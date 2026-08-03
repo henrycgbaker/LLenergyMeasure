@@ -20,7 +20,7 @@ import json
 import logging
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from llenergymeasure.config.models import StudyConfig
 from llenergymeasure.config.runner_spec import RunnerSpec
@@ -33,9 +33,6 @@ from llenergymeasure.domain.bundle_artefacts import (
 from llenergymeasure.domain.experiment import ExperimentResult, StudyResult, StudySummary
 from llenergymeasure.domain.progress import ProgressCallback
 from llenergymeasure.study.single import run_single_experiment
-
-if TYPE_CHECKING:
-    from llenergymeasure.study.server_session import ServerSessionResult
 
 logger = logging.getLogger(__name__)
 
@@ -161,13 +158,11 @@ def orchestrate_study(
     )
 
     if is_single:
-        result_files, experiment_results, warnings, server_results = (
-            _run_single_experiment_dispatch(
-                study, manifest, study_dir, runner_specs, progress, resolution_logs
-            )
+        result_files, experiment_results, warnings = _run_single_experiment_dispatch(
+            study, manifest, study_dir, runner_specs, progress, resolution_logs
         )
     else:
-        result_files, experiment_results, warnings, server_results = _run_via_runner(
+        result_files, experiment_results, warnings = _run_via_runner(
             study,
             manifest,
             study_dir,
@@ -188,17 +183,14 @@ def orchestrate_study(
     if manifest.status not in ("timed_out", "circuit_breaker", "interrupted"):
         manifest.mark_study_completed()
 
-    # Server sessions map to None in experiment_results (slice boundary), so count
-    # them from the side channel: a session with any valid level is completed, an
-    # aborted / all-invalid one is failed, and its measured window energy folds into
-    # the study total. Offline results are counted as before (byte-identical).
-    completed = sum(1 for r in experiment_results if r is not None) + sum(
-        1 for s in server_results if s.valid
-    )
-    failed = len(experiment_results) - completed
-    total_energy = sum(r.total_energy_j for r in experiment_results if r is not None) + sum(
-        (s.total_window_energy_j or 0.0) for s in server_results
-    )
+    # Natural counting over the mapped results: server sessions are now first-class
+    # (their per-window ExperimentResults enter experiment_results, no side channel),
+    # so a completed result is any non-None entry and a failure is a None (a failure
+    # dict). Server window energies fold into the study total the same way offline
+    # experiment energies do.
+    completed = sum(1 for r in experiment_results if r is not None)
+    failed = sum(1 for r in experiment_results if r is None)
+    total_energy = sum(r.total_energy_j for r in experiment_results if r is not None)
 
     # study.experiments is already cycle-expanded by apply_cycles(), so len() is the true total
     n_cycles = study.study_execution.n_cycles
@@ -418,12 +410,12 @@ def _run_single_experiment_dispatch(
     runner_specs: Any,
     progress: ProgressCallback | None,
     resolution_logs: dict[str, dict[str, Any]],
-) -> tuple[list[str], list[ExperimentResult | None], list[str], list[ServerSessionResult]]:
+) -> tuple[list[str], list[ExperimentResult | None], list[str]]:
     """Run a single-experiment study in-process, emitting study-table begin/end events.
 
     For a StudyProgressCallback, emits begin_experiment / end_experiment_(ok|fail) so
     the study display shows the single experiment's table row. Offline-only (server
-    studies never take the single path), so the server-results channel is empty.
+    studies never take the single path).
     """
     from llenergymeasure.domain.progress import STEPS_LOCAL, StudyProgressCallback, docker_steps
 
@@ -482,7 +474,7 @@ def _run_single_experiment_dispatch(
         else:
             study_cb.end_experiment_fail(1, exp_elapsed)
 
-    return result_files, experiment_results, warnings, []
+    return result_files, experiment_results, warnings
 
 
 def _run_via_runner(
@@ -494,14 +486,14 @@ def _run_via_runner(
     skip_set: set[tuple[str, int]] | None = None,
     no_lock: bool = False,
     resolution_logs: dict[str, dict[str, Any]] | None = None,
-) -> tuple[list[str], list[ExperimentResult | None], list[str], list[ServerSessionResult]]:
+) -> tuple[list[str], list[ExperimentResult | None], list[str]]:
     """Delegate to StudyRunner for multi-experiment / multi-cycle runs.
 
-    Returns ``(result_files, experiment_results, warnings, server_results)``. Server
-    sessions map to ``None`` in ``experiment_results`` (they are not yet an
-    ExperimentResult - per-window bundles are SM10, metrics SM12 - so they stay out
-    of StudyResult.experiments) but are surfaced separately in ``server_results`` so
-    the study summary can count them truthfully.
+    Returns ``(result_files, experiment_results, warnings)``. A server session is
+    first-class: its mapped per-window ExperimentResults enter ``experiment_results``
+    (and hence StudyResult.experiments) and its persisted bundle paths join
+    ``result_files``. A failure dict maps to a single ``None`` (a failed cell); an
+    offline result maps to itself, unchanged.
     """
     from llenergymeasure.domain.progress import StudyProgressCallback
     from llenergymeasure.study.runner import StudyRunner
@@ -522,31 +514,15 @@ def _run_via_runner(
 
     warnings: list[str] = []
     experiment_results: list[ExperimentResult | None] = []
-    server_results: list[ServerSessionResult] = []
+    server_result_files: list[str] = []
     for r in raw_results:
-        if isinstance(r, dict):
+        if isinstance(r, ServerSessionResult):
+            experiment_results.extend(r.experiment_results)
+            server_result_files.extend(r.result_files)
+        elif isinstance(r, dict):
             warnings.append(r.get("message", "Unknown error"))
             experiment_results.append(None)
-        elif isinstance(r, ServerSessionResult):
-            # Keep the experiments=None mapping (slice boundary: server sessions do
-            # not enter StudyResult.experiments at SM9); surface a one-line summary
-            # and hand the session out so the summary counters reflect it.
-            experiment_results.append(None)
-            server_results.append(r)
-            warnings.append(_server_session_summary(r))
         else:
             experiment_results.append(r)
 
-    return runner.result_files, experiment_results, warnings, server_results
-
-
-def _server_session_summary(result: Any) -> str:
-    """One-line human summary of a server session's outcome (SM9-interim surfacing)."""
-    valid = sum(1 for level in result.levels if level.valid)
-    total = len(result.levels)
-    verdict = "valid" if result.valid else ("aborted" if result.aborted else "invalid")
-    return (
-        f"server session ({result.engine}) {verdict}: {valid}/{total} level(s) passed "
-        f"the stability gate, {result.window_count} measured window(s). Per-window "
-        "bundles + metrics land with SM10/SM12."
-    )
+    return runner.result_files + server_result_files, experiment_results, warnings

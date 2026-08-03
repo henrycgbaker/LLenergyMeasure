@@ -180,7 +180,18 @@ def _save_and_record(
     On any save failure, marks the experiment failed on the manifest.
     """
     try:
+        from llenergymeasure.domain.session import SessionBlock
         from llenergymeasure.results.bundle import BundleWriter
+
+        # Offline degenerates to the one-window session (O7.1/O7.2): a fresh
+        # session id, window_count=1, all phase raws null (offline pre-window
+        # phases are not instrumented). Present in both modes so readers see one
+        # shape.
+        session = SessionBlock(
+            session_id=uuid.uuid4().hex,
+            window_count=1,
+            level_count=1,
+        )
 
         writer = BundleWriter(
             study_dir,
@@ -191,10 +202,13 @@ def _save_and_record(
             experiment_index=experiment_index,
             ts_source_dir=ts_source_dir,
         )
-        result_path = writer.write_result(result, runner_provenance=runner_provenance)
+        result_path = writer.write_result(
+            result, runner_provenance=runner_provenance, session=session
+        )
         writer.write_system(
             host_snapshot=environment_snapshot,
             runner=runner_provenance,
+            session=session,
         )
         writer.move_config_sidecar(
             resolved_config_hash=resolved_config_hash,
@@ -325,6 +339,17 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
             ExperimentOrder(self.study.study_execution.experiment_order),
         )
 
+        # Session grouping (O7.3): fold consecutive rate-only-varying server cells
+        # into one session (one launch, a rate level per cell). group_starts maps the
+        # FIRST index of a multi-cell server group to its member indices; single
+        # cells (offline, or a lone server cell) are dispatched one at a time as
+        # before, so the offline path is untouched.
+        from llenergymeasure.study.server_session import partition_server_groups
+
+        units = partition_server_groups(ordered)
+        group_starts = {unit[0]: unit for unit in units if len(unit) > 1}
+        consumed_by_group: set[int] = set()
+
         # spawn: CUDA-safe; fork causes silent CUDA corruption (CP-1)
         mp_ctx = multiprocessing.get_context("spawn")
 
@@ -361,8 +386,16 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
                 if self._interrupt_event.is_set():
                     break
 
-                # Resume skip-set: skip experiments that completed in a previous run.
-                if self._resume_should_skip(config, i, len(ordered)):
+                # Consumed by a server group that a prior iteration dispatched.
+                if i in consumed_by_group:
+                    continue
+
+                is_group = i in group_starts
+
+                # Resume skip-set: single cells use the per-cell skip; a server group
+                # handles resume per-member inside its own dispatch (some members may
+                # have completed in a prior run).
+                if not is_group and self._resume_should_skip(config, i, len(ordered)):
                     continue
 
                 # Wall-clock timeout check: mark remaining experiments skipped.
@@ -380,7 +413,14 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
                 if self._run_inter_experiment_gaps(i, cycle_gap_indices):
                     break
 
-                result = self._run_one(config, mp_ctx, index=i + 1)
+                if is_group:
+                    group = group_starts[i]
+                    consumed_by_group.update(group)
+                    result = self._run_one_server_group([ordered[j] for j in group], index=i + 1)
+                    if result is None:
+                        continue  # whole group already completed on resume
+                else:
+                    result = self._run_one(config, mp_ctx, index=i + 1)
                 results.append(result)
 
                 # Circuit breaker integration: update state based on result.
@@ -807,6 +847,48 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
         except Exception as exc:
             failure = {"type": type(exc).__name__, "message": str(exc)}
             self.manifest.mark_failed(config_hash, cycle, failure["type"], failure["message"])
+            if self._progress:
+                self._progress.end_experiment_fail(index, 0.0, error=failure["message"])
+            return failure
+
+    def _run_one_server_group(self, member_configs: list[ExperimentConfig], *, index: int) -> Any:
+        """Dispatch a rate-only-varying server group as one session (O7.3).
+
+        Assigns each member its (config_hash, cycle), skipping members already
+        completed in a prior run (resume) while still advancing their cycle counters
+        so subsequent cycles stay aligned. The surviving cells drive one server
+        lifetime with a rate level each (one launch, re-warm per level, SM8
+        unchanged); the per-cell manifest lifecycle is the session's own. Returns the
+        session result (a ServerSessionResult or a failure dict), or None when the
+        whole group was already completed on resume. Host-side construction / launch
+        failures translate to a non-fatal failure dict per member, mirroring the
+        single-cell path.
+        """
+        from llenergymeasure.domain.experiment import compute_declared_config_hash
+        from llenergymeasure.study.server_session import ServerCell, ServerSession
+
+        cells: list[ServerCell] = []
+        for config in member_configs:
+            config_hash = compute_declared_config_hash(config)
+            cycle = self._cycle_counters.get(config_hash, 0) + 1
+            self._cycle_counters[config_hash] = cycle
+            if (config_hash, cycle) in self._skip_set:
+                logger.info("Skipping completed server cell (resumed)")
+                continue
+            cells.append(ServerCell(config, config_hash, cycle))
+        if not cells:
+            return None
+
+        spec = self._runner_specs.get(member_configs[0].engine) if self._runner_specs else None
+        try:
+            with ServerSession.for_group(self, cells, spec, index=index) as session:
+                return session.run()
+        except Exception as exc:
+            failure = {"type": type(exc).__name__, "message": str(exc)}
+            for cell in cells:
+                self.manifest.mark_failed(
+                    cell.config_hash, cell.cycle, failure["type"], failure["message"]
+                )
             if self._progress:
                 self._progress.end_experiment_fail(index, 0.0, error=failure["message"])
             return failure

@@ -84,6 +84,18 @@ def test_experiment_manifest_entry_defaults() -> None:
     assert entry.completed_at is None
 
 
+def test_entries_carry_resolved_config_hash(tmp_path) -> None:
+    """Built entries stamp the resolved-config hash (for the resume resolved-drift guard)."""
+    from llenergymeasure.domain.experiment import compute_declared_config_hash
+    from llenergymeasure.study.hashing import build_resolved_view, hash_config
+
+    study = _make_study(n_experiments=2, n_cycles=1)
+    writer = ManifestWriter(study=study, study_dir=tmp_path)
+    for entry, exp in zip(writer.manifest.experiments, study.experiments, strict=True):
+        assert entry.config_hash == compute_declared_config_hash(exp)
+        assert entry.resolved_config_hash == hash_config(build_resolved_view(exp))
+
+
 def test_experiment_manifest_entry_completed() -> None:
     now = datetime.now(timezone.utc)
     entry = ExperimentManifestEntry(
