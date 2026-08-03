@@ -491,6 +491,18 @@ class TestCleanSession:
             assert sys_block["drain_energy_j"] == pytest.approx(7.0)
         # Timeseries parquet rode the existing writer path (the core carried samples).
         assert all((b / "timeseries.parquet").exists() for b in bundles)
+        # config.json is written host-side with the declared + resolved hashes; the
+        # observed half and engine_version stay absent (container-boundary, SM12).
+        for bundle in bundles:
+            cfg = _read(bundle / "config.json")
+            assert (
+                cfg["declared_config_hash"]
+                == _read(bundle / RESULT_FILENAME)["declared_config_hash"]
+            )
+            assert cfg["resolved_config_hash"]
+            assert "declared_config" in cfg
+            assert "engine_version" not in cfg
+            assert "observed_config_hash" not in cfg
 
     def test_persisted_window_energy_sum_equals_session_total(self, tmp_path: Path) -> None:
         config = _server_config(10.0)

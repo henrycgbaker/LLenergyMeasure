@@ -562,6 +562,9 @@ class ServerSession:
         self._result_files: list[str] = []
         # Each level's representative bundle rel-path for the manifest result_file.
         self._level_result_file: dict[int, str] = {}
+        # Per-cell resolved-config hash cache (the config.json sidecar's R7W
+        # realised-protocol provenance; computed once per grid point).
+        self._resolved_hash_cache: dict[str, str | None] = {}
         self._env_snapshot: EnvironmentSnapshot | None = None
         # Populated in __enter__.
         self._handle: ServerHandle | None = None
@@ -917,11 +920,12 @@ class ServerSession:
         No ts_source_dir / rescue analogue applies: the measurement loop is
         host-side by design even when the engine server is a sibling container, so
         there is no in-container staging directory. The runner block still carries
-        the image provenance. config.json is host-absent (no harness subprocess
-        stages one), so its finalize backstop is marked expected-absent; the
-        timeseries parquet, when the window core carried samples, is written
-        directly into the bundle from those in-memory samples via the same writer
-        the offline harness uses (no new sampling machinery).
+        the image provenance. config.json is written host-side directly (the
+        declared config + declared/resolved hashes; the observed half is
+        container-boundary state deferred to SM12), and the timeseries parquet -
+        when the window core carried samples - is written directly into the bundle
+        from those in-memory samples via the same writer the offline harness uses
+        (no new sampling machinery).
         """
         from llenergymeasure.results.bundle import BundleWriter
 
@@ -935,18 +939,18 @@ class ServerSession:
             cycle=cell.cycle,
             experiment_index=self.index,
         )
-        writer.mark_artefact_absent("config")
         result_path = writer.write_result(
             result, runner_provenance=self._runner_provenance(), session=preliminary
         )
         if result.timeseries and samples:
             self._write_timeseries(writer.bundle_dir, samples, result)
+        self._write_config_sidecar(writer.bundle_dir, cell, result)
         writer.write_system(
             host_snapshot=self._host_snapshot(),
             runner=self._runner_provenance(),
             session=preliminary,
         )
-        writer.move_config_sidecar()  # no-op host-side (no staging dir); config absent
+        writer.move_config_sidecar()  # no-op host-side; config.json is written above
         self._pending_writers.append(writer)
         self._experiment_results.append(result)
         self._result_files.append(str(result_path))
@@ -967,6 +971,50 @@ class ServerSession:
                 experiment_id=result.experiment_id,
                 declared_config_hash=result.declared_config_hash,
             )
+
+    def _write_config_sidecar(self, bundle_dir: Any, cell: ServerCell, result: Any) -> None:
+        """Write the per-window config.json host-side (declared config + hashes).
+
+        Server bundles carry a config.json like offline bundles so the resolved
+        config hash (the R7W realised-protocol provenance the resume guard keys on)
+        lands on disk and a config.json glob over the results does not fork on
+        serving mode. The OBSERVED half (observed_engine_params /
+        observed_sampling_params / observed_config_hash) and the running
+        engine_version are container-boundary state the host cannot see for server
+        mode; they are OMITTED (not nulled) and land with SM12.
+        """
+        from llenergymeasure.results.persistence import save_config_sidecar
+
+        with contextlib.suppress(Exception):
+            save_config_sidecar(
+                bundle_dir,
+                experiment_id=result.experiment_id,
+                config_hash=cell.config_hash,
+                engine=result.engine,
+                model_name=result.model_name,
+                measurement_methodology="server_windowed",
+                resolved_config_hash=self._resolved_config_hash(cell),
+                declared_config=cell.config.model_dump(mode="json"),
+            )
+
+    def _resolved_config_hash(self, cell: ServerCell) -> str | None:
+        """Resolved-config hash for a cell (build_resolved_view + hash_config), cached.
+
+        The same pipeline that stamps the manifest entry's resolved hash, so the
+        sidecar and the manifest agree. Best-effort: a failure yields None (the
+        sidecar then omits the field).
+        """
+        if cell.config_hash in self._resolved_hash_cache:
+            return self._resolved_hash_cache[cell.config_hash]
+        resolved: str | None
+        try:
+            from llenergymeasure.study.hashing import build_resolved_view, hash_config
+
+            resolved = hash_config(build_resolved_view(cell.config))
+        except Exception:
+            resolved = None
+        self._resolved_hash_cache[cell.config_hash] = resolved
+        return resolved
 
     # -- per-cell manifest lifecycle (point 5) -------------------------------
 
