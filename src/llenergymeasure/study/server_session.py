@@ -700,7 +700,18 @@ class ServerSession:
         # Clean close = no exception propagating AND not interrupted: only then is
         # the drain measured and its raws patched into the sibling bundles (O7.4).
         clean = exc_type is None and not self._interrupted
-        self._cleanup(clean=clean)
+        # Teardown is best-effort AS A WHOLE (F6 session-hardening posture): a fault
+        # in cleanup must never convert a completed measurement into a failure by
+        # escaping to the dispatch site. It is logged LOUDLY, never swallowed
+        # silently. KeyboardInterrupt / SystemExit (BaseException) still propagate.
+        try:
+            self._cleanup(clean=clean)
+        except Exception:
+            logger.warning(
+                "Server session teardown raised (best-effort); the session result "
+                "stands and the on-disk bundles are unaffected.",
+                exc_info=True,
+            )
         return None
 
     # -- finalisation --------------------------------------------------------
@@ -1587,8 +1598,21 @@ class ServerSession:
         """
         if not self._pending_writers:
             return
+        final_block: SessionBlock | None = None
         if clean:
-            final_block = self._build_session_block(final=True)
+            # Building the final block is the one non-trivial call on this
+            # otherwise fully-defensive teardown path; guard it so a block-build
+            # fault degrades to unpatched-but-finalized bundles rather than
+            # escaping (which would flip completed manifest entries to failed).
+            try:
+                final_block = self._build_session_block(final=True)
+            except Exception:
+                logger.warning(
+                    "Building the final session block failed; window bundles are "
+                    "finalized with their preliminary session block (drain unpatched).",
+                    exc_info=True,
+                )
+        if final_block is not None:
             for writer in self._pending_writers:
                 with contextlib.suppress(Exception):
                     writer.patch_session_block(final_block)

@@ -281,6 +281,9 @@ def _runner(study_dir: Path, configs: list[ExperimentConfig], event: threading.E
         _interrupt_event=event,
         _runner_specs=None,
         _get_env_snapshot=_snapshot,
+        # Fields StudyRunner._run_one_server_group reads when driven duck-typed.
+        _cycle_counters={},
+        _skip_set=set(),
     )
 
 
@@ -709,3 +712,84 @@ class TestSigint:
             assert block["launch_energy_j"] == pytest.approx(40.0)
         # The manifest is left running (the sweep loop's mark_interrupted downgrades it).
         assert session._runner.manifest.manifest.status == "running"
+
+
+# ---------------------------------------------------------------------------
+# Teardown hardening: a fault after a successful run never converts success to
+# failure or rewrites completed manifest history (both altitudes).
+# ---------------------------------------------------------------------------
+
+
+class TestTeardownHardening:
+    def test_finalize_block_fault_keeps_result_and_completed_cell(
+        self, tmp_path: Path, monkeypatch: Any, caplog: Any
+    ) -> None:
+        # The verifier's proven scenario, through the dispatch site: a teardown fault
+        # building the final=True session block after a successful run must degrade to
+        # unpatched-but-finalized bundles (FIX A), never escape to flip the cell.
+        from llenergymeasure.study import server_session as ss
+        from llenergymeasure.study.runner import StudyRunner
+
+        config = _server_config(10.0)
+        runner = _runner(tmp_path, [config], event=None)
+        real_for_group = ss.ServerSession.for_group
+
+        def wired(rn: Any, cells: Any, spec: Any, *, index: int, engine: Any = None) -> Any:
+            session = real_for_group(rn, cells, spec, index=index, engine=FakeEngine())
+            _wire(session, energy_sink=ProducingEnergySink(power_w=100.0))
+            original = session._build_session_block
+
+            def faulty(*, final: bool) -> Any:
+                if final:
+                    raise RuntimeError("teardown block build failed")
+                return original(final=final)
+
+            session.__dict__["_build_session_block"] = faulty
+            return session
+
+        monkeypatch.setattr(ss.ServerSession, "for_group", staticmethod(wired))
+        with caplog.at_level("WARNING"):
+            result = StudyRunner._run_one_server_group(runner, [config], index=1)
+
+        # The legitimate result survives (not a failure dict) and the cell stays
+        # completed with its bundle path...
+        assert isinstance(result, ServerSessionResult)
+        entry = runner.manifest.manifest.experiments[0]
+        assert entry.status == "completed"
+        assert entry.result_file
+        # ...and the teardown fault was logged loudly (not swallowed).
+        assert any("session block" in r.message.lower() for r in caplog.records)
+
+    def test_escaped_teardown_fault_does_not_rewrite_completed_history(
+        self, tmp_path: Path, monkeypatch: Any
+    ) -> None:
+        # Defense-in-depth (FIX B): even if a future unguarded teardown line escapes
+        # the session guard entirely, the dispatch handler must not downgrade a cell
+        # already recorded completed.
+        from llenergymeasure.study import server_session as ss
+        from llenergymeasure.study.runner import StudyRunner
+
+        config = _server_config(10.0)
+        runner = _runner(tmp_path, [config], event=None)
+        real_for_group = ss.ServerSession.for_group
+
+        def wired(rn: Any, cells: Any, spec: Any, *, index: int, engine: Any = None) -> Any:
+            session = real_for_group(rn, cells, spec, index=index, engine=FakeEngine())
+            _wire(session, energy_sink=ProducingEnergySink(power_w=100.0))
+            return session
+
+        monkeypatch.setattr(ss.ServerSession, "for_group", staticmethod(wired))
+
+        def escaping_exit(self: Any, *exc: Any) -> None:
+            raise RuntimeError("escaped teardown")
+
+        monkeypatch.setattr(ss.ServerSession, "__exit__", escaping_exit)
+
+        result = StudyRunner._run_one_server_group(runner, [config], index=1)
+
+        # The dispatch degrades to a failure dict (the guard was bypassed)...
+        assert isinstance(result, dict)
+        # ...but the completed cell's history is NOT rewritten.
+        entry = runner.manifest.manifest.experiments[0]
+        assert entry.status == "completed"
+        assert entry.result_file

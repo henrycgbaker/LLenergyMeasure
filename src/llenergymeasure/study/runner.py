@@ -885,7 +885,12 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
                 return session.run()
         except Exception as exc:
             failure = {"type": type(exc).__name__, "message": str(exc)}
+            # A late fault (e.g. a teardown fault escaping the session guard) must not
+            # rewrite history: a cell already recorded completed has valid bundles on
+            # disk, so downgrade only the cells not already completed.
             for cell in cells:
+                if self.manifest.entry_status(cell.config_hash, cell.cycle) == "completed":
+                    continue
                 self.manifest.mark_failed(
                     cell.config_hash, cell.cycle, failure["type"], failure["message"]
                 )

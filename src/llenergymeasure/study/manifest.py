@@ -293,6 +293,17 @@ class ManifestWriter:
     # Private helpers
     # ------------------------------------------------------------------
 
+    def entry_status(self, config_hash: str, cycle: int) -> str | None:
+        """Return the status of a ``(config_hash, cycle)`` entry, or None when absent.
+
+        A read-only lookup (unlike ``_find`` it never raises), used by the dispatch
+        site to avoid rewriting an entry that already reached a terminal state.
+        """
+        for entry in self.manifest.experiments:
+            if entry.config_hash == config_hash and entry.cycle == cycle:
+                return entry.status
+        return None
+
     def _find(self, config_hash: str, cycle: int) -> ExperimentManifestEntry:
         """Find entry by (config_hash, cycle). Raises KeyError if not found."""
         for entry in self.manifest.experiments:
