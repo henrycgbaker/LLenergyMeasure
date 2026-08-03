@@ -697,6 +697,8 @@ class TestCleanSession:
         assert all((b / "timeseries.parquet").exists() for b in bundles)
         # SM11: each window bundle carries its per-request log with client counts;
         # the four fixture requests per window land as in-measurement-window rows.
+        import pyarrow.parquet as pq
+
         from llenergymeasure.results.request_log import read_requests_parquet
 
         for bundle in bundles:
@@ -707,6 +709,9 @@ class TestCleanSession:
             assert all(r["in_measurement_window"] is True for r in rows)
             assert all(r["is_ramp"] is False for r in rows)
             assert all(r["server_completion_tokens"] == 1 for r in rows)  # auxiliary preserved
+            # M1: the window's measured span rides as file metadata (re-clip support).
+            meta = pq.read_table(bundle / "requests.parquet").schema.metadata
+            assert float(meta[b"span_end"]) > float(meta[b"span_start"])
         # config.json is written host-side with the declared + resolved hashes; the
         # observed half and engine_version stay absent (container-boundary, SM12).
         for bundle in bundles:

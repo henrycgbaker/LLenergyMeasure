@@ -357,6 +357,8 @@ class BundleWriter:
         rows: list[RequestLogRow],
         *,
         experiment_id: str | None = None,
+        span_start: float | None = None,
+        span_end: float | None = None,
     ) -> Path:
         """Write the window's per-request log (requests.parquet) into the bundle.
 
@@ -364,10 +366,12 @@ class BundleWriter:
         the server session hands one window's request rows and ``finalize()``
         sweeps the outcome via the registry with no hand-glue. Must run after
         :meth:`write_result` (it writes into the bundle dir). The Parquet carries
-        the same identity metadata as the result (experiment id + config hash) so
-        it stays attributable if separated from its directory. An empty ``rows``
-        still writes a schema-only Parquet (a truthful empty log), so a window
-        that issued no requests never trips the missing-artefact backstop.
+        the same identity metadata as the result (experiment id + config hash) plus
+        the window's measured ``span_start`` / ``span_end`` (so per-row receipt
+        series can be re-clipped to the window offline), so it stays attributable
+        and re-derivable if separated from its directory. An empty ``rows`` still
+        writes a schema-only Parquet (a truthful empty log), so a window that issued
+        no requests never trips the missing-artefact backstop.
         """
         if self._dir is None:
             raise RuntimeError("write_result() must be called before write_requests()")
@@ -378,6 +382,8 @@ class BundleWriter:
             self._dir / REQUESTS_FILENAME,
             experiment_id=experiment_id or self._experiment_id,
             declared_config_hash=self._config_hash,
+            span_start=span_start,
+            span_end=span_end,
         )
 
     def mark_artefact_absent(self, name: str) -> None:

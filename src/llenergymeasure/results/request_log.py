@@ -24,6 +24,17 @@ wall-clock - so only their DIFFERENCES are meaningful; SM12 derives every latenc
 as a difference. The schema is locked: do not rename or retype a column without
 folding the change into the bundle-format break (there is no per-artefact schema
 version; Parquet stays self-describing under the single bundle_version).
+
+CLIPPING SEMANTICS (read before deriving a denominator). Rows are ISSUE-partitioned
+(a row lands in the window that owns its issue time) and per-row token
+counts/times are receipt-UNCLIPPED: ``output_token_times`` is the request's whole
+client receipt series, so it can include receipts outside the window's measured
+span (a straddler's drain-tail tokens, or a ramp row's tokens). The AUTHORITATIVE
+span-clipped denominator is ``result.json`` ``output_tokens`` (the window manager
+clips receipts to the measured span). An alternative attribution is re-derivable
+offline by clipping each row's ``output_token_times`` to the window's
+``span_start`` / ``span_end`` (persisted as this file's key-value metadata); the
+per-row ``client_output_tokens`` is NOT that clipped count.
 """
 
 from __future__ import annotations
@@ -118,6 +129,8 @@ def write_requests_parquet(
     *,
     experiment_id: str | None = None,
     declared_config_hash: str | None = None,
+    span_start: float | None = None,
+    span_end: float | None = None,
 ) -> Path:
     """Write a window's request rows to a Parquet file (schema locked).
 
@@ -127,11 +140,20 @@ def write_requests_parquet(
     Parquet file-level key-value metadata (not columns), mirroring the timeseries
     writer, so the log stays attributable if separated from its bundle dir.
 
+    ``span_start`` / ``span_end`` are the window's measured monotonic span bounds,
+    also stored as file-level metadata (the span is file-scoped, not row-scoped).
+    They make the per-row (issue-partitioned, receipt-UNCLIPPED) token series
+    re-clippable to the measured window offline, so an alternative attribution can
+    be re-derived without re-running (M1); the authoritative span-clipped
+    denominator remains ``result.json`` ``output_tokens``.
+
     Args:
         rows: The window's request rows, in issue order.
         output_path: Destination path for requests.parquet.
         experiment_id: Unique experiment identifier, stored as file metadata.
         declared_config_hash: Config hash for orphan attribution, file metadata.
+        span_start: Window measured-span start (monotonic s), file metadata.
+        span_end: Window measured-span end (monotonic s), file metadata.
 
     Returns:
         The output_path after writing.
@@ -144,10 +166,12 @@ def write_requests_parquet(
 
     schema = _requests_schema()
     identity = {
-        key: value
+        key: str(value)
         for key, value in (
             ("experiment_id", experiment_id),
             ("declared_config_hash", declared_config_hash),
+            ("span_start", span_start),
+            ("span_end", span_end),
         )
         if value is not None
     }

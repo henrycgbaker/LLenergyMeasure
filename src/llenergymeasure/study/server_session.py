@@ -1037,6 +1037,7 @@ class ServerSession:
                 cell=cell,
                 level_index=outcome.level_index,
                 request_rows=rows,
+                request_span=(window.boundaries.span_start, window.boundaries.span_end),
             )
 
     def _persist_abort_cores(self, levels: list[ServerLevelResult]) -> None:
@@ -1086,6 +1087,7 @@ class ServerSession:
         cell: ServerCell,
         level_index: int,
         request_rows: list[RequestLogRow] | None,
+        request_span: tuple[float, float] | None = None,
     ) -> None:
         """Write one window bundle through the existing writer path; defer finalize.
 
@@ -1102,9 +1104,11 @@ class ServerSession:
         ``request_rows`` is the window's per-request log (SM11): a list (possibly
         empty) writes requests.parquet via the registry writer method; ``None`` (a
         degraded abort core, whose bookkeeping was lost) writes none and suppresses
-        the finalize backstop for that server bundle. A parquet-write hiccup is
-        swallowed so the finalize sweep reports the missing artefact loudly rather
-        than crashing persistence.
+        the finalize backstop for that server bundle. ``request_span`` is the
+        window's measured monotonic (span_start, span_end), stored as file metadata
+        so the receipt-unclipped rows are re-clippable offline (M1). A parquet-write
+        hiccup is swallowed so the finalize sweep reports the missing artefact
+        loudly rather than crashing persistence.
         """
         from llenergymeasure.results.bundle import BundleWriter
 
@@ -1124,8 +1128,14 @@ class ServerSession:
         if result.timeseries and samples:
             self._write_timeseries(writer.bundle_dir, samples, result)
         if request_rows is not None:
+            span_start, span_end = request_span if request_span is not None else (None, None)
             with contextlib.suppress(Exception):
-                writer.write_requests(request_rows, experiment_id=result.experiment_id)
+                writer.write_requests(
+                    request_rows,
+                    experiment_id=result.experiment_id,
+                    span_start=span_start,
+                    span_end=span_end,
+                )
         else:
             writer.mark_artefact_absent("requests")
         self._write_config_sidecar(writer.bundle_dir, cell, result)

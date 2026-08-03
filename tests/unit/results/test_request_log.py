@@ -122,14 +122,41 @@ def test_null_auxiliary_and_timing_fields_round_trip(tmp_path: Path) -> None:
     assert read_back["client_output_tokens"] == 0
 
 
-def test_identity_metadata_is_stored_as_file_kv(tmp_path: Path) -> None:
-    """experiment_id / declared_config_hash ride as Parquet file metadata, not columns."""
+def test_identity_and_span_metadata_stored_as_file_kv(tmp_path: Path) -> None:
+    """Identity + the window span ride as Parquet file metadata, not columns (M1)."""
     write_requests_parquet(
         [_row()],
         tmp_path / "requests.parquet",
         experiment_id="server-abc-c1-L0-W0",
         declared_config_hash="abc123",
+        span_start=1030.0,
+        span_end=1040.0,
     )
     meta = pq.read_table(tmp_path / "requests.parquet").schema.metadata or {}
     assert meta.get(b"experiment_id") == b"server-abc-c1-L0-W0"
     assert meta.get(b"declared_config_hash") == b"abc123"
+    # The span bounds make the receipt-unclipped rows re-clippable offline (M1).
+    assert float(meta[b"span_start"]) == 1030.0
+    assert float(meta[b"span_end"]) == 1040.0
+
+
+def test_rows_are_receipt_unclipped_and_reclippable_to_span(tmp_path: Path) -> None:
+    """Per-row token times are unclipped; clipping to the file span re-derives the count."""
+    span_start, span_end = 10.0, 20.0
+    # A straddler: 3 receipts in-span, 2 past span_end (drain tail).
+    row = _row(
+        request_index=0,
+        output_token_times=[11.0, 15.0, 19.0, 22.0, 25.0],
+        client_output_tokens=5,
+    )
+    write_requests_parquet(
+        [row], tmp_path / "requests.parquet", span_start=span_start, span_end=span_end
+    )
+    read_back = read_requests_parquet(tmp_path / "requests.parquet")[0]
+    meta = pq.read_table(tmp_path / "requests.parquet").schema.metadata
+    lo, hi = float(meta[b"span_start"]), float(meta[b"span_end"])
+    # Unclipped per-row count is the whole series...
+    assert read_back["client_output_tokens"] == 5
+    # ...but clipping to the persisted span re-derives the in-span (denominator) count.
+    in_span = [t for t in read_back["output_token_times"] if lo <= t <= hi]
+    assert len(in_span) == 3
