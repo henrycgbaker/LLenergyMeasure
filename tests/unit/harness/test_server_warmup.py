@@ -348,6 +348,16 @@ class TestServerWarmupComposite:
         assert result.mode == "composite"
         assert source.issued >= 1  # warmup traffic actually ran
 
+    def test_composite_captures_warmup_energy(self):
+        # The gate sampler's power series ALSO feeds the warmup energy (C2: same
+        # sampler, not a parallel path). A settled series integrates to > 0 J.
+        sampler = FakeSampler(_SETTLED, ready_after=1)
+        source = FakeSource()
+        sw = _warmup(ServerWarmupConfig(mode="composite"), sampler, source)
+        asyncio.run(sw(_ctx()))
+        assert sw.results[0].energy_j is not None
+        assert sw.results[0].energy_j > 0.0
+
     def test_traffic_and_sampler_lifecycle(self):
         # ready_after=1: the first poll is empty (gate fails), so the loop sleeps and
         # the traffic task actually runs before convergence on the second poll.

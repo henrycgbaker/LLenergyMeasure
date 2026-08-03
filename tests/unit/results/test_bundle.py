@@ -102,6 +102,53 @@ def test_write_result_attaches_runner_provenance(tmp_path: Path) -> None:
     assert payload["runner_provenance"]["source"] == "env"
 
 
+def test_session_block_dual_serialised_and_patchable(tmp_path: Path) -> None:
+    """The session block folds into result.json + system.json and is patchable pre-finalize."""
+    from llenergymeasure.domain.session import SessionBlock
+
+    study_dir = tmp_path / "study"
+    study_dir.mkdir()
+    writer = _writer(study_dir)
+    preliminary = SessionBlock(session_id="sess-1", window_count=2, drain_energy_j=None)
+    result_path = writer.write_result(make_result(), session=preliminary)
+    writer.write_system(host_snapshot=_make_snapshot(), session=preliminary)
+
+    # Dual-serialised: both result.json and system.json carry the block.
+    assert json.loads(result_path.read_text())["session"]["session_id"] == "sess-1"
+    sys_path = writer.bundle_dir / "system.json"
+    assert json.loads(sys_path.read_text())["session"]["drain_energy_j"] is None
+
+    # The in-write-path patch (O7.5) restamps both files before finalize.
+    final = SessionBlock(session_id="sess-1", window_count=2, drain_energy_j=12.5)
+    writer.patch_session_block(final)
+    assert json.loads(result_path.read_text())["session"]["drain_energy_j"] == 12.5
+    assert json.loads(sys_path.read_text())["session"]["drain_energy_j"] == 12.5
+
+
+def test_pre_session_facts_bundle_still_loads(tmp_path: Path) -> None:
+    """A bundle written without a session block (pre-SM10) reads back with session=None (D22)."""
+    study_dir = tmp_path / "study"
+    study_dir.mkdir()
+    writer = _writer(study_dir)
+    writer.write_result(make_result())  # no session passed
+    writer.write_system(host_snapshot=_make_snapshot())
+    loaded = BundleReader.read(writer.bundle_dir)
+    assert loaded.result.session is None
+    assert loaded.environment is not None and loaded.environment.session is None
+
+
+def test_mark_artefact_absent_silences_backstop(tmp_path: Path, caplog) -> None:
+    """A caller-declared absent artefact does not trigger the finalize loudness warning."""
+    study_dir = tmp_path / "study"
+    study_dir.mkdir()
+    writer = _writer(study_dir)
+    writer.write_result(make_result())
+    writer.mark_artefact_absent("config")
+    with caplog.at_level(logging.WARNING):
+        writer.finalize()
+    assert "config.json" not in caplog.text
+
+
 def test_bundle_dir_requires_write_result(tmp_path: Path) -> None:
     """Accessing bundle_dir before write_result raises (write order contract)."""
     import pytest

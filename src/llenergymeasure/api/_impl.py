@@ -279,6 +279,7 @@ def run_study(
             load_resume_state,
             prepare_resume_manifest,
             validate_config_drift,
+            validate_resolved_config_drift,
         )
         from llenergymeasure.utils.exceptions import StudyError
 
@@ -289,6 +290,10 @@ def run_study(
 
         old_manifest, skip_set = load_resume_state(resume_dir)
         validate_config_drift(old_manifest, study)
+        # Declared-hash drift is only half the guard: catch a resolved-protocol
+        # change (e.g. a user-config warmup overlay) that the declared family and the
+        # skip-set are blind to, before it silently skips a differently-resolved cell.
+        validate_resolved_config_drift(old_manifest, study)
         prepare_resume_manifest(resume_dir, old_manifest)
 
     return orchestrate_study(

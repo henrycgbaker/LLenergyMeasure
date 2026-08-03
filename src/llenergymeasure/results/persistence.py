@@ -119,7 +119,7 @@ def save_config_sidecar(
     experiment_id: str,
     config_hash: str,
     engine: str,
-    engine_version: str,
+    engine_version: str | None = None,
     model_name: str,
     measurement_methodology: str,
     steady_state_window: tuple[float, float] | None = None,
@@ -189,11 +189,16 @@ def save_config_sidecar(
         "experiment_id": experiment_id,
         "declared_config_hash": config_hash,
         "engine": engine,
-        "engine_version": engine_version,
-        "model_name": model_name,
-        "measurement_methodology": measurement_methodology,
-        "steady_state_not_detected": steady_state_not_detected,
     }
+    # engine_version is the running library version, known only post-construction
+    # (offline always supplies it, so its key position is preserved here). The
+    # host-side server path cannot see the in-container library, so it omits the
+    # field rather than nulling it.
+    if engine_version is not None:
+        payload["engine_version"] = engine_version
+    payload["model_name"] = model_name
+    payload["measurement_methodology"] = measurement_methodology
+    payload["steady_state_not_detected"] = steady_state_not_detected
     if steady_state_window is not None:
         payload["steady_state_window"] = list(steady_state_window)
     if measurement_window_discard_fraction is not None:
@@ -252,6 +257,9 @@ def save_system(
     # precedence source). None when the snapshot carries no runner block (e.g.
     # the in-container snapshot, whose runner facts the host patches in later).
     env_data["runner"] = snapshot_dict.get("runner")
+    # Session facts block (dual-serialised alongside the result.json copy). None
+    # when the snapshot carries no session block (older sidecars).
+    env_data["session"] = snapshot_dict.get("session")
 
     path = experiment_dir / SYSTEM_FILENAME
     _atomic_write(json.dumps(env_data, indent=2, default=str), path)

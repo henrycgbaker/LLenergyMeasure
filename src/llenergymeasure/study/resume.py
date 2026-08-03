@@ -139,6 +139,48 @@ def validate_config_drift(manifest: StudyManifest, new_study: StudyConfig) -> No
         )
 
 
+def validate_resolved_config_drift(manifest: StudyManifest, new_study: StudyConfig) -> None:
+    """Raise StudyError if a completed experiment's resolved protocol has changed.
+
+    The study_design_hash and the skip-set key on the DECLARED config family only,
+    so a change to the RESOLVED protocol between runs - most notably a user-config
+    server-warmup overlay that rewrites the realised warmup while the declared
+    config is untouched - would otherwise be invisible to resume, and the resumed
+    run would skip the already-"completed" experiment while silently measuring under
+    a different protocol.
+
+    Each completed manifest entry that carries a resolved_config_hash is re-checked
+    against the resolved hash recomputed for the matching declared config in the
+    resumed study. A mismatch aborts with an actionable message. Entries without a
+    resolved hash (a pre-SM10 manifest) leave the guard inert.
+
+    Args:
+        manifest: Manifest loaded from the resumable study directory.
+        new_study: Freshly loaded (overlay-applied) StudyConfig to resume with.
+
+    Raises:
+        StudyError: A completed experiment's resolved hash no longer matches.
+    """
+    from llenergymeasure.study.hashing import resolved_hashes_by_declared
+
+    resolved_by_declared = resolved_hashes_by_declared(new_study.experiments)
+
+    for entry in manifest.experiments:
+        if entry.status != "completed" or entry.resolved_config_hash is None:
+            continue
+        current = resolved_by_declared.get(entry.config_hash)
+        if current is not None and current != entry.resolved_config_hash:
+            raise StudyError(
+                "Resolved-config drift detected for a completed experiment "
+                f"({entry.config_summary}). The declared config is unchanged, but its "
+                f"resolved protocol moved (recorded {entry.resolved_config_hash}, now "
+                f"{current}) - typically a user-config server-warmup overlay that changed "
+                "between runs. Resuming would skip this experiment while measuring under a "
+                "different protocol. Remedy: start a fresh study directory, or restore the "
+                "user config that was in effect for the original run."
+            )
+
+
 def prepare_resume_manifest(study_dir: Path, manifest: StudyManifest) -> ManifestWriter:
     """Re-initialise a ManifestWriter that reuses the existing study directory.
 

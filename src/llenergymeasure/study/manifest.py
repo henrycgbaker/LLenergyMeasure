@@ -33,6 +33,12 @@ class ExperimentManifestEntry(BaseModel):
     config_summary: str
     cycle: int
     status: Literal["pending", "running", "completed", "failed", "skipped", "interrupted"]
+    # Resolved-config hash (library-resolution + realised warmup protocol). Additive:
+    # None for a pre-SM10 manifest, which leaves the resume resolved-drift guard inert.
+    # Populated at entry creation from StudyConfig.declared_resolved_config_hashes so a
+    # resumed run can detect a resolved-protocol change (e.g. a user-config warmup
+    # overlay) that the declared-hash skip-set is blind to.
+    resolved_config_hash: str | None = None
     result_file: str | None = None
     log_file: str | None = None
     error_type: str | None = None
@@ -287,6 +293,17 @@ class ManifestWriter:
     # Private helpers
     # ------------------------------------------------------------------
 
+    def entry_status(self, config_hash: str, cycle: int) -> str | None:
+        """Return the status of a ``(config_hash, cycle)`` entry, or None when absent.
+
+        A read-only lookup (unlike ``_find`` it never raises), used by the dispatch
+        site to avoid rewriting an entry that already reached a terminal state.
+        """
+        for entry in self.manifest.experiments:
+            if entry.config_hash == config_hash and entry.cycle == cycle:
+                return entry.status
+        return None
+
     def _find(self, config_hash: str, cycle: int) -> ExperimentManifestEntry:
         """Find entry by (config_hash, cycle). Raises KeyError if not found."""
         for entry in self.manifest.experiments:
@@ -364,6 +381,8 @@ class ManifestWriter:
                 summaries[h] = build_config_summary(exp)
             occurrences[h] = occurrences.get(h, 0) + 1
 
+        resolved_hashes = ManifestWriter._resolved_hashes_by_declared(study)
+
         entries: list[ExperimentManifestEntry] = []
         for config_hash, count in occurrences.items():
             summary = summaries[config_hash]
@@ -374,6 +393,27 @@ class ManifestWriter:
                         config_summary=summary,
                         cycle=cycle,
                         status="pending",
+                        resolved_config_hash=resolved_hashes.get(config_hash),
                     )
                 )
         return entries
+
+    @staticmethod
+    def _resolved_hashes_by_declared(study: StudyConfig) -> dict[str, str]:
+        """Map each declared config_hash to its resolved-config hash (best-effort).
+
+        The resolved hash carries the realised warmup protocol (the user-config
+        overlay output, R7W), so it moves when the resolved protocol changes even
+        though the declared hash does not - which is what the resume resolved-drift
+        guard keys on. Computed through the SAME resolved-view pipeline that produced
+        StudyConfig.declared_resolved_config_hashes. Returns an empty map on any
+        failure (the entry's resolved_config_hash then stays None and the guard is
+        inert).
+        """
+        try:
+            from llenergymeasure.study.hashing import resolved_hashes_by_declared
+
+            return resolved_hashes_by_declared(study.experiments)
+        except Exception as exc:
+            logger.debug("Failed to compute resolved hashes for manifest entries: %s", exc)
+            return {}

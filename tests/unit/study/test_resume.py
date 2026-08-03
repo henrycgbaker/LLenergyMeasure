@@ -295,6 +295,96 @@ def test_validate_config_drift_raises_on_hash_mismatch() -> None:
 
 
 # ---------------------------------------------------------------------------
+# validate_resolved_config_drift (SM10)
+# ---------------------------------------------------------------------------
+
+
+def _server_config_with_overlay(mode: str):
+    """A server config with the tool-wide warmup overlay applied (mode)."""
+    from llenergymeasure.config.models import ExperimentConfig, ServerWarmupConfig
+    from llenergymeasure.config.precedence import apply_server_warmup_overlay
+    from llenergymeasure.config.user_config import UserConfig, UserServerConfig
+
+    config = ExperimentConfig(
+        task={"model": "gpt2"},
+        engine="vllm",
+        serving_mode="server",
+        server={"traffic": {"rate": 10, "window_seconds": 10}},
+    )
+    apply_server_warmup_overlay(
+        config, UserConfig(server=UserServerConfig(warmup=ServerWarmupConfig(mode=mode)))
+    )
+    return config
+
+
+def _manifest_with_completed_server_entry(config):
+    from llenergymeasure.domain.experiment import compute_declared_config_hash
+    from llenergymeasure.study.hashing import build_resolved_view, hash_config
+    from llenergymeasure.study.manifest import ExperimentManifestEntry, StudyManifest
+
+    entry = ExperimentManifestEntry(
+        config_hash=compute_declared_config_hash(config),
+        config_summary="vllm / gpt2 / server",
+        cycle=1,
+        status="completed",
+        resolved_config_hash=hash_config(build_resolved_view(config)),
+    )
+    return StudyManifest(
+        study_name="test",
+        study_design_hash="h",
+        llenergymeasure_version="0.9.0",
+        started_at=datetime(2026, 3, 1, tzinfo=timezone.utc),
+        total_experiments=1,
+        pending=0,
+        completed=1,
+        experiments=[entry],
+    )
+
+
+def test_validate_resolved_config_drift_passes_when_unchanged() -> None:
+    from llenergymeasure.study.resume import validate_resolved_config_drift
+
+    original = _server_config_with_overlay("composite")
+    manifest = _manifest_with_completed_server_entry(original)
+    resumed = MagicMock()
+    resumed.experiments = [_server_config_with_overlay("composite")]
+    validate_resolved_config_drift(manifest, resumed)  # same resolved protocol -> no raise
+
+
+def test_validate_resolved_config_drift_raises_on_warmup_overlay_change() -> None:
+    from llenergymeasure.study.resume import validate_resolved_config_drift
+
+    # The declared config is identical; only the user-config warmup overlay changed
+    # (composite -> fixed), which moves the resolved hash and must be rejected.
+    original = _server_config_with_overlay("composite")
+    manifest = _manifest_with_completed_server_entry(original)
+    resumed = MagicMock()
+    resumed.experiments = [_server_config_with_overlay("fixed")]
+
+    with pytest.raises(StudyError) as exc_info:
+        validate_resolved_config_drift(manifest, resumed)
+    assert "Resolved-config drift" in str(exc_info.value)
+
+
+def test_validate_resolved_config_drift_inert_without_resolved_hash() -> None:
+    """A pre-SM10 manifest entry (no resolved hash) leaves the guard inert."""
+    from llenergymeasure.study.manifest import ExperimentManifestEntry
+    from llenergymeasure.study.resume import validate_resolved_config_drift
+
+    entry = ExperimentManifestEntry(
+        config_hash="deadbeef",
+        config_summary="x",
+        cycle=1,
+        status="completed",
+        resolved_config_hash=None,
+    )
+    manifest = _make_manifest_with_hash("h").model_copy(update={"experiments": [entry]})
+    resumed = MagicMock()
+    resumed.experiments = []
+    validate_resolved_config_drift(manifest, resumed)  # no raise
+
+
+# ---------------------------------------------------------------------------
 # prepare_resume_manifest
 # ---------------------------------------------------------------------------
 

@@ -25,6 +25,7 @@ from llenergymeasure.domain.metrics import (
 # domain module (both experiment and environment carry it, and experiment
 # imports environment, so a shared low-level module avoids an import cycle).
 from llenergymeasure.domain.provenance import RunnerProvenance
+from llenergymeasure.domain.session import SessionBlock
 
 if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig
@@ -90,6 +91,67 @@ class AggregationMetadata(BaseModel):
         default=False, description="Whether GPU IDs were unique (no double counting)"
     )
     warnings: list[str] = Field(default_factory=list, description="Aggregation warnings")
+
+
+class ServerWarmupProvenance(BaseModel):
+    """One level's warmup outcome, stamped into each of the level's window bundles.
+
+    The server pre-window protocol's outcome (D6 divergence label): identical
+    across a level's windows (one warmup per level) but carried per window so the
+    persistence layer, which never learns sessions exist, has it locally.
+    """
+
+    mode: str = Field(..., description="Warmup mode: 'composite' (convergence gate) or 'fixed'.")
+    converged: bool = Field(
+        ..., description="Whether the composite gate was satisfied (or the fixed duration ran)."
+    )
+    timed_out: bool = Field(
+        ...,
+        description="Whether composite hit its failsafe timeout and proceeded anyway (a loud "
+        "disclosure, never a silent pass).",
+    )
+    elapsed_s: float = Field(..., description="Wall-clock seconds spent in this level's warmup.")
+
+
+class ServerWindowProvenance(BaseModel):
+    """Server-mode per-window provenance: which level/window, and its pre-window protocol.
+
+    The additive server-provenance block on a server-mode ExperimentResult. It
+    locates the window within its rate level and records the warmup outcome and
+    the disclosed attribution policy. Derived server metrics (goodput, slo_pass,
+    energy-at-operating-point) are a later slice and deliberately absent.
+    """
+
+    level_index: int = Field(..., description="0-based rate-level index within the session.")
+    window_index: int = Field(..., description="0-based measured-window index within the level.")
+    level_window_count: int = Field(
+        ..., description="Number of measured windows this level produced."
+    )
+    level_valid: bool = Field(
+        ..., description="Whether the level passed its window-to-window J/token stability gate."
+    )
+    intra_window_cov: float | None = Field(
+        default=None,
+        description="Within-window J/token coefficient of variation (the k=4 sub-window "
+        "diagnostic): a WITHIN-window stability figure, distinct from the window-to-window gate "
+        "that sets level_valid. None when unformable (e.g. a window with no attributed tokens) or "
+        "for a degraded abort-core bundle.",
+    )
+    invalid_reason: str | None = Field(
+        default=None,
+        description="Why the level was invalid (gate failure or abort site), or None when valid.",
+    )
+    warmup: ServerWarmupProvenance | None = Field(
+        default=None, description="This level's warmup outcome, or None when no warmup ran."
+    )
+    pre_window_protocol: str = Field(
+        ...,
+        description="Human-readable description of the server pre-window warmup protocol "
+        "(the offline-vs-server comparability label).",
+    )
+    attribution_policy: str = Field(
+        ..., description="The disclosed energy/token attribution policy the window used."
+    )
 
 
 class ExperimentResult(BaseModel):
@@ -244,6 +306,24 @@ class ExperimentResult(BaseModel):
         default=None,
         description="How the experiment was executed (local process or Docker container). "
         "None when no runner spec was available.",
+    )
+
+    # Session facts - dual-serialised into result.json AND the system.json sidecar
+    # (mirrors the runner block). Present in both modes (offline: session id +
+    # window_count=1, raws null). None for pre-session-facts bundles (D22 loadable).
+    session: SessionBlock | None = Field(
+        default=None,
+        description="Session facts for the measurement session this window belongs to. "
+        "Server mode carries launch/warmup/drain raws + window/level counts; offline carries a "
+        "session id and window_count=1. None for older bundles.",
+    )
+
+    # Server-mode per-window provenance (which level/window, warmup outcome,
+    # pre-window protocol). None for offline results.
+    server: ServerWindowProvenance | None = Field(
+        default=None,
+        description="Server-mode per-window provenance: level/window position, level validity, "
+        "warmup outcome, and the pre-window protocol label. None for offline results.",
     )
 
     # Environment sidecar (loaded from system.json by load_result; excluded

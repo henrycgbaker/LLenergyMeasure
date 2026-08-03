@@ -20,7 +20,7 @@ import json
 import logging
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from llenergymeasure.config.models import StudyConfig
 from llenergymeasure.config.runner_spec import RunnerSpec
@@ -33,9 +33,6 @@ from llenergymeasure.domain.bundle_artefacts import (
 from llenergymeasure.domain.experiment import ExperimentResult, StudyResult, StudySummary
 from llenergymeasure.domain.progress import ProgressCallback
 from llenergymeasure.study.single import run_single_experiment
-
-if TYPE_CHECKING:
-    from llenergymeasure.study.server_session import ServerSessionResult
 
 logger = logging.getLogger(__name__)
 
@@ -161,13 +158,11 @@ def orchestrate_study(
     )
 
     if is_single:
-        result_files, experiment_results, warnings, server_results = (
-            _run_single_experiment_dispatch(
-                study, manifest, study_dir, runner_specs, progress, resolution_logs
-            )
+        result_files, experiment_results, warnings = _run_single_experiment_dispatch(
+            study, manifest, study_dir, runner_specs, progress, resolution_logs
         )
     else:
-        result_files, experiment_results, warnings, server_results = _run_via_runner(
+        result_files, experiment_results, warnings = _run_via_runner(
             study,
             manifest,
             study_dir,
@@ -188,17 +183,10 @@ def orchestrate_study(
     if manifest.status not in ("timed_out", "circuit_breaker", "interrupted"):
         manifest.mark_study_completed()
 
-    # Server sessions map to None in experiment_results (slice boundary), so count
-    # them from the side channel: a session with any valid level is completed, an
-    # aborted / all-invalid one is failed, and its measured window energy folds into
-    # the study total. Offline results are counted as before (byte-identical).
-    completed = sum(1 for r in experiment_results if r is not None) + sum(
-        1 for s in server_results if s.valid
-    )
-    failed = len(experiment_results) - completed
-    total_energy = sum(r.total_energy_j for r in experiment_results if r is not None) + sum(
-        (s.total_window_energy_j or 0.0) for s in server_results
-    )
+    # Cell-granular counting: total_experiments is a cell count ex ante, so the
+    # summary counters must be cells too (a server session maps to N window results
+    # but is a handful of grid-point cells).
+    completed, failed, total_energy = _count_outcomes(experiment_results)
 
     # study.experiments is already cycle-expanded by apply_cycles(), so len() is the true total
     n_cycles = study.study_execution.n_cycles
@@ -224,7 +212,9 @@ def orchestrate_study(
     )
 
     return StudyResult(
-        experiments=[r for r in experiment_results if r is not None],
+        # experiment_results may hold failure dicts (kept for cell-granular counting);
+        # StudyResult.experiments carries only the real ExperimentResults.
+        experiments=[r for r in experiment_results if isinstance(r, ExperimentResult)],
         study_name=study.study_name,
         study_design_hash=study.study_design_hash,
         measurement_protocol=measurement_protocol,
@@ -418,12 +408,12 @@ def _run_single_experiment_dispatch(
     runner_specs: Any,
     progress: ProgressCallback | None,
     resolution_logs: dict[str, dict[str, Any]],
-) -> tuple[list[str], list[ExperimentResult | None], list[str], list[ServerSessionResult]]:
+) -> tuple[list[str], list[Any], list[str]]:
     """Run a single-experiment study in-process, emitting study-table begin/end events.
 
     For a StudyProgressCallback, emits begin_experiment / end_experiment_(ok|fail) so
     the study display shows the single experiment's table row. Offline-only (server
-    studies never take the single path), so the server-results channel is empty.
+    studies never take the single path).
     """
     from llenergymeasure.domain.progress import STEPS_LOCAL, StudyProgressCallback, docker_steps
 
@@ -482,7 +472,7 @@ def _run_single_experiment_dispatch(
         else:
             study_cb.end_experiment_fail(1, exp_elapsed)
 
-    return result_files, experiment_results, warnings, []
+    return result_files, experiment_results, warnings
 
 
 def _run_via_runner(
@@ -494,14 +484,14 @@ def _run_via_runner(
     skip_set: set[tuple[str, int]] | None = None,
     no_lock: bool = False,
     resolution_logs: dict[str, dict[str, Any]] | None = None,
-) -> tuple[list[str], list[ExperimentResult | None], list[str], list[ServerSessionResult]]:
+) -> tuple[list[str], list[Any], list[str]]:
     """Delegate to StudyRunner for multi-experiment / multi-cycle runs.
 
-    Returns ``(result_files, experiment_results, warnings, server_results)``. Server
-    sessions map to ``None`` in ``experiment_results`` (they are not yet an
-    ExperimentResult - per-window bundles are SM10, metrics SM12 - so they stay out
-    of StudyResult.experiments) but are surfaced separately in ``server_results`` so
-    the study summary can count them truthfully.
+    Returns ``(result_files, experiment_results, warnings)``. A server session is
+    first-class: its mapped per-window ExperimentResults enter ``experiment_results``
+    (and hence StudyResult.experiments) and its persisted bundle paths join
+    ``result_files``. A failure dict maps to a single ``None`` (a failed cell); an
+    offline result maps to itself, unchanged.
     """
     from llenergymeasure.domain.progress import StudyProgressCallback
     from llenergymeasure.study.runner import StudyRunner
@@ -521,32 +511,54 @@ def _run_via_runner(
     raw_results = runner.run()
 
     warnings: list[str] = []
-    experiment_results: list[ExperimentResult | None] = []
-    server_results: list[ServerSessionResult] = []
+    experiment_results: list[Any] = []
+    server_result_files: list[str] = []
     for r in raw_results:
-        if isinstance(r, dict):
+        if isinstance(r, ServerSessionResult):
+            experiment_results.extend(r.experiment_results)
+            server_result_files.extend(r.result_files)
+        elif isinstance(r, dict):
             warnings.append(r.get("message", "Unknown error"))
-            experiment_results.append(None)
-        elif isinstance(r, ServerSessionResult):
-            # Keep the experiments=None mapping (slice boundary: server sessions do
-            # not enter StudyResult.experiments at SM9); surface a one-line summary
-            # and hand the session out so the summary counters reflect it.
-            experiment_results.append(None)
-            server_results.append(r)
-            warnings.append(_server_session_summary(r))
+            # Keep the failure dict (not a None) so the summary can count a
+            # whole-group launch failure as its N cells via the dict's "cells" field
+            # (M4); StudyResult.experiments filters to ExperimentResult instances.
+            experiment_results.append(r)
         else:
             experiment_results.append(r)
 
-    return runner.result_files, experiment_results, warnings, server_results
+    return runner.result_files + server_result_files, experiment_results, warnings
 
 
-def _server_session_summary(result: Any) -> str:
-    """One-line human summary of a server session's outcome (SM9-interim surfacing)."""
-    valid = sum(1 for level in result.levels if level.valid)
-    total = len(result.levels)
-    verdict = "valid" if result.valid else ("aborted" if result.aborted else "invalid")
-    return (
-        f"server session ({result.engine}) {verdict}: {valid}/{total} level(s) passed "
-        f"the stability gate, {result.window_count} measured window(s). Per-window "
-        "bundles + metrics land with SM10/SM12."
-    )
+def _count_outcomes(experiment_results: list[Any]) -> tuple[int, int, float]:
+    """Return ``(completed, failed, total_energy)`` counted CELL-granular.
+
+    An offline result is one cell. A server session's per-window results collapse
+    to their grid-point cell by ``(session_id, level_index)``: the cell completes
+    iff its level was valid, else fails. A failure dict counts as its ``cells``
+    field (default 1) failed cells - so a whole grouped-session launch failure that
+    dooms N cells contributes N, keeping completed + failed == total_experiments
+    (the per-cell manifest is the authoritative cell-level record). A ``None`` (the
+    single-experiment failure shape) counts as one failed. ``total_energy`` sums
+    every real result: a gate-failed level still contributes its
+    physically-measured window energy.
+    """
+    completed = 0
+    failed = 0
+    total_energy = 0.0
+    server_cells: dict[tuple[str | None, int], bool] = {}
+    for r in experiment_results:
+        if r is None:
+            failed += 1
+            continue
+        if isinstance(r, dict):
+            failed += int(r.get("cells", 1))
+            continue
+        total_energy += r.total_energy_j
+        if r.server is None:
+            completed += 1  # an offline cell
+            continue
+        session_id = r.session.session_id if r.session is not None else None
+        server_cells[(session_id, r.server.level_index)] = r.server.level_valid
+    completed += sum(1 for valid in server_cells.values() if valid)
+    failed += sum(1 for valid in server_cells.values() if not valid)
+    return completed, failed, total_energy

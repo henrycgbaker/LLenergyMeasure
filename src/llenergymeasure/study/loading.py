@@ -67,11 +67,12 @@ def finalise_study(raw: LoadedStudyRaw, *, user_config: UserConfig | None = None
     # binds on the realised warmup protocol. Declared hashes are untouched (the
     # overlay is side-channel state, never a field), and the overlay rides the
     # sweep-dedup deep copies through to the runner. No-op for offline configs and
-    # when the user config carries no warmup layer. Note: resume/drift-detection
-    # (validate_config_drift on study_design_hash, the skip-set on config_hash) key
-    # on the DECLARED family only, so a resumed study is blind to a user-config
-    # warmup change between runs (see resume.py; banked for the resolved-hash resume
-    # guard alongside SM10's persistence work).
+    # when the user config carries no warmup layer. The DECLARED-family drift checks
+    # (validate_config_drift on study_design_hash, the skip-set on config_hash) are
+    # blind to a user-config warmup change between runs; the RESOLVED-family guard
+    # (resume.validate_resolved_config_drift, keyed on the manifest resolved_config_hash)
+    # closes that gap, so a resumed study now rejects a changed resolved protocol
+    # rather than silently skipping a differently-resolved cell.
     if user_config is not None:
         from llenergymeasure.config.precedence import apply_server_warmup_overlay
 
