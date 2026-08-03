@@ -95,6 +95,7 @@ from llenergymeasure.results.request_log import (
     REQUEST_STATUS_TIMEOUT,
     RequestLogRow,
 )
+from llenergymeasure.results.server_metrics import SloBounds, derive_server_window_metrics
 
 if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig, TrafficConfig
@@ -1032,6 +1033,7 @@ class ServerSession:
                 level_valid=level_valid,
                 invalid_reason=invalid_reason,
                 server_output_tokens=_sum_server_completion_tokens(rows),
+                request_rows=rows,
             )
             samples = self._window_samples(window.energy)
             self._persist_bundle(
@@ -1178,7 +1180,14 @@ class ServerSession:
         serving mode. The OBSERVED half (observed_engine_params /
         observed_sampling_params / observed_config_hash) and the running
         engine_version are container-boundary state the host cannot see for server
-        mode; they are OMITTED (not nulled) and land with SM12.
+        mode; they are OMITTED (not nulled). At v0.7 there is NO in-container
+        measurement harness observing the live engine (the traffic issuer runs
+        host-side against the served endpoint), so a server bundle carries NO
+        observed hash AT ALL - and, critically, the declared/resolved hash is never
+        projected in its place (a declared hash masquerading as observed would
+        poison the observed-collision analysis). In-container observation is
+        post-v0.7; until then a server cell's observed identity is genuinely absent,
+        not zero.
         """
         from llenergymeasure.results.persistence import save_config_sidecar
 
@@ -1311,18 +1320,29 @@ class ServerSession:
         level_valid: bool,
         invalid_reason: str | None,
         server_output_tokens: int | None,
+        request_rows: list[RequestLogRow],
     ) -> ExperimentResult:
         """Map one measured window to an ExperimentResult (serving_mode='server').
 
         Fills the shared-core quantities truthfully (window energy J, client-counted
-        output tokens, window duration, J/token) and leaves the derived server
-        metrics (goodput, slo_pass, amortised breakdown) None - SM12. ``output_tokens``
-        is the client-side canonical count (span-received streamed deltas, O8);
-        prefill tokens are 0 (client-side input-token counting needs a host tokenizer
-        and is out of scope - the engine's prompt_tokens ride only in requests.parquet).
-        The counting mechanism and the auxiliary server-reported total are disclosed in
-        the server provenance. Identity is the CELL's grid-point hash (rate is identity
-        per C4), so the bundle lands under its own hash.
+        output tokens, window duration, J/token) and derives the server-distinct
+        metrics (latency percentiles, throughput, attainment/slo overlay, goodput,
+        energy-at-operating-point) from the SAME ``request_rows`` that feed
+        requests.parquet, with no re-sampling (SM12). ``output_tokens`` is the
+        client-side canonical count (span-received streamed deltas, O8); prefill
+        tokens are None (client-side input-token counting is post-v0.7 - the engine's
+        prompt_tokens ride only in requests.parquet), and total_tokens is therefore
+        None too (input + output is undefined while input is uncounted). The counting
+        mechanism and the auxiliary server-reported total are disclosed in the server
+        provenance. Identity is the CELL's grid-point hash (rate is identity per C4),
+        so the bundle lands under its own hash.
+
+        The SLO overlay inside the derived metrics is a PURE function of the rows and
+        the configured bounds (O5.3): the bounds only classify the window post-hoc,
+        so they never entered its identity, and the overlay is re-derivable offline
+        against any bounds. Latency metrics filter status=="ok" and are drain-inclusive
+        (D7); the token/energy denominators are the already-clipped window figures
+        (avg_tokens_per_second, window_j_per_token) reused, never recomputed.
         """
         from llenergymeasure.domain.experiment import ExperimentResult
 
@@ -1332,6 +1352,7 @@ class ServerSession:
         output_tokens = bk.energy_denominator_tokens
         energy_j = window.window_energy_j or 0.0
         j_per_token = window.window_j_per_token
+        token_throughput = (output_tokens / duration) if duration > 0 else 0.0
         start_time, end_time = self._core_times(window.energy)
         server_prov = self._server_provenance(
             level_index=wr.level_index,
@@ -1345,6 +1366,14 @@ class ServerSession:
             attribution_policy=bk.attribution_policy,
             server_reported_output_tokens=server_output_tokens,
         )
+        server_metrics = derive_server_window_metrics(
+            request_rows,
+            duration_s=duration,
+            token_throughput_tokens_s=token_throughput,
+            j_per_token=j_per_token,
+            level_valid=level_valid,
+            slo=self._slo_bounds(cell.config),
+        )
         return ExperimentResult(
             experiment_id=self._window_experiment_id(
                 cell.config_hash, cell.cycle, wr.level_index, window.window_index
@@ -1353,12 +1382,12 @@ class ServerSession:
             serving_mode="server",
             engine=_engine_name(cell.config),
             model_name=cell.config.task.model,
-            input_tokens=0,
+            input_tokens=None,
             output_tokens=output_tokens,
-            total_tokens=output_tokens,
+            total_tokens=None,
             total_energy_j=energy_j,
             total_inference_time_sec=duration,
-            avg_tokens_per_second=(output_tokens / duration) if duration > 0 else 0.0,
+            avg_tokens_per_second=token_throughput,
             avg_energy_per_token_j=j_per_token if j_per_token is not None else 0.0,
             energy_per_token_mj_total=(j_per_token * 1000.0) if j_per_token is not None else None,
             total_flops=0.0,
@@ -1366,6 +1395,7 @@ class ServerSession:
             end_time=end_time,
             timeseries=self._timeseries_name(window.energy),
             server=server_prov,
+            server_metrics=server_metrics,
         )
 
     def _map_degraded_core(
@@ -1382,9 +1412,12 @@ class ServerSession:
     ) -> ExperimentResult:
         """Map a failed level's preserved abort core to a degraded ExperimentResult.
 
-        The window's bookkeeping was lost with the abort, so tokens / duration are
-        null-equivalents (0); only the measured GPU energy stands. The degradation
-        and its cause are disclosed in the server provenance and the warnings.
+        The window's bookkeeping was lost with the abort, so the output-token count
+        and duration are null-equivalents (0) and no per-request rows survive to
+        derive server metrics (server_metrics stays None); only the measured GPU
+        energy stands. input_tokens / total_tokens are None (the server-mode
+        mode-inapplicable discipline). The degradation and its cause are disclosed in
+        the server provenance and the warnings.
         """
         from llenergymeasure.domain.experiment import ExperimentResult
 
@@ -1407,9 +1440,9 @@ class ServerSession:
             serving_mode="server",
             engine=_engine_name(cell.config),
             model_name=cell.config.task.model,
-            input_tokens=0,
+            input_tokens=None,
             output_tokens=0,
-            total_tokens=0,
+            total_tokens=None,
             total_energy_j=_core_energy_j(core) or 0.0,
             total_inference_time_sec=0.0,
             avg_tokens_per_second=0.0,
@@ -1421,6 +1454,20 @@ class ServerSession:
             measurement_warnings=[f"degraded window bundle (level aborted): {invalid_reason}"],
             server=server_prov,
         )
+
+    @staticmethod
+    def _slo_bounds(config: ExperimentConfig) -> SloBounds | None:
+        """Project the config's slo bounds into the pure overlay input (None when unset).
+
+        The slo bounds are a post-hoc overlay excluded from both hash families (O5.3);
+        they only classify the derived metrics, so they are read here and passed to
+        the pure derivation, never folded into the window's identity.
+        """
+        server = config.server
+        if server is None or server.traffic.slo is None:
+            return None
+        slo = server.traffic.slo
+        return SloBounds(ttft_ms=slo.ttft_ms, tpot_ms=slo.tpot_ms, percentile=slo.percentile)
 
     @staticmethod
     def _server_provenance(

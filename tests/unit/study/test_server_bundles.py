@@ -242,6 +242,24 @@ def _server_config(rate: float = 10.0) -> ExperimentConfig:
     )
 
 
+def _server_config_with_slo(
+    rate: float = 10.0, *, ttft_ms: float = 1.0, percentile: float = 0.99
+) -> ExperimentConfig:
+    return ExperimentConfig(
+        task={"model": "gpt2"},
+        engine="vllm",
+        serving_mode="server",
+        server={
+            "traffic": {
+                "rate": rate,
+                "window_seconds": 10,
+                "slo": {"ttft_ms": ttft_ms, "percentile": percentile},
+            }
+        },
+        measurement={"baseline": {"enabled": False}},
+    )
+
+
 def _offline_config(model: str) -> ExperimentConfig:
     return ExperimentConfig(task={"model": model}, engine="vllm", serving_mode="offline")
 
@@ -767,6 +785,97 @@ class TestCleanSession:
         assert len(result.result_files) == 3
         assert all(r.serving_mode == "server" for r in result.experiment_results)
         assert all(r.session is not None for r in result.experiment_results)
+
+    def test_clean_session_derives_server_metrics(self, tmp_path: Path) -> None:
+        """Each window bundle lands the SM12 derived metrics (no slo configured)."""
+        config = _server_config(10.0)
+        runner = _runner(tmp_path, [config], event=None)
+        session = ServerSession(
+            runner,
+            config,
+            None,
+            config_hash=compute_declared_config_hash(config),
+            cycle=1,
+            index=1,
+            engine=FakeEngine(),
+        )
+        _wire(session, energy_sink=ProducingEnergySink(power_w=100.0))
+        with session:
+            result = session.run()
+        assert isinstance(result, ServerSessionResult)
+        for bundle in _bundles(tmp_path):
+            metrics = _read(bundle / RESULT_FILENAME)["server_metrics"]
+            assert metrics is not None
+            # Four in-span completed requests, no failures (the fixture's rows).
+            assert metrics["completed_count"] == 4
+            assert metrics["error_count"] == 0
+            assert metrics["timeout_count"] == 0
+            assert metrics["completion_rate"] == pytest.approx(1.0)
+            # Request throughput over the 10 s span (4 completed / 10 s).
+            assert metrics["request_throughput_req_s"] == pytest.approx(0.4)
+            # TTFT is zero in the fixture (first token stamped at issue), 4 samples;
+            # single-token requests give no TPOT / ITL sample.
+            assert metrics["ttft"]["samples"] == 4
+            assert metrics["ttft"]["p99_ms"] == pytest.approx(0.0)
+            assert metrics["tpot"]["samples"] == 0
+            assert metrics["itl"]["samples"] == 0
+            # The energy-at-operating-point value is the window's J/token.
+            assert metrics["energy_at_operating_point_j_per_token"] is not None
+            # Client and server token totals agree (both 4), ratio 1.0.
+            assert metrics["server_reported_client_token_ratio"] == pytest.approx(1.0)
+            # No slo configured -> the overlay is absent, and the mode-inapplicable
+            # prefill fields are None (client-side prefill counting is post-v0.7).
+            assert metrics["slo"] is None
+            payload = _read(bundle / RESULT_FILENAME)
+            assert payload["input_tokens"] is None
+            assert payload["total_tokens"] is None
+            assert payload["output_tokens"] == 4
+
+    def test_clean_session_slo_overlay_and_offline_rejudge(self, tmp_path: Path) -> None:
+        """With slo configured the overlay lands, and it is re-derivable offline (O5.3)."""
+        from llenergymeasure.results.request_log import rows_from_parquet
+        from llenergymeasure.results.server_metrics import SloBounds, evaluate_slo
+
+        config = _server_config_with_slo(10.0, ttft_ms=1.0, percentile=0.99)
+        runner = _runner(tmp_path, [config], event=None)
+        session = ServerSession(
+            runner,
+            config,
+            None,
+            config_hash=compute_declared_config_hash(config),
+            cycle=1,
+            index=1,
+            engine=FakeEngine(),
+        )
+        _wire(session, energy_sink=ProducingEnergySink(power_w=100.0))
+        with session:
+            result = session.run()
+        assert isinstance(result, ServerSessionResult)
+        for bundle in _bundles(tmp_path):
+            slo = _read(bundle / RESULT_FILENAME)["server_metrics"]["slo"]
+            assert slo is not None
+            # All four zero-TTFT requests meet the 1 ms bound -> full attainment, pass.
+            assert slo["attainment_fraction"] == pytest.approx(1.0)
+            assert slo["slo_pass"] is True
+            assert slo["percentile"] == pytest.approx(0.99)
+            assert slo["ttft_bound_ms"] == pytest.approx(1.0)
+            # Goodput = attainment (1.0) x span-clipped throughput (0.4 tok/s).
+            assert slo["goodput_tokens_s"] == pytest.approx(0.4)
+            assert slo["energy_at_operating_point_valid"] is True
+            # Re-judge the SAME persisted rows against a STRICTER-population bound
+            # offline: the physical rows are unchanged, only the verdict moves. The
+            # fixture TTFT is exactly 0, so use a tpot bound that no single-token
+            # request can violate to confirm the attainment stays a pure function of
+            # (rows, bounds) reachable from requests.parquet alone.
+            rows = rows_from_parquet(bundle / "requests.parquet")
+            reeval = evaluate_slo(
+                rows,
+                SloBounds(ttft_ms=1.0, tpot_ms=None, percentile=0.99),
+                token_throughput_tokens_s=0.4,
+                level_valid=True,
+            )
+            assert reeval.attainment_fraction == pytest.approx(1.0)
+            assert reeval.slo_pass is True
 
 
 # ---------------------------------------------------------------------------
