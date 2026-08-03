@@ -229,7 +229,7 @@ def evaluate_slo(
     )
 
 
-def _sum_server_completion_tokens(rows: Sequence[RequestLogRow]) -> tuple[int, bool]:
+def _completed_server_token_total(rows: Sequence[RequestLogRow]) -> tuple[int, bool]:
     """Sum auxiliary server-reported completion tokens over rows; flag whether any was seen.
 
     Returns (total, any_reported) so a true 0 is distinguishable from 'no engine
@@ -282,7 +282,7 @@ def derive_server_window_metrics(
     # comparable (both whole-request receipt-unclipped counts, not the span-clipped
     # energy denominator): server self-reported completion tokens / client-counted.
     client_tokens = sum(r.client_output_tokens for r in completed)
-    server_tokens, any_server = _sum_server_completion_tokens(completed)
+    server_tokens, any_server = _completed_server_token_total(completed)
     token_ratio = (server_tokens / client_tokens) if (any_server and client_tokens > 0) else None
 
     slo_eval = (
