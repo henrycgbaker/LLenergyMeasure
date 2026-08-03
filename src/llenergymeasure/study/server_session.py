@@ -762,8 +762,13 @@ class ServerSession:
         )
 
         if interrupted:
-            # Manifest handling is the sweep loop's (mark_interrupted downgrades the
-            # cells left running); do not resolve the entries here.
+            # Credit cleanly-closed levels now (their outcome is known and their
+            # bundles are persisted+finalized), so resume does not re-run them and
+            # duplicate their bundles; in-flight / aborted / unreached cells stay
+            # running for the sweep loop's mark_interrupted downgrade (M3).
+            self._resolve_manifest_per_cell(
+                levels, aborted=aborted, abort_reason=abort_reason, interrupted=True
+            )
             self._end_progress(result, ok=result.valid)
             return result
 
@@ -1050,20 +1055,28 @@ class ServerSession:
         *,
         aborted: bool,
         abort_reason: str | None,
+        interrupted: bool = False,
     ) -> None:
         """Resolve each grid point (cell) on its own level's outcome (point 5).
 
         A cell whose level passed the stability gate completes (with its level
-        aggregates as the resume-display metrics); every other cell fails - a gate
-        failure, an abort, or a level a warmup-abort doomed before it ran. The
-        interrupt path never reaches here (the sweep loop downgrades the running
-        cells).
+        aggregates as the resume-display metrics); a cleanly-closed gate-failed
+        level fails. On the CLEAN path every other cell fails too (an abort, or a
+        level a warmup-abort doomed before it ran). On the INTERRUPT path only
+        cleanly-CLOSED levels (validation resolved) are credited now - their outcome
+        is known and their bundles are finalized, so resume must not re-run them;
+        in-flight, aborted, and unreached cells stay running for the sweep loop's
+        mark_interrupted downgrade (M3).
         """
         levels_by_index = {level.level_index: level for level in levels}
         error_type = "WarmupTrafficError" if aborted else "ServerSessionInvalid"
         for level_index, cell in enumerate(self._cells):
             level = levels_by_index.get(level_index)
-            if level is not None and level.valid:
+            closed = level is not None and level.validation is not None
+            if interrupted and not closed:
+                # In-flight / aborted / unreached: leave running for mark_interrupted.
+                continue
+            if level is not None and level.validation is not None and level.valid:
                 self._runner.manifest.mark_completed(
                     cell.config_hash,
                     cell.cycle,
@@ -1151,7 +1164,7 @@ class ServerSession:
         )
         return ExperimentResult(
             experiment_id=self._window_experiment_id(
-                cell.config_hash, wr.level_index, window.window_index
+                cell.config_hash, cell.cycle, wr.level_index, window.window_index
             ),
             declared_config_hash=cell.config_hash,
             serving_mode="server",
@@ -1205,7 +1218,9 @@ class ServerSession:
             attribution_policy=ATTRIBUTION_STEADY_STATE_SPAN,
         )
         return ExperimentResult(
-            experiment_id=self._window_experiment_id(cell.config_hash, level_index, window_index),
+            experiment_id=self._window_experiment_id(
+                cell.config_hash, cell.cycle, level_index, window_index
+            ),
             declared_config_hash=cell.config_hash,
             serving_mode="server",
             engine=_engine_name(cell.config),
@@ -1254,8 +1269,13 @@ class ServerSession:
         )
 
     @staticmethod
-    def _window_experiment_id(config_hash: str, level_index: int, window_index: int) -> str:
-        return f"server-{config_hash}-L{level_index}-W{window_index}"
+    def _window_experiment_id(
+        config_hash: str, cycle: int, level_index: int, window_index: int
+    ) -> str:
+        # The cycle component keeps cycle 1 and cycle 2 of one grid point distinct
+        # (else their result.json + timeseries would collide once a reader keys on
+        # experiment_id).
+        return f"server-{config_hash}-c{cycle}-L{level_index}-W{window_index}"
 
     @staticmethod
     def _window_samples(core: MeasuredWindowCore | None) -> list[Any]:
@@ -1598,20 +1618,23 @@ class ServerSession:
         """
         if not self._pending_writers:
             return
+        # Always patch the best-known session block into every sibling before
+        # finalize, so all siblings carry the FINAL window/level counts (not the
+        # incremental preliminary window_count they were written with). The drain
+        # raws are included ONLY on a clean close (final=clean); they stay null on
+        # the interrupt path (O7.4). The block build is the one non-trivial call on
+        # this otherwise fully-defensive teardown path, so it is guarded: a fault
+        # degrades to unpatched-but-finalized bundles rather than escaping (which
+        # would flip completed manifest entries to failed).
         final_block: SessionBlock | None = None
-        if clean:
-            # Building the final block is the one non-trivial call on this
-            # otherwise fully-defensive teardown path; guard it so a block-build
-            # fault degrades to unpatched-but-finalized bundles rather than
-            # escaping (which would flip completed manifest entries to failed).
-            try:
-                final_block = self._build_session_block(final=True)
-            except Exception:
-                logger.warning(
-                    "Building the final session block failed; window bundles are "
-                    "finalized with their preliminary session block (drain unpatched).",
-                    exc_info=True,
-                )
+        try:
+            final_block = self._build_session_block(final=clean)
+        except Exception:
+            logger.warning(
+                "Building the session block failed; window bundles are finalized "
+                "with their preliminary session block.",
+                exc_info=True,
+            )
         if final_block is not None:
             for writer in self._pending_writers:
                 with contextlib.suppress(Exception):

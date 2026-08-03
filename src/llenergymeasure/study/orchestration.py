@@ -212,7 +212,9 @@ def orchestrate_study(
     )
 
     return StudyResult(
-        experiments=[r for r in experiment_results if r is not None],
+        # experiment_results may hold failure dicts (kept for cell-granular counting);
+        # StudyResult.experiments carries only the real ExperimentResults.
+        experiments=[r for r in experiment_results if isinstance(r, ExperimentResult)],
         study_name=study.study_name,
         study_design_hash=study.study_design_hash,
         measurement_protocol=measurement_protocol,
@@ -406,7 +408,7 @@ def _run_single_experiment_dispatch(
     runner_specs: Any,
     progress: ProgressCallback | None,
     resolution_logs: dict[str, dict[str, Any]],
-) -> tuple[list[str], list[ExperimentResult | None], list[str]]:
+) -> tuple[list[str], list[Any], list[str]]:
     """Run a single-experiment study in-process, emitting study-table begin/end events.
 
     For a StudyProgressCallback, emits begin_experiment / end_experiment_(ok|fail) so
@@ -482,7 +484,7 @@ def _run_via_runner(
     skip_set: set[tuple[str, int]] | None = None,
     no_lock: bool = False,
     resolution_logs: dict[str, dict[str, Any]] | None = None,
-) -> tuple[list[str], list[ExperimentResult | None], list[str]]:
+) -> tuple[list[str], list[Any], list[str]]:
     """Delegate to StudyRunner for multi-experiment / multi-cycle runs.
 
     Returns ``(result_files, experiment_results, warnings)``. A server session is
@@ -509,7 +511,7 @@ def _run_via_runner(
     raw_results = runner.run()
 
     warnings: list[str] = []
-    experiment_results: list[ExperimentResult | None] = []
+    experiment_results: list[Any] = []
     server_result_files: list[str] = []
     for r in raw_results:
         if isinstance(r, ServerSessionResult):
@@ -517,25 +519,28 @@ def _run_via_runner(
             server_result_files.extend(r.result_files)
         elif isinstance(r, dict):
             warnings.append(r.get("message", "Unknown error"))
-            experiment_results.append(None)
+            # Keep the failure dict (not a None) so the summary can count a
+            # whole-group launch failure as its N cells via the dict's "cells" field
+            # (M4); StudyResult.experiments filters to ExperimentResult instances.
+            experiment_results.append(r)
         else:
             experiment_results.append(r)
 
     return runner.result_files + server_result_files, experiment_results, warnings
 
 
-def _count_outcomes(
-    experiment_results: list[ExperimentResult | None],
-) -> tuple[int, int, float]:
+def _count_outcomes(experiment_results: list[Any]) -> tuple[int, int, float]:
     """Return ``(completed, failed, total_energy)`` counted CELL-granular.
 
     An offline result is one cell. A server session's per-window results collapse
     to their grid-point cell by ``(session_id, level_index)``: the cell completes
-    iff its level was valid, else fails. A ``None`` is a failure dict - one per
-    failed cell for a single cell, but ONE for a whole grouped-session launch
-    failure that dooms N cells (the per-cell manifest is the authoritative
-    cell-level record). ``total_energy`` sums every non-None result: a gate-failed
-    level still contributes its physically-measured window energy.
+    iff its level was valid, else fails. A failure dict counts as its ``cells``
+    field (default 1) failed cells - so a whole grouped-session launch failure that
+    dooms N cells contributes N, keeping completed + failed == total_experiments
+    (the per-cell manifest is the authoritative cell-level record). A ``None`` (the
+    single-experiment failure shape) counts as one failed. ``total_energy`` sums
+    every real result: a gate-failed level still contributes its
+    physically-measured window energy.
     """
     completed = 0
     failed = 0
@@ -544,6 +549,9 @@ def _count_outcomes(
     for r in experiment_results:
         if r is None:
             failed += 1
+            continue
+        if isinstance(r, dict):
+            failed += int(r.get("cells", 1))
             continue
         total_energy += r.total_energy_j
         if r.server is None:

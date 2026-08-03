@@ -904,18 +904,21 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
             with ServerSession.for_group(self, cells, spec, index=index) as session:
                 return session.run()
         except Exception as exc:
-            failure = {"type": type(exc).__name__, "message": str(exc)}
+            error_type = type(exc).__name__
+            message = str(exc)
+            # "cells" carries the group size so the study summary counts a whole-group
+            # launch failure as N failed cells, not one (M4). The per-cell manifest
+            # marks below remain the authoritative cell-level record.
+            failure: dict[str, Any] = {"type": error_type, "message": message, "cells": len(cells)}
             # A late fault (e.g. a teardown fault escaping the session guard) must not
             # rewrite history: a cell already recorded completed has valid bundles on
             # disk, so downgrade only the cells not already completed.
             for cell in cells:
                 if self.manifest.entry_status(cell.config_hash, cell.cycle) == "completed":
                     continue
-                self.manifest.mark_failed(
-                    cell.config_hash, cell.cycle, failure["type"], failure["message"]
-                )
+                self.manifest.mark_failed(cell.config_hash, cell.cycle, error_type, message)
             if self._progress:
-                self._progress.end_experiment_fail(index, 0.0, error=failure["message"])
+                self._progress.end_experiment_fail(index, 0.0, error=message)
             return failure
 
     def _handle_result(

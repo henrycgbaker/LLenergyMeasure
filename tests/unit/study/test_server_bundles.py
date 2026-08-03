@@ -485,15 +485,16 @@ class TestFirstClassOrchestration:
                 self.result_files = ["/offline"]
 
             def run(self) -> list[Any]:
-                return [ssr, {"type": "X", "message": "boom"}]
+                return [ssr, {"type": "X", "message": "boom", "cells": 2}]
 
         monkeypatch.setattr(runner_module, "StudyRunner", _FakeRunner)
         study = StudyConfig(experiments=[_server_config()])
         files, exps, warnings = orchestration._run_via_runner(study, object(), tmp_path)
 
-        # The session's mapped windows enter experiment_results first-class; a failure
-        # dict maps to one None; the session's bundle paths join result_files.
-        assert exps == [r1, r2, None]
+        # The session's mapped windows enter experiment_results first-class; the failure
+        # dict is KEPT (for cell-granular counting); the session's bundle paths join
+        # result_files.
+        assert exps == [r1, r2, {"type": "X", "message": "boom", "cells": 2}]
         assert files == ["/offline", "/a", "/b"]
         assert warnings == ["boom"]
 
@@ -516,8 +517,20 @@ class TestFirstClassOrchestration:
         # the None = 2 failed (never 6/1 window-granular).
         assert completed == 2
         assert failed == 2
-        # total_energy still sums every non-None window (gate-failed levels count).
+        # total_energy still sums every real window (gate-failed levels count).
         assert total_energy == pytest.approx(offline.total_energy_j + 30.0 + 10.0)
+
+    def test_count_outcomes_counts_group_failure_dict_by_cells(self) -> None:
+        from llenergymeasure.study.orchestration import _count_outcomes
+
+        # A whole-group launch failure is ONE dict for N cells: it counts as N
+        # failed, so completed + failed matches the cell total (M4). A bare dict
+        # (single cell) defaults to one.
+        completed, failed, _ = _count_outcomes(
+            [{"type": "E", "message": "boom", "cells": 3}, {"type": "E", "message": "x"}, None]
+        )
+        assert completed == 0
+        assert failed == 5  # 3 (group) + 1 (bare dict) + 1 (None)
 
 
 # ---------------------------------------------------------------------------
@@ -640,6 +653,10 @@ class TestCleanSession:
             assert block["drain_energy_j"] == pytest.approx(7.0)  # drain stamped on clean close
             assert block["drain_duration_s"] is not None
             # Server per-window provenance is present and truthful.
+            # M2: experiment_id carries the cycle so cycle 1 and 2 of one grid point
+            # never collide.
+            assert payload["experiment_id"].startswith("server-")
+            assert "-c1-L0-W" in payload["experiment_id"]
             prov = payload["server"]
             assert prov["level_index"] == 0
             assert prov["level_valid"] is True
@@ -793,13 +810,28 @@ class TestSigint:
         assert len(bundles) == 3
         for bundle in bundles:
             block = _read(bundle / RESULT_FILENAME)["session"]
-            # ...and their drain fields are NULL (the interrupted path skips the patch).
+            # ...and their drain fields are NULL (the interrupted path skips the drain).
             assert block["drain_energy_j"] is None
             assert block["drain_duration_s"] is None
             # Launch/warmup raws (measured before the interrupt) are still present.
             assert block["launch_energy_j"] == pytest.approx(40.0)
-        # The manifest is left running (the sweep loop's mark_interrupted downgrades it).
-        assert session._runner.manifest.manifest.status == "running"
+            # M1: every sibling carries the FINAL window_count (uniform), not the
+            # incremental preliminary [1, 2, 3].
+            assert block["window_count"] == 3
+        manifest = session._runner.manifest
+        # The study is left running (the sweep loop's mark_interrupted downgrades it).
+        assert manifest.manifest.status == "running"
+        # M3: level 0 closed valid -> cell 0 credited completed now (resume won't
+        # re-run it); level 1 was interrupted before closing -> cell 1 stays running.
+        assert manifest.entry_status(compute_declared_config_hash(a), 1) == "completed"
+        assert manifest.manifest.experiments[0].result_file
+        assert manifest.entry_status(compute_declared_config_hash(b), 1) == "running"
+        # The resume skip-set (built from completed entries) contains cell 0 only.
+        from llenergymeasure.study.resume import load_resume_state
+
+        _loaded, skip_set = load_resume_state(tmp_path)
+        assert (compute_declared_config_hash(a), 1) in skip_set
+        assert (compute_declared_config_hash(b), 1) not in skip_set
 
 
 # ---------------------------------------------------------------------------
