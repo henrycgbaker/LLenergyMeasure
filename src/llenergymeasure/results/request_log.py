@@ -243,3 +243,39 @@ def read_requests_parquet(path: Path) -> list[dict[str, Any]]:
     table = pq.read_table(Path(path))
     rows: list[dict[str, Any]] = table.to_pylist()
     return rows
+
+
+def rows_from_parquet(path: Path) -> list[RequestLogRow]:
+    """Read requests.parquet back into typed :class:`RequestLogRow` records.
+
+    The typed counterpart of :func:`read_requests_parquet`, so a consumer can
+    re-derive a window's server metrics (SM12) or re-judge it against fresh SLO
+    bounds OFFLINE from the persisted rows alone (the re-judgeable promise). The
+    Parquet schema is locked, so the column set maps 1:1 onto the dataclass fields;
+    ``output_token_times`` comes back as a list.
+    """
+    rows: list[RequestLogRow] = []
+    for row in read_requests_parquet(path):
+        rows.append(
+            RequestLogRow(
+                request_index=row["request_index"],
+                issued_at=row["issued_at"],
+                dispatched_at=row["dispatched_at"],
+                first_token_at=row["first_token_at"],
+                completed_at=row["completed_at"],
+                ttft_ms=row["ttft_ms"],
+                e2e_latency_ms=row["e2e_latency_ms"],
+                client_output_tokens=row["client_output_tokens"],
+                server_prompt_tokens=row["server_prompt_tokens"],
+                server_completion_tokens=row["server_completion_tokens"],
+                status=row["status"],
+                finish_reason=row["finish_reason"],
+                level_index=row["level_index"],
+                window_index=row["window_index"],
+                in_measurement_window=row["in_measurement_window"],
+                is_ramp=row["is_ramp"],
+                completed_in_drain=row["completed_in_drain"],
+                output_token_times=list(row["output_token_times"] or []),
+            )
+        )
+    return rows
