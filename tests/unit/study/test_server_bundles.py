@@ -650,6 +650,57 @@ class TestGrouping:
         statuses = {e.config_hash: e.status for e in runner.manifest.manifest.experiments}
         assert statuses == {ha: "completed", hb: "completed"}
 
+    def test_fully_invalid_group_failure_dict_counts_all_cells(self, tmp_path: Path) -> None:
+        # A grouped session that ran to completion but whose every level GATE-FAILED
+        # (no valid window) returns a failure dict, not a ServerSessionResult. That
+        # dict must carry cells=N so _count_outcomes charges N failed cells - keeping
+        # completed + failed == total_experiments. The M4 fix added cells only to the
+        # launch-failure dict; this exercises the missed PRODUCER path (_finalise).
+        from llenergymeasure.study.orchestration import _count_outcomes
+
+        a, b = _server_config(10.0), _server_config(20.0)
+        ha, hb = compute_declared_config_hash(a), compute_declared_config_hash(b)
+        runner = _runner(tmp_path, [a, b], event=None)
+        cells = [ServerCell(a, ha, 1), ServerCell(b, hb, 1)]
+        session = ServerSession.for_group(runner, cells, None, index=1, engine=FakeEngine())
+        _wire(session, energy_sink=ProducingEnergySink(power_w=100.0))
+
+        # Force every level invalid: land all token receipts in the ramp (before any
+        # window's span_start), so each measured window has zero attributed tokens and
+        # the stability gate fails. No level is valid -> run() returns a failure dict.
+        def _ramp_only_plans(shape: Any, transport: Any) -> list[LevelPlan]:
+            spec = WindowSpec(rate=10.0, duration_seconds=10.0, ramp_exclusion_seconds=30.0)
+            plans: list[LevelPlan] = []
+            for _ in range(len(session._cells)):
+                report, receipt_fn = _report_with_receipts([1000.5, 1001.0])
+                plans.append(
+                    LevelPlan(
+                        spec=spec,
+                        traffic_source=FakeTrafficSource(report),
+                        transport=SimpleNamespace(),
+                        token_receipt_fn=receipt_fn,
+                    )
+                )
+            return plans
+
+        session.__dict__["_make_level_plans"] = _ramp_only_plans
+
+        with session:
+            result = session.run()
+
+        # PRODUCER: the fully-invalid grouped session returns the failure dict carrying
+        # its group size, not a ServerSessionResult.
+        assert isinstance(result, dict)
+        assert result["type"] == "ServerSessionInvalid"
+        assert result["cells"] == 2
+
+        # CONSUMER: orchestration keeps the dict in experiment_results verbatim, so
+        # _count_outcomes charges all N cells as failed and the study's cell accounting
+        # balances against its two experiments.
+        completed, failed, _ = _count_outcomes([result])
+        assert (completed, failed) == (0, 2)
+        assert completed + failed == len(cells)  # == total_experiments
+
 
 # ---------------------------------------------------------------------------
 # Clean session -> bundles on disk with the full session block + drain raws

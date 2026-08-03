@@ -921,7 +921,12 @@ class ServerSession:
             message = abort_reason or self._invalid_message(levels)
             error_type = "WarmupTrafficError" if aborted else "ServerSessionInvalid"
             self._end_progress(result, ok=False)
-            return {"type": error_type, "message": message}
+            # "cells" carries the group size so _count_outcomes counts a fully-invalid
+            # grouped session (warmup-abort or no-valid-window) as its N failed cells,
+            # not one. The launch-failure dict in runner._run_one_server_group already
+            # carries it (M4); this producer path was the gap. A single-cell session has
+            # len == 1, matching the dict's default.
+            return {"type": error_type, "message": message, "cells": len(self._cells)}
 
         self._end_progress(result, ok=True)
         return result
