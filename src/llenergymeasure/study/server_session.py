@@ -286,15 +286,18 @@ def _build_request_row(
 ) -> RequestLogRow:
     """Build one request-log row from a request record and its owning window (D7).
 
-    The raw client receipt series (``output_token_times`` / ``client_output_tokens``)
-    is carried for ALL terminal statuses (H1): a mid-stream failure still delivered
-    those tokens, and the transport preserved them on the record. The latency-sample
-    and finish fields (``first_token_at`` / ``ttft_ms`` / ``finish_reason``) are
-    populated only for an ``ok`` request - a failed or timed-out request is not a
-    valid TTFT sample and its stream never finished, so SM12 filters latency
-    percentiles by status without inspecting the token series. ``completed_at`` /
-    ``e2e_latency_ms`` stay truthful per status: an error row carries its
-    to-failure latency, a timeout row (no completion) leaves them null.
+    Raw-record discipline: every column states its physical fact when it exists and
+    is null only when it does not - the row does not filter or judge by status
+    (that is SM12's consumer-side job). The client receipt series
+    (``output_token_times`` / ``client_output_tokens``) is carried for ALL statuses
+    (H1: a mid-stream failure still delivered those tokens, preserved on the
+    record). ``first_token_at`` / ``ttft_ms`` are the real first-token receipt and
+    latency whenever a token physically arrived (so an error / timeout row that
+    streamed keeps them, matching ``output_token_times[0]``); ``finish_reason`` is
+    the real terminal reason when a finish chunk physically arrived, else null (a
+    mid-stream death never finished). ``completed_at`` / ``e2e_latency_ms`` are the
+    time-to-terminal: an error row carries its to-failure latency, a timeout row
+    (no completion) leaves them null.
     """
     boundaries = window.boundaries
     completion = record.result if isinstance(record.result, CompletionResult) else None
@@ -302,11 +305,11 @@ def _build_request_row(
     completed_at = record.completed_at
     issued_at = record.issued_at
     in_window = boundaries.span_start <= issued_at <= boundaries.span_end
-    ok = _request_status(record) == REQUEST_STATUS_OK
-    # Latency-sample + finish fields are ok-only (a failed request is not a valid
-    # TTFT sample and never finished); the token series above stays real regardless.
-    first_token_at = completion.first_token_at if (completion is not None and ok) else None
-    finish_reason = completion.finish_reason if (completion is not None and ok) else None
+    # Raw physical facts, no status gate: first_token_at is real whenever a token
+    # arrived (it IS output_token_times[0]); finish_reason is real only when a
+    # finish chunk arrived (null on a mid-stream death). SM12 filters by status.
+    first_token_at = completion.first_token_at if completion is not None else None
+    finish_reason = completion.finish_reason if completion is not None else None
     return RequestLogRow(
         request_index=record.index,
         issued_at=issued_at,

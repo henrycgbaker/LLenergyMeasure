@@ -36,6 +36,11 @@ offline by clipping each row's ``output_token_times`` to the window's
 ``span_start`` / ``span_end`` (persisted as this file's key-value metadata); the
 per-row ``client_output_tokens`` is NOT that clipped count.
 
+Rows carry PHYSICAL FACTS for every status (raw-record discipline): an error /
+timeout row still reports the real receipts, first-token latency, and to-failure
+e2e it actually observed. Latency-percentile derivation should therefore filter to
+``status == "ok"`` on the consumer side (SM12); the rows do not pre-filter.
+
 RECEIPT JITTER (M2). Receipt timestamps are stamped in the client's async event
 loop, not at the socket: under high concurrency the loop can defer resuming the
 reader after bytes arrive, adding scheduling jitter to each receipt time. TTFT and
@@ -72,14 +77,17 @@ class RequestLogRow:
     terminal reason (e.g. ``"stop"`` vs ``"length"``); SM12 needs it to tell a
     natural stop from a length-truncation for goodput / SLO attainment.
 
-    Terminal-status field asymmetry (M2): the latency-SAMPLE and finish fields
-    ``first_token_at`` / ``ttft_ms`` / ``finish_reason`` are populated only for an
-    ``ok`` row - a failed / timed-out request is not a valid TTFT sample and its
-    stream never finished, so SM12 filters latency percentiles by status without
-    inspecting the token series (which stays real, see above). ``completed_at`` /
-    ``e2e_latency_ms`` follow the status: an ``error`` row carries its to-failure
-    latency (completion timestamp is the failure time), a ``timeout`` row never
-    completed so both are null.
+    Raw-record discipline: every column states its physical fact when it exists and
+    is null only when it does not - the row never filters or judges by status.
+    ``first_token_at`` / ``ttft_ms`` are the real first-token receipt and its
+    latency whenever a token physically arrived, so an ``error`` / ``timeout`` row
+    that streamed keeps them (``first_token_at`` == ``output_token_times[0]``);
+    ``finish_reason`` is the real terminal reason only when a finish chunk arrived,
+    else null (a mid-stream death never finished). ``completed_at`` /
+    ``e2e_latency_ms`` are the time-to-terminal: an ``error`` row carries its
+    to-failure latency (completion timestamp is the failure time), a ``timeout``
+    row never completed so both are null. Filtering failed requests OUT of latency
+    percentiles is the consumer's job (SM12), keyed on ``status``.
 
     ``in_measurement_window`` / ``is_ramp`` / ``completed_in_drain`` are the D7
     boundary attribution: a request issued in the level's prospective ramp

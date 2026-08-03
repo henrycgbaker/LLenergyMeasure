@@ -497,7 +497,7 @@ class TestRequestRows:
         assert _sum_server_completion_tokens([row]) == 99
 
     def test_status_ok_error_timeout(self) -> None:
-        """Status classifies requests and gates the latency-sample / finish fields (H1)."""
+        """Rows carry physical facts per status; SM12 filters, the row never does."""
         windows = [_win(0, 10.0, 20.0)]
         ok = _req(0, 11.0, completed_at=12.0, result=_completion([11.5], finish_reason="stop"))
         # H1: error / timeout requests carry their REAL partial receipts.
@@ -511,14 +511,21 @@ class TestRequestRows:
         # The token series is real for ALL statuses (the delivered tokens count).
         assert [r.client_output_tokens for r in rows] == [1, 2, 1]
         assert rows[1].output_token_times == [12.2, 12.3]
-        # Latency-sample + finish fields are ok-only; failed / timed-out rows null them.
-        assert rows[0].finish_reason == "stop" and rows[0].first_token_at is not None
+        # Raw-record: first_token_at / ttft are the REAL physical facts when a token
+        # arrived (even on a failed / timed-out row) - first_token_at IS the series[0].
+        assert rows[1].first_token_at == 12.2
+        assert rows[1].ttft_ms == pytest.approx(200.0)  # (12.2 - 12.0) * 1000
+        assert rows[2].first_token_at == 13.2
+        assert rows[2].ttft_ms == pytest.approx(200.0)  # (13.2 - 13.0) * 1000
+        # finish_reason is real only when a finish chunk arrived; a mid-stream death
+        # never finished, so it stays null (truthful) on the error / timeout rows.
         assert [r.finish_reason for r in rows] == ["stop", None, None]
-        assert rows[1].first_token_at is None and rows[1].ttft_ms is None
-        assert rows[2].first_token_at is None and rows[2].ttft_ms is None
-        # completed_at / e2e: error carries its to-failure latency, timeout stays null.
-        assert rows[1].e2e_latency_ms is not None
+        # e2e is time-to-terminal: the error row carries its to-failure latency, the
+        # timeout row (never completed) leaves completed_at / e2e null.
+        assert rows[1].e2e_latency_ms == pytest.approx(500.0)  # (12.5 - 12.0) * 1000
+        assert rows[1].completed_at == 12.5
         assert rows[2].e2e_latency_ms is None
+        assert rows[2].completed_at is None
 
     def test_mid_stream_failure_tokens_count_in_denominator(self) -> None:
         """H1 regression: a clean straddler and a mid-stream-failed request with
