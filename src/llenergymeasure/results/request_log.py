@@ -36,6 +36,18 @@ offline by clipping each row's ``output_token_times`` to the window's
 ``span_start`` / ``span_end`` (persisted as this file's key-value metadata); the
 per-row ``client_output_tokens`` is NOT that clipped count.
 
+RE-DERIVATION GRANULARITY (a straddler crosses files). Rows are ISSUE-partitioned,
+but a window's energy DENOMINATOR counts receipts by RECEIPT time: a request issued
+in window N-1's span whose tokens arrive in window N's span has its row in the N-1
+file while some of its tokens belong to window N's energy span. So a faithful
+re-derivation clips the level's FULL window-row set, not one window's rows in
+isolation. The level's window bundles are siblings tied by their result.json
+``session_id`` (per session) plus each row's ``level_index`` (per cell) and ordered
+by ``window_index`` - the request-log row itself carries ``level_index`` /
+``window_index`` but not ``session_id`` (that lives in the sibling session block).
+Re-clipping a single window's own rows is only exact for the LAST window of a level,
+where no later span can claim a straddler's receipts.
+
 Rows carry PHYSICAL FACTS for every status (raw-record discipline): an error /
 timeout row still reports the real receipts, first-token latency, and to-failure
 e2e it actually observed. Latency-percentile derivation should therefore filter to
