@@ -259,6 +259,25 @@ def _evaluate_observables(samples: list[PowerThermalSample]) -> ObservableState:
 # ---------------------------------------------------------------------------
 
 
+def _integrate_sampler_energy(samples: list[PowerThermalSample]) -> float | None:
+    """GPU energy (J) over a warmup sampler's power series, or None if unformable.
+
+    Reuses the window manager's energy machinery (``windowing._clean_samples`` +
+    ``energy.nvml.integrate_power_samples``, summed across GPUs) so the per-level
+    warmup energy is NOT a parallel integration path (C2): the same PowerThermal
+    sampler the convergence gate already polls also feeds the energy denominator.
+    Returns None when fewer than two usable samples were collected.
+    """
+    if len(samples) < 2:
+        return None
+    from llenergymeasure.energy.nvml import integrate_power_samples
+
+    cleaned = _clean_samples(samples)
+    if len(cleaned) < 2:
+        return None
+    return sum(integrate_power_samples(cleaned).values())
+
+
 @dataclass(frozen=True)
 class ServerWarmupResult:
     """One level's server-warmup outcome, recorded for result provenance (SM9).
@@ -267,7 +286,8 @@ class ServerWarmupResult:
     fixed duration completed (fixed). ``timed_out`` is True only when composite hit
     its failsafe and PROCEEDED anyway - a loud disclosure, never a silent pass.
     ``pre_window_protocol`` is the per-mode description SM14 uses to label the
-    offline-vs-server divergence.
+    offline-vs-server divergence. ``energy_j`` is the GPU energy measured over the
+    warmup phase (from the SAME sampler the gate uses, C2), or None when unmeasured.
     """
 
     level_index: int
@@ -277,6 +297,7 @@ class ServerWarmupResult:
     elapsed_s: float
     final_observables: ObservableState | None
     pre_window_protocol: str
+    energy_j: float | None = None
 
 
 def describe_server_warmup_protocol(config: ServerWarmupConfig) -> str:
@@ -381,6 +402,7 @@ class ServerWarmup:
         traffic_died = False
         cause: BaseException | None = None
         observables = ObservableState(False, False, False)
+        energy_j: float | None = None
 
         sampler.start()
         traffic_task: asyncio.Task[Any] = asyncio.create_task(source.run(counting))
@@ -402,6 +424,7 @@ class ServerWarmup:
         finally:
             await self._stop_traffic(traffic_task)
             sampler.stop()
+            energy_j = _integrate_sampler_energy(sampler.get_samples())
 
         elapsed = self._clock() - start
         if traffic_died:
@@ -417,6 +440,7 @@ class ServerWarmup:
             elapsed_s=elapsed,
             final_observables=observables,
             pre_window_protocol=describe_server_warmup_protocol(self._config),
+            energy_j=energy_j,
         )
 
     async def _warm_fixed(self, context: WarmupContext) -> ServerWarmupResult:
@@ -443,6 +467,11 @@ class ServerWarmup:
         start = self._clock()
         traffic_died = False
         cause: BaseException | None = None
+        energy_j: float | None = None
+        # A sampler runs purely to measure the warmup phase's GPU energy (the fixed
+        # mode has no convergence gate, so the sampler is energy-only here); it is
+        # the SAME PowerThermal sampler machinery, not a parallel energy path (C2).
+        sampler = self._sampler_factory()
         traffic_task: asyncio.Task[Any] = asyncio.create_task(source.run(counting))
 
         # Race the fixed duration against the traffic: whichever finishes first wins.
@@ -453,6 +482,7 @@ class ServerWarmup:
             await self._sleep(duration)
 
         sleeper: asyncio.Task[None] = asyncio.create_task(_await_duration())
+        sampler.start()
         try:
             done, _pending = await asyncio.wait(
                 {traffic_task, sleeper}, return_when=asyncio.FIRST_COMPLETED
@@ -465,6 +495,8 @@ class ServerWarmup:
             with contextlib.suppress(BaseException):
                 await sleeper
             await self._stop_traffic(traffic_task)
+            sampler.stop()
+            energy_j = _integrate_sampler_energy(sampler.get_samples())
 
         elapsed = self._clock() - start
         if traffic_died:
@@ -480,6 +512,7 @@ class ServerWarmup:
             elapsed_s=elapsed,
             final_observables=None,
             pre_window_protocol=protocol,
+            energy_j=energy_j,
         )
 
     @staticmethod

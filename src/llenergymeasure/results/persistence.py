@@ -252,6 +252,9 @@ def save_system(
     # precedence source). None when the snapshot carries no runner block (e.g.
     # the in-container snapshot, whose runner facts the host patches in later).
     env_data["runner"] = snapshot_dict.get("runner")
+    # Session facts block (dual-serialised alongside the result.json copy). None
+    # when the snapshot carries no session block (older sidecars).
+    env_data["session"] = snapshot_dict.get("session")
 
     path = experiment_dir / SYSTEM_FILENAME
     _atomic_write(json.dumps(env_data, indent=2, default=str), path)

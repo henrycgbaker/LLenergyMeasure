@@ -56,6 +56,7 @@ if TYPE_CHECKING:
     from llenergymeasure.domain.environment import EnvironmentSnapshot
     from llenergymeasure.domain.experiment import ExperimentResult
     from llenergymeasure.domain.provenance import RunnerProvenance
+    from llenergymeasure.domain.session import SessionBlock
 
 logger = logging.getLogger(__name__)
 
@@ -110,18 +111,31 @@ class BundleWriter:
         return self._dir
 
     def write_result(
-        self, result: ExperimentResult, *, runner_provenance: RunnerProvenance | None = None
+        self,
+        result: ExperimentResult,
+        *,
+        runner_provenance: RunnerProvenance | None = None,
+        session: SessionBlock | None = None,
     ) -> Path:
         """Create the experiment dir and write result.json (+ timeseries copy).
 
-        Attaches ``runner_provenance`` to the frozen result before serialising
-        (it rides in result.json, unlike the environment sidecar). Resolves the
-        timeseries parquet from the result's ``timeseries`` field inside
-        ``ts_source_dir`` and hands it to the atomic writer, then removes the
-        stale staged copy. Returns the path to result.json.
+        Attaches ``runner_provenance`` and the ``session`` facts block to the
+        frozen result before serialising (both ride in result.json, unlike the
+        environment sidecar). Resolves the timeseries parquet from the result's
+        ``timeseries`` field inside ``ts_source_dir`` and hands it to the atomic
+        writer, then removes the stale staged copy. Returns the path to result.json.
+
+        ``session`` is a passthrough data block (the writer never learns that
+        sessions exist): the offline caller stamps ``{session_id, window_count=1}``
+        with null raws, the server caller stamps the full launch/warmup/drain facts.
         """
-        if runner_provenance is not None and hasattr(result, "model_copy"):
-            result = result.model_copy(update={"runner_provenance": runner_provenance})
+        updates: dict[str, Any] = {}
+        if runner_provenance is not None:
+            updates["runner_provenance"] = runner_provenance
+        if session is not None:
+            updates["session"] = session
+        if updates and hasattr(result, "model_copy"):
+            result = result.model_copy(update=updates)
 
         ts_filename = getattr(result, "timeseries", None)
         if not ts_filename:
@@ -155,6 +169,7 @@ class BundleWriter:
         *,
         host_snapshot: EnvironmentSnapshot | None,
         runner: RunnerProvenance | None = None,
+        session: SessionBlock | None = None,
     ) -> None:
         """Write system.json with the rescue-preference policy.
 
@@ -168,15 +183,22 @@ class BundleWriter:
 
         ``runner`` is the unified runner provenance: it is both the
         system.json ``runner`` block (image + digest + source) and the
-        mode discriminator for the missing-rescue docker warning.
+        mode discriminator for the missing-rescue docker warning. ``session`` is
+        the session-facts data block dual-serialised alongside the result.json copy.
         """
         if self._dir is None:
             raise RuntimeError("write_result() must be called before write_system()")
 
-        # Attach the host-only runner block to the host snapshot so the host
-        # write carries it (local path, and the docker no-rescue fallback).
-        if runner is not None and host_snapshot is not None:
-            host_snapshot = host_snapshot.model_copy(update={"runner": runner})
+        # Attach the host-only runner block and the session block to the host
+        # snapshot so the host write carries them (local path, and the docker
+        # no-rescue fallback).
+        if host_snapshot is not None and (runner is not None or session is not None):
+            updates: dict[str, Any] = {}
+            if runner is not None:
+                updates["runner"] = runner
+            if session is not None:
+                updates["session"] = session
+            host_snapshot = host_snapshot.model_copy(update=updates)
 
         if host_snapshot is not None:
             persistence.save_system(
@@ -188,7 +210,7 @@ class BundleWriter:
 
         rescued = self._ts_source_dir / SYSTEM_FILENAME if self._ts_source_dir is not None else None
         if rescued is not None and rescued.exists():
-            self._rescue_system(rescued, runner)
+            self._rescue_system(rescued, runner, session)
         elif runner is not None and runner.mode == RUNNER_CONTAINER:
             logger.warning(
                 "No in-container system.json rescued for %s (cycle %d) at %s - "
@@ -199,19 +221,24 @@ class BundleWriter:
                 self._dir,
             )
 
-    def _rescue_system(self, rescued: Path, runner: RunnerProvenance | None) -> None:
+    def _rescue_system(
+        self,
+        rescued: Path,
+        runner: RunnerProvenance | None,
+        session: SessionBlock | None = None,
+    ) -> None:
         """Prefer the rescued in-container system.json over the host write.
 
-        Loads the rescued snapshot, patches the host-only runner block into it,
-        and atomically overwrites the host-written system.json. Best-effort:
-        a read/write failure warns loudly and leaves the host-written file (which
-        already carries the runner block) in place. The staged rescue file is
-        always consumed.
+        Loads the rescued snapshot, patches the host-only runner block and the
+        session-facts block into it, and atomically overwrites the host-written
+        system.json. Best-effort: a read/write failure warns loudly and leaves the
+        host-written file (which already carries both blocks) in place. The staged
+        rescue file is always consumed.
         """
         self._stage_json_artefact(
             rescued,
             SYSTEM_FILENAME,
-            lambda payload: self._patch_runner_block(payload, runner),
+            lambda payload: self._patch_runner_block(payload, runner, session),
             failure_note=(
                 "Failed to rescue in-container system.json - system.json will "
                 "record the dispatching host, not the container the experiment ran in"
@@ -256,17 +283,22 @@ class BundleWriter:
 
     @staticmethod
     def _patch_runner_block(
-        payload: dict[str, Any], runner: RunnerProvenance | None
+        payload: dict[str, Any],
+        runner: RunnerProvenance | None,
+        session: SessionBlock | None = None,
     ) -> dict[str, Any]:
-        """Patch the host-only runner block into a rescued system payload.
+        """Patch the host-only runner + session blocks into a rescued system payload.
 
-        The container writes system.json without runner facts only the host
-        knows (image ref, registry digest, precedence source). This patches them
-        in and stamps ``bundle_version`` if the (older-image) payload omitted it.
-        A no-op when no runner block is available.
+        The container writes system.json without facts only the host knows: the
+        runner block (image ref, registry digest, precedence source) and the
+        session-facts block. This patches them in and stamps ``bundle_version`` if
+        the (older-image) payload omitted it. A no-op when neither block is available.
         """
         if runner is not None:
             payload["runner"] = runner.model_dump()
+            payload.setdefault("bundle_version", BUNDLE_VERSION)
+        if session is not None:
+            payload["session"] = session.model_dump(mode="json")
             payload.setdefault("bundle_version", BUNDLE_VERSION)
         return payload
 
@@ -310,6 +342,52 @@ class BundleWriter:
                 "engine/model identity will be missing from this result"
             ),
         )
+
+    def mark_artefact_absent(self, name: str) -> None:
+        """Declare a registered artefact expected-absent for this bundle.
+
+        Suppresses its ``finalize()`` loudness backstop. Used by callers whose
+        dispatch legitimately produces no such artefact (e.g. the host-side server
+        measurement path writes no config.json - there is no harness subprocess to
+        stage one), so its absence is not a silent-loss warning.
+        """
+        self._skip_backstops.add(name)
+
+    def patch_session_block(self, session: SessionBlock) -> None:
+        """Re-stamp the session block into an already-written (not yet finalized) bundle.
+
+        The in-write-path patch (O7.5/O7.6): a window bundle is written at level
+        close carrying a PRELIMINARY session block (drain fields null, totals not
+        yet final); at clean session close the drain raws and final totals are
+        known, so this re-writes result.json and system.json with the complete
+        block. It runs BEFORE :meth:`finalize`, so it is the normal write path, not
+        a mutation of a finished record. Best-effort per file: a read/write failure
+        warns and leaves the preliminary block in place.
+        """
+        if self._dir is None:
+            raise RuntimeError("write_result() must be called before patch_session_block()")
+        block = session.model_dump(mode="json")
+        from llenergymeasure.domain.bundle_artefacts import RESULT_FILENAME
+
+        for filename in (RESULT_FILENAME, SYSTEM_FILENAME):
+            path = self._dir / filename
+            if not path.exists():
+                continue
+            try:
+                payload = load_json(path)
+                payload["session"] = block
+                persistence._atomic_write(
+                    json.dumps(payload, indent=2, default=str),
+                    path,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Failed to patch session block into %s (%s, cycle %d): %s",
+                    path,
+                    self._config_hash,
+                    self._cycle,
+                    exc,
+                )
 
     def finalize(self) -> None:
         """Run the loudness backstops uniformly from the artefact registry.

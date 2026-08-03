@@ -10,6 +10,7 @@ from typing import Any
 from pydantic import BaseModel, Field, model_validator
 
 from llenergymeasure.domain.provenance import RunnerProvenance
+from llenergymeasure.domain.session import SessionBlock
 
 
 class GPUEnvironment(BaseModel):
@@ -143,4 +144,10 @@ class EnvironmentSnapshot(BaseModel):
         description="How the experiment was executed (docker vs local, image + digest + source, "
         "the unified runner-provenance model). None for older sidecars written before runner "
         "provenance was recorded.",
+    )
+    session: SessionBlock | None = Field(
+        default=None,
+        description="Session facts for the measurement session this window belongs to (server "
+        "mode: launch/warmup/drain raws + session id; offline: session id + window_count=1). "
+        "None for older sidecars written before session facts were recorded.",
     )
