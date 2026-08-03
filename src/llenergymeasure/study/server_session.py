@@ -1321,17 +1321,34 @@ class ServerSession:
     def _measure_phase(
         self, detail: str, run: Callable[[], None]
     ) -> tuple[float | None, float | None]:
-        """Bracket ``run()`` with a MeasurementBracket; return (duration_s, energy_j).
+        """Run ``run()`` inside a MeasurementBracket; return (duration_s, energy_j).
 
-        Reuses the SAME bracket machinery the windows use (C2). Energy comes from
-        the bracket's energy tracker (robust for short phases, unlike integrating a
-        handful of thermal samples); duration is the event-delineated span around
-        ``run`` (D19). On an exception the bracket is released and the error
-        re-raised so the caller's failure path runs.
+        Session-phase energy (launch / warmup / drain) is AUXILIARY provenance, not
+        the measurement itself, and the duration is the floor: ``run`` always
+        executes and the phase duration is always measured. Energy degrades to None
+        when the bracket cannot be constructed / entered / finished (e.g. no GPU /
+        energy backend on the host), with one warning - it does NOT abort the phase.
+        Only an exception raised by ``run`` itself propagates (a launch/drain failure
+        must still fail). This reuses the SAME bracket machinery the windows use
+        (C2); windows, unlike these phases, legitimately hard-require the backend.
         """
-        bracket = self._make_phase_bracket(detail)
         start = time.monotonic()
-        bracket.__enter__()
+        bracket: MeasurementBracket | None = None
+        try:
+            bracket = self._make_phase_bracket(detail)
+            bracket.__enter__()
+        except Exception:
+            # Energy backend unavailable: still run the phase, stamp null energy.
+            logger.warning(
+                "Phase %r energy is unmeasurable (energy bracket unavailable); "
+                "stamping null energy (the duration is still measured).",
+                detail,
+                exc_info=True,
+            )
+            run()  # a failure in run() still propagates (a launch/drain error is fatal)
+            return time.monotonic() - start, None
+
+        # The bracket is live: run the phase inside it.
         try:
             run()
         except BaseException:
@@ -1340,10 +1357,14 @@ class ServerSession:
             with contextlib.suppress(BaseException):
                 bracket.finish()
             raise
-        bracket.__exit__(None, None, None)
-        core = bracket.finish()
-        duration = time.monotonic() - start
-        return duration, _phase_energy_j(core)
+        # Phase completed: close the bracket and read its energy, both best-effort
+        # (a teardown / read fault degrades energy to null, never fails the phase).
+        energy: float | None = None
+        with contextlib.suppress(Exception):
+            bracket.__exit__(None, None, None)
+        with contextlib.suppress(Exception):
+            energy = _phase_energy_j(bracket.finish())
+        return time.monotonic() - start, energy
 
     def _make_phase_bracket(self, detail: str) -> MeasurementBracket:
         """Build the phase-energy bracket (overridable for tests).

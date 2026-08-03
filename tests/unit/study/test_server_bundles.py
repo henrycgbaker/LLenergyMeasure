@@ -835,6 +835,90 @@ class TestSigint:
 
 
 # ---------------------------------------------------------------------------
+# Phase-energy measurement degrades on a GPU-less host (energy is auxiliary)
+# ---------------------------------------------------------------------------
+
+
+class TestPhaseMeasurementDegradation:
+    def test_measure_phase_degrades_when_bracket_enter_raises(
+        self, tmp_path: Path, caplog: Any
+    ) -> None:
+        # On a GPU-less host the energy bracket's __enter__ raises (no energy
+        # backend). Phase energy is auxiliary provenance, so _measure_phase must
+        # still run the phase and measure its duration, stamping null energy.
+        config = _server_config(10.0)
+        runner = _runner(tmp_path, [config], event=None)
+        session = ServerSession(
+            runner,
+            config,
+            None,
+            config_hash=compute_declared_config_hash(config),
+            cycle=1,
+            index=1,
+            engine=FakeEngine(),
+        )
+
+        class _BadBracket:
+            def __enter__(self) -> Any:
+                raise ValueError("No GPUs available.")
+
+            def __exit__(self, *exc: Any) -> None:
+                return None
+
+            def finish(self) -> Any:  # pragma: no cover - never reached
+                raise AssertionError("finish must not run when __enter__ failed")
+
+        session.__dict__["_make_phase_bracket"] = lambda detail: _BadBracket()
+
+        calls: list[int] = []
+        with caplog.at_level("WARNING"):
+            duration, energy = session._measure_phase("test phase", lambda: calls.append(1))
+
+        # Duration is the floor (always measured); energy degrades to null.
+        assert duration is not None and duration >= 0.0
+        assert energy is None
+        # The phase still ran exactly once.
+        assert calls == [1]
+        # One loud warning disclosing the unmeasurable energy.
+        assert any("unmeasurable" in r.message.lower() for r in caplog.records)
+
+    def test_measure_phase_propagates_run_failure_even_when_bracket_unavailable(
+        self, tmp_path: Path
+    ) -> None:
+        # A launch/drain failure (run() raising) must still propagate even when the
+        # energy bracket is unavailable - only the ENERGY degrades, not the phase.
+        config = _server_config(10.0)
+        runner = _runner(tmp_path, [config], event=None)
+        session = ServerSession(
+            runner,
+            config,
+            None,
+            config_hash=compute_declared_config_hash(config),
+            cycle=1,
+            index=1,
+            engine=FakeEngine(),
+        )
+
+        class _BadBracket:
+            def __enter__(self) -> Any:
+                raise ValueError("No GPUs available.")
+
+            def __exit__(self, *exc: Any) -> None:
+                return None
+
+            def finish(self) -> Any:  # pragma: no cover
+                raise AssertionError
+
+        session.__dict__["_make_phase_bracket"] = lambda detail: _BadBracket()
+
+        def _boom() -> None:
+            raise RuntimeError("launch failed")
+
+        with pytest.raises(RuntimeError, match="launch failed"):
+            session._measure_phase("test phase", _boom)
+
+
+# ---------------------------------------------------------------------------
 # Teardown hardening: a fault after a successful run never converts success to
 # failure or rewrites completed manifest history (both altitudes).
 # ---------------------------------------------------------------------------
