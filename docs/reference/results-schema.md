@@ -272,22 +272,24 @@ A study run with `serving_mode: server` writes the same per-cell artefacts descr
 
 ### Per-window bundles
 
-A server cell is one server lifetime that measures several windows (three per rate level by default), and each window is written as its own result bundle:
+A server *session* is one server lifetime that measures several windows (each rate level runs three windows by default), and each window is written as its own result bundle. Each rate cell contributes one result per measurement window; under the default sequential order a session covers one cell, while a grouped (interleaved) session folds a rate sweep's cells into one lifetime. The layout below is a sequential-order study (one session per rate):
 
 ```
 results/
 └── <study-name>_<UTC-timestamp>/
     ├── manifest.json
-    ├── 001_c0_<model>-<engine>_<hash>/          # one measurement window
+    ├── 001_c0_<model>-<engine>_<hashA>/         # rate A, window 0
     │   ├── result.json                          # window metrics (serving_mode "server")
     │   ├── config.json                          # resolved config + provenance
     │   ├── system.json                          # environment + session facts
     │   └── requests.parquet                     # per-window request log
-    ├── 002_c0_.../                              # next window
+    ├── 001_c0_<model>-<engine>_<hashA>_1/       # rate A, window 1 (collision suffix)
+    ├── 001_c0_<model>-<engine>_<hashA>_2/       # rate A, window 2
+    ├── 002_c0_<model>-<engine>_<hashB>/         # rate B, window 0
     └── ...
 ```
 
-So a sweep of three rates measuring three windows each produces nine bundles from three study cells. The `manifest.json` still tracks one entry per **cell** (grid point), reflecting that cell's rate level outcome; the per-window `ExperimentResult` objects are what flow into `StudyResult.experiments`. If a grouped server session is fully invalid (a warmup abort, or no valid window), it is counted as its full cell count of failures rather than a single failure, so the manifest's `total`/`failed` accounting stays correct.
+A cell's window bundles share the cell's index prefix and are disambiguated by a numeric collision suffix (`_1`, `_2`); the config hash differs per rate, not per window; under a grouped (interleaved) session every window bundle shares one index prefix. So a sweep of three rates measuring three windows each produces nine bundles from three study cells. The `manifest.json` still tracks one entry per **cell** (grid point), reflecting that cell's rate level outcome; the per-window `ExperimentResult` objects are what flow into `StudyResult.experiments`. If a grouped server session is fully invalid (a warmup abort, or no valid window), it is counted as its full cell count of failures rather than a single failure, so the manifest's `total`/`failed` accounting stays correct.
 
 A window `result.json` carries `serving_mode: "server"`, the shared energy metrics, and a distinguishing convention on token counts:
 

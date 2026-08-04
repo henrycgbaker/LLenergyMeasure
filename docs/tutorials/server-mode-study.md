@@ -85,6 +85,8 @@ study_name: tutorial-server-mode
 
 serving_mode: server
 
+engine: vllm            # single serving engine for this study
+
 runners:
   vllm: container
 
@@ -230,14 +232,23 @@ study directory looks like this:
 ```text
 results/tutorial-server-mode_2026-05-07T14-32-08/
 ├── manifest.json
-├── 001_c0_qwen-vllm_<hash>/                # one window
-│   ├── result.json                         # window metrics (serving_mode: server)
-│   ├── config.json                         # resolved config + provenance
-│   ├── system.json                         # environment + session facts
-│   └── requests.parquet                    # per-window request log
-├── 002_c0_qwen-vllm_<hash>/                # next window
-└── ...
+├── 001_c0_Qwen2.5-0.5B-vllm_<hashA>/          # rate 2, window 0
+│   ├── result.json                            # window metrics (serving_mode: server)
+│   ├── config.json                            # resolved config + provenance
+│   ├── system.json                            # environment + session facts
+│   └── requests.parquet                       # per-window request log
+├── 001_c0_Qwen2.5-0.5B-vllm_<hashA>_1/        # rate 2, window 1 (collision suffix)
+├── 001_c0_Qwen2.5-0.5B-vllm_<hashA>_2/        # rate 2, window 2
+├── 001_c0_Qwen2.5-0.5B-vllm_<hashB>/          # rate 4, window 0
+├── 001_c0_Qwen2.5-0.5B-vllm_<hashB>_1/        # rate 4, window 1
+├── 001_c0_Qwen2.5-0.5B-vllm_<hashC>/          # rate 8, window 0
+└── ...                                        # nine bundles total: three rates x three windows
 ```
+
+All nine bundles share the `001_c0_Qwen2.5-0.5B-vllm_` prefix, because this
+study interleaves a single server launch across the sweep: the config hash
+differs per rate, and the second and third window of each rate take a `_1` /
+`_2` collision suffix.
 
 Each window's `result.json` carries `serving_mode: "server"` and the
 shared energy metrics; server-distinct metrics (TTFT/ITL percentiles,
@@ -259,7 +270,7 @@ import duckdb
 
 rows = duckdb.sql("""
     SELECT status, count(*) AS n, median(ttft_ms) AS p50_ttft_ms
-    FROM 'results/tutorial-server-mode_2026-05-07T14-32-08/001_c0_qwen-vllm_*/requests.parquet'
+    FROM 'results/tutorial-server-mode_2026-05-07T14-32-08/*/requests.parquet'
     WHERE in_measurement_window AND NOT is_ramp
     GROUP BY status
 """).df()
