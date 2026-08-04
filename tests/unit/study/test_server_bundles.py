@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import threading
 from datetime import datetime
 from pathlib import Path
@@ -1203,3 +1204,64 @@ class TestTeardownHardening:
         entry = runner.manifest.manifest.experiments[0]
         assert entry.status == "completed"
         assert entry.result_file
+
+
+# ---------------------------------------------------------------------------
+# finalise_study session-order hint (SM13)
+# ---------------------------------------------------------------------------
+
+_HINT_FRAGMENT = "one server per cell per cycle"
+
+
+def _finalise_order(experiments: list[ExperimentConfig], *, order: str, n_cycles: int) -> Any:
+    """Run finalise_study over a bare LoadedStudyRaw with the given cycle ordering."""
+    from llenergymeasure.config.loader import LoadedStudyRaw
+    from llenergymeasure.config.models import ExecutionConfig, OutputConfig
+    from llenergymeasure.study.loading import finalise_study
+
+    raw = LoadedStudyRaw(
+        valid_experiments=list(experiments),
+        skipped=[],
+        study_name="hint-test",
+        output=OutputConfig(),
+        execution=ExecutionConfig(experiment_order=order, n_cycles=n_cycles),
+        runners=None,
+        images=None,
+    )
+    return finalise_study(raw)
+
+
+class TestSequentialServerHint:
+    """The sequential-order did-you-know for a foldable server sweep (INFO)."""
+
+    def test_sequential_multi_cycle_foldable_sweep_hints(self, caplog) -> None:
+        with caplog.at_level(logging.INFO, logger="llenergymeasure.study.loading"):
+            _finalise_order(
+                [_server_config(10.0), _server_config(20.0)], order="sequential", n_cycles=3
+            )
+        hits = [r for r in caplog.records if _HINT_FRAGMENT in r.getMessage()]
+        assert len(hits) == 1
+        assert hits[0].levelno == logging.INFO
+
+    def test_interleave_is_silent(self, caplog) -> None:
+        with caplog.at_level(logging.INFO, logger="llenergymeasure.study.loading"):
+            _finalise_order(
+                [_server_config(10.0), _server_config(20.0)], order="interleave", n_cycles=3
+            )
+        assert not any(_HINT_FRAGMENT in r.getMessage() for r in caplog.records)
+
+    def test_single_cycle_is_silent(self, caplog) -> None:
+        with caplog.at_level(logging.INFO, logger="llenergymeasure.study.loading"):
+            _finalise_order(
+                [_server_config(10.0), _server_config(20.0)], order="sequential", n_cycles=1
+            )
+        assert not any(_HINT_FRAGMENT in r.getMessage() for r in caplog.records)
+
+    def test_no_server_cells_is_silent(self, caplog) -> None:
+        with caplog.at_level(logging.INFO, logger="llenergymeasure.study.loading"):
+            _finalise_order(
+                [_offline_config("gpt2"), _offline_config("distilgpt2")],
+                order="sequential",
+                n_cycles=3,
+            )
+        assert not any(_HINT_FRAGMENT in r.getMessage() for r in caplog.records)
