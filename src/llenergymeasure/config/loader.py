@@ -194,7 +194,8 @@ def load_study_config(
 
     Raises:
         ConfigError: File not found, parse error, base file missing, ALL configs invalid,
-            empty study (no sweep and no experiments).
+            empty study (no sweep and no experiments), or a study that mixes
+            serving_mode values (a v0.7 staging restriction).
         ValidationError: Pydantic structural errors on ExecutionConfig pass through.
     """
     path = Path(path)
@@ -242,6 +243,12 @@ def load_study_config(
             "Nothing to run. Check sweep dimensions against engine constraints.\n" + skip_details
         )
 
+    # v0.7 staging restriction (deliberately deletable): a YAML/CLI-loaded study
+    # must not mix serving_mode values. This is the SINGLE gate; deleting the
+    # function plus this one call re-admits mixed-mode studies with no other
+    # change. See _validate_homogeneous_serving_mode.
+    _validate_homogeneous_serving_mode(valid_experiments)
+
     return LoadedStudyRaw(
         valid_experiments=valid_experiments,
         skipped=skipped,
@@ -256,6 +263,35 @@ def load_study_config(
 # =============================================================================
 # Private helpers
 # =============================================================================
+
+
+def _validate_homogeneous_serving_mode(experiments: list[ExperimentConfig]) -> None:
+    """Reject a YAML/CLI-loaded study that mixes serving_mode values (v0.7 staging).
+
+    DELIBERATELY DELETABLE: this function plus its single call site in
+    ``load_study_config`` are the ONLY thing restricting mixed serving_mode
+    studies at v0.7. A later release that admits the engine x serving_mode grid
+    crossing deletes both and nothing else changes. This restriction lives here
+    at the study-config loading edge (shared identically by the CLI and the
+    YAML-driven API paths), NOT as a model_validator: the data model stays
+    mixed-legal, so direct ``StudyConfig(experiments=[...])`` construction with
+    mixed modes is unaffected.
+
+    Args:
+        experiments: The fully-expanded, already-validated experiment list.
+
+    Raises:
+        ConfigError: When the experiments span more than one serving_mode.
+    """
+    modes = sorted({exp.serving_mode for exp in experiments})
+    if len(modes) > 1:
+        raise ConfigError(
+            f"This study mixes serving_mode values ({', '.join(modes)}), but a "
+            "single study must use exactly one serving_mode at this release. "
+            "Mixed-mode studies (a study spanning both offline and server) arrive "
+            "in a later release. Split the study so every experiment shares one "
+            "serving_mode: run one study per serving_mode."
+        )
 
 
 def _load_file(path: Path | str) -> dict[str, Any]:

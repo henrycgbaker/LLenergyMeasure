@@ -447,6 +447,87 @@ def test_load_study_config_empty_study_raises(tmp_path):
         load_study_config(study_yaml)
 
 
+def test_load_study_config_mixed_serving_mode_explicit_raises(tmp_path):
+    """A study whose explicit experiments mix serving_mode is rejected (v0.7 staging).
+
+    The error names both modes found, points at the field by name, and tells the
+    user to split the study.
+    """
+    study_yaml = tmp_path / "study.yaml"
+    study_yaml.write_text(
+        yaml.dump(
+            {
+                "experiments": [
+                    {"task": {"model": "gpt2"}, "engine": "vllm", "serving_mode": "offline"},
+                    {
+                        "task": {"model": "gpt2"},
+                        "engine": "vllm",
+                        "serving_mode": "server",
+                        "server": {"traffic": {"rate": 5}},
+                    },
+                ]
+            }
+        )
+    )
+    with pytest.raises(ConfigError) as exc:
+        load_study_config(study_yaml)
+    msg = str(exc.value)
+    assert "offline" in msg
+    assert "server" in msg
+    assert "serving_mode" in msg
+    assert "split" in msg.lower()
+
+
+def test_load_study_config_mixed_serving_mode_sweep_raises(tmp_path):
+    """A serving_mode sweep spanning both modes funnels through the SAME validator.
+
+    A flat ``serving_mode: [offline, server]`` axis cannot produce two valid arms
+    (it cannot carry the mode-conditional ``server:`` section, so one arm is always
+    invalid). The realistic serving_mode sweep is a dependent group whose variants
+    pair each serving_mode with its own sections; both arms are valid and mixed, so
+    the same single validator rejects them.
+    """
+    study_yaml = tmp_path / "study.yaml"
+    study_yaml.write_text(
+        yaml.dump(
+            {
+                "task": {"model": "gpt2"},
+                "engine": "vllm",
+                "sweep": {
+                    "mode_variants": [
+                        {"serving_mode": "offline"},
+                        {"serving_mode": "server", "server": {"traffic": {"rate": 5}}},
+                    ]
+                },
+            }
+        )
+    )
+    with pytest.raises(ConfigError) as exc:
+        load_study_config(study_yaml)
+    msg = str(exc.value)
+    assert "offline" in msg
+    assert "server" in msg
+
+
+def test_load_study_config_homogeneous_server_rate_sweep_loads(tmp_path):
+    """A pure-server study with a rate sweep is homogeneous and loads fine."""
+    study_yaml = tmp_path / "study.yaml"
+    study_yaml.write_text(
+        yaml.dump(
+            {
+                "task": {"model": "gpt2"},
+                "engine": "vllm",
+                "serving_mode": "server",
+                "server": {"traffic": {"rate": 2, "window_seconds": 60}},
+                "sweep": {"server.traffic.rate": [2, 10]},
+            }
+        )
+    )
+    raw = load_study_config(study_yaml)
+    assert len(raw.valid_experiments) == 2
+    assert {e.serving_mode for e in raw.valid_experiments} == {"server"}
+
+
 def test_load_study_config_all_invalid_raises(tmp_path):
     """load_study_config() with all invalid configs raises ConfigError."""
     study_yaml = tmp_path / "study.yaml"
