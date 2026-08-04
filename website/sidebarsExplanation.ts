@@ -24,6 +24,7 @@ const sidebarsExplanation: SidebarsConfig = {
       items: [
         'architecture/architecture-overview',
         'architecture/pipeline-architecture',
+        'architecture/server-measurement',
         'architecture/ci-architecture',
         {
           type: 'category',
