@@ -189,6 +189,7 @@ const config: Config = {
           items: [
             {label: 'First measurement', to: '/tutorials/first-measurement'},
             {label: 'Multi-engine study', to: '/tutorials/multi-engine-study'},
+            {label: 'Server-mode study', to: '/tutorials/server-mode-study'},
           ],
         },
         {

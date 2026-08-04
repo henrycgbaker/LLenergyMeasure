@@ -4,6 +4,7 @@ const sidebarsTutorials: SidebarsConfig = {
   tutorialsSidebar: [
     'first-measurement',
     'multi-engine-study',
+    'server-mode-study',
   ],
 };
 
