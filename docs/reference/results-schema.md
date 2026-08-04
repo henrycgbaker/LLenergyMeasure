@@ -45,7 +45,7 @@ The scientific record. One JSON file per experiment cell. Stamped with `bundle_v
 | `experiment_id` | str | Unique experiment identifier (`{model}_{YYYYMMDD_HHMMSS}` for single experiments; study-level cells inherit a richer per-cell identifier) |
 | `declared_config_hash` | str | SHA-256[:16] of `ExperimentConfig` with environment fields excluded; same hash -> logically identical experiments |
 | `llenergymeasure_version` | str &#124; null | Package version that produced this result |
-| `serving_mode` | str | The serving mode that produced this result: the offline/server discriminator, mirroring the config-side `ExperimentConfig.serving_mode`. `"offline"` for batch measurement (the only mode today); server mode (v0.8.0) will stamp `"server"`. A plain string, not a closed vocabulary |
+| `serving_mode` | str | The serving mode that produced this result: the offline/server discriminator, mirroring the config-side `ExperimentConfig.serving_mode`. `"offline"` for batch measurement; `"server"` for a server-mode measurement window (v0.7). A plain string, not a closed vocabulary. See [Server-mode results](#server-mode-results) for the server surfaces |
 | `engine` | str | Inference engine used. Convenience copy; authoritative home is the `config.json` sidecar |
 | `model_name` | str | Model name/path measured. Convenience copy; authoritative home is the `config.json` sidecar |
 
@@ -265,6 +265,136 @@ Written when `output.save_timeseries: true` (the default). One Parquet file per 
 | `sm_clock_mhz` | float64 | SM clock in MHz (when available) |
 
 LLenergyMeasure polls NVML at 100 ms intervals; thermal-throttle events shorter than the polling interval may be missed - see [Methodology &gt; Known limitations](/explanation/methodology/methodology#known-limitations).
+
+## Server-mode results
+
+A study run with `serving_mode: server` writes the same per-cell artefacts described above, plus a per-window request log, and it produces **one result bundle per measurement window** rather than one per experiment. This section documents the server-specific surfaces. For the measurement model behind them see [Methodology &gt; Server-mode measurement](/explanation/methodology/methodology#server-mode-measurement).
+
+### Per-window bundles
+
+A server cell is one server lifetime that measures several windows (three per rate level by default), and each window is written as its own result bundle:
+
+```
+results/
+└── <study-name>_<UTC-timestamp>/
+    ├── manifest.json
+    ├── 001_c0_<model>-<engine>_<hash>/          # one measurement window
+    │   ├── result.json                          # window metrics (serving_mode "server")
+    │   ├── config.json                          # resolved config + provenance
+    │   ├── system.json                          # environment + session facts
+    │   └── requests.parquet                     # per-window request log
+    ├── 002_c0_.../                              # next window
+    └── ...
+```
+
+So a sweep of three rates measuring three windows each produces nine bundles from three study cells. The `manifest.json` still tracks one entry per **cell** (grid point), reflecting that cell's rate level outcome; the per-window `ExperimentResult` objects are what flow into `StudyResult.experiments`. If a grouped server session is fully invalid (a warmup abort, or no valid window), it is counted as its full cell count of failures rather than a single failure, so the manifest's `total`/`failed` accounting stays correct.
+
+A window `result.json` carries `serving_mode: "server"`, the shared energy metrics, and a distinguishing convention on token counts:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `output_tokens` | int | Client-side canonical output-token count: streamed content deltas received in the steady-state span. This is the J/token denominator |
+| `input_tokens` | int &#124; null | `null` in server mode. Client-side input-token counting is post-v0.7; the engine's self-reported prompt tokens ride in `requests.parquet` only |
+| `total_tokens` | int &#124; null | `null` in server mode (undefined while `input_tokens` is uncounted) |
+
+### Session facts (`system.json`)
+
+Each server-mode bundle's `system.json` carries a `session` block recording the raw per-phase quantities of the server lifetime the window belongs to:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `session_id` | str | Identifier shared by every window bundle of one server lifetime |
+| `window_count` | int | Total windows measured in this session |
+| `level_count` | int &#124; null | Rate levels in this session (`null` for offline, which degenerates to one window) |
+| `launch_duration_s` / `launch_energy_j` | float &#124; null | Launch-to-ready phase (model load rides inside it) |
+| `warmup_total_duration_s` / `warmup_total_energy_j` | float &#124; null | Summed warmup across the session's levels |
+| `drain_duration_s` / `drain_energy_j` | float &#124; null | Post-window drain (see the asymmetry note below) |
+
+The block holds raw quantities only. A phase whose energy could not be measured stamps `null`, never `0.0`, so a null reads as "unmeasured", not "zero joules".
+
+:::note In-memory vs on-disk drain asymmetry (by design)
+A window bundle is written at level close carrying a **preliminary** session block with the drain fields `null` (the drain has not happened yet). On a clean session close the drain raws become known and are patched into each already-written on-disk bundle, so the on-disk `drain_duration_s` / `drain_energy_j` are populated. The in-memory `ExperimentResult.session` returned to a Python caller keeps the preliminary drain-`null` block: the drain is a post-return, session-close measurement. The on-disk bundles are the system of record. On the interrupt path the drain is never measured, so the drain fields stay `null` on disk too.
+:::
+
+### `requests.parquet` - per-window request log
+
+One Parquet file per window, one row per issued request. Every column states a physical fact for every row regardless of terminal status (the raw-record discipline): an `error` or `timeout` row still reports the real receipts, first-token latency, and to-failure latency it observed. Filtering failed requests out of latency percentiles is the consumer's job, keyed on `status`.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `request_index` | int64 | Ordinal index of the request within the window |
+| `issued_at` | float64 | Monotonic-seconds time the request was issued (the ideal scheduled time; the latency anchor) |
+| `dispatched_at` | float64 &#124; null | Monotonic-seconds time the request was dispatched to the transport |
+| `first_token_at` | float64 &#124; null | Monotonic-seconds first-token receipt. Real whenever a token physically arrived, regardless of status (`== output_token_times[0]`) |
+| `completed_at` | float64 &#124; null | Monotonic-seconds time-to-terminal. An `error` row carries its failure time; a `timeout` row never completed, so `null` |
+| `ttft_ms` | float64 &#124; null | Time-to-first-token latency in ms |
+| `e2e_latency_ms` | float64 &#124; null | End-to-end latency in ms (time-to-terminal, including to-failure latency for an `error` row) |
+| `client_output_tokens` | int64 | Client-counted output tokens (length of `output_token_times`). Real for all statuses; the J/token denominator |
+| `server_prompt_tokens` | int64 &#124; null | Engine's self-reported prompt-token usage. Auxiliary provenance only |
+| `server_completion_tokens` | int64 &#124; null | Engine's self-reported completion-token usage. Auxiliary provenance only |
+| `status` | string | Terminal status: `"ok"` (transport returned), `"error"` (it raised), `"timeout"` (never completed) |
+| `finish_reason` | string &#124; null | Stream's terminal reason (e.g. `"stop"` vs `"length"`). Real only when a finish chunk arrived, else `null` |
+| `level_index` | int32 | Which rate level the request belongs to |
+| `window_index` | int32 | Which measurement window (within the level) the request belongs to |
+| `in_measurement_window` | bool | Issued within the steady-state span `[span_start, span_end]` |
+| `is_ramp` | bool | Issued during the level's ramp; never counted toward steady-state metrics |
+| `completed_in_drain` | bool | Issued in-span but completed after `span_end`: full latency kept, only in-span tokens counted |
+| `output_token_times` | list(float64) | Client-side per-token receipt series (one entry per streamed content delta). Receipt-unclipped and real for all statuses |
+
+The window's measured span bounds are stored as **file-level Parquet metadata** (`span_start`, `span_end`, plus `experiment_id` and `declared_config_hash`), not per row. Because the per-row token series is issue-partitioned and receipt-unclipped, those file-level bounds let an alternative attribution be re-clipped and re-derived offline without re-running the study; the authoritative in-span denominator remains the window `result.json` `output_tokens`.
+
+The two boundaries are used differently. The **energy denominator** counts client-side output tokens delivered within the span across all requests, regardless of terminal status (a mid-stream failure still delivered those tokens). **Latency percentiles** filter to `status == "ok"` on the consumer side; the rows never pre-filter.
+
+### Derived server metrics and the SLO overlay
+
+Per-window server metrics are derived by a pure function of the request rows (and, when SLO bounds are configured, the bounds). The derivation constructs no backend, reads no clock, and never re-clips receipts:
+
+| Field | Description |
+|-------|-------------|
+| `request_throughput_req_s` | Completed requests per second over the span |
+| `completed_count` / `error_count` / `timeout_count` | Terminal-status tallies |
+| `completion_rate` | Completed / total in-window |
+| `length_truncated_count` | Completed requests that stopped at the output-token budget (`finish_reason == "length"`) |
+| `ttft` / `tpot` / `itl` / `e2e` | Latency percentile blocks (p50 / p90 / p99) over `status == "ok"` requests |
+| `energy_at_operating_point_j_per_token` | The window's energy per token at this rate |
+| `server_reported_client_token_ratio` | Engine-reported vs client-counted token divergence |
+| `slo` | The SLO evaluation overlay (below), or `null` when no bounds were configured |
+
+The SLO overlay is a **pure post-hoc overlay**. The bounds only classify a window after the fact: no SLO value enters the window's identity or its physical measurement, so every measurement field is byte-stable across an SLO re-judgement and only the `slo` block moves. The same rows judged against different bounds (offline, over a loaded `requests.parquet`) yield a different verdict with every physical measurement untouched.
+
+| SLO field | Description |
+|-----------|-------------|
+| `ttft_bound_ms` / `tpot_bound_ms` / `percentile` | The bounds this window was judged against |
+| `ttft_at_percentile_ms` / `tpot_at_percentile_ms` | Observed tail values at the shared percentile, for cross-checking |
+| `attainment_fraction` | Fraction of completed requests meeting all configured bounds jointly |
+| `slo_pass` | Window verdict: `attainment_fraction >= percentile` |
+| `goodput_tokens_s` | Goodput (see the caveat below) |
+| `energy_at_operating_point_valid` | Whether this window's operating-point energy is usable (`slo_pass and level_valid`) |
+
+**Attainment is a per-request joint evaluation**, not a per-metric percentile: a completed request counts iff its TTFT is within `ttft_ms` **and** its per-request TPOT is within `tpot_ms` at once. A latency exactly equal to a bound meets it; only strictly-greater-than violates. A missing TTFT under a configured TTFT bound fails; an undefined TPOT (fewer than two tokens) passes the TPOT bound vacuously.
+
+**Length-truncated requests are attainment-eligible.** A completion that stopped at its output-token budget (`finish_reason == "length"`) is a normal completion (`status == "ok"`) - the workload fixes the output budget, so a length stop is a served request, not a failure. Such completions are counted and evaluated against the bounds like any other, and their tally is disclosed in `length_truncated_count` so a caller can re-segment for a different reading.
+
+**Goodput caveat.** `goodput_tokens_s` is `attainment_fraction x token-throughput` over the same records. The throughput factor counts every in-span delivered token, including the partial output of failed requests, while attainment counts only completions. At a high failure rate goodput therefore overstates SLO-meeting throughput; read it alongside `completion_rate`.
+
+### Files as a record: querying per-window results
+
+Because each window writes its own `requests.parquet`, a whole study's request logs are one glob. For example, TTFT percentiles per rate level with DuckDB:
+
+```python
+import duckdb
+
+df = duckdb.sql("""
+    SELECT level_index,
+           count(*) FILTER (WHERE status = 'ok') AS ok_requests,
+           quantile_cont(ttft_ms, 0.99) FILTER (WHERE status = 'ok') AS p99_ttft_ms
+    FROM 'results/<study>_<ts>/*/requests.parquet'
+    WHERE in_measurement_window AND NOT is_ramp
+    GROUP BY level_index
+    ORDER BY level_index
+""").df()
+print(df)
+```
 
 ## `StudyResult` - final return value (Python API)
 
