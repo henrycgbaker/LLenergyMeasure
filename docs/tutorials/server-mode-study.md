@@ -190,8 +190,9 @@ print(f"Completed {study_result.summary.completed} cells")
 
 ## Step 4 - What happens at run time
 
-A server cell is one server lifetime. Inside it the harness runs a fixed
-sequence:
+A server *session* is one server lifetime; under this tutorial's
+`interleave` order one session serves all three rate cells as levels over
+a single launch. Inside a session the harness runs a fixed sequence:
 
 1. **Launch.** The engine server starts in a container: the harness
    allocates a free loopback port and runs the image detached (no
