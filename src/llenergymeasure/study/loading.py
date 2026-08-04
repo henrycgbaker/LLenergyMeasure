@@ -163,11 +163,16 @@ def _maybe_hint_sequential_server_singletons(
     """Emit a did-you-know when a foldable server sweep runs under sequential order.
 
     Under ``sequential`` order with ``n_cycles > 1`` each grid point's cycles are
-    adjacent, so a rate/slo sweep's cells are never both consecutive AND same-cycle
+    adjacent, so a rate sweep's cells are never both consecutive AND same-cycle
     and each dispatches as its own server session (one server launch per cell per
     cycle). ``interleave`` replays the base ordering per cycle pass, so each pass
     folds the sweep into a single launch. Both are correct; this is INFO, not a
     warning.
+
+    Only a rate sweep is foldable: an slo sweep never folds (slo is excluded from
+    the declared config hash as a post-hoc overlay, so slo-differing cells share a
+    declared hash and either dedup-collapse to one config or cycle-track as
+    repeats), so this hint stays silent for an slo-only sweep under either order.
 
     The foldability test reuses the session-grouping machinery on the pre-cycle
     base list: a unit of two or more cells is (by construction) a multi-cell server

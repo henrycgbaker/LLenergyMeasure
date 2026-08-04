@@ -1265,3 +1265,17 @@ class TestSequentialServerHint:
                 n_cycles=3,
             )
         assert not any(_HINT_FRAGMENT in r.getMessage() for r in caplog.records)
+
+    def test_slo_only_sweep_is_silent(self, caplog) -> None:
+        # Only a rate sweep is foldable. slo is excluded from the declared config
+        # hash (a post-hoc overlay for the same physical experiment), so two cells
+        # differing ONLY by slo bounds share a declared hash and never fold: dedup
+        # (on by default) collapses them to one canonical config, so the hint must
+        # stay silent even under sequential order with more than one cycle.
+        with caplog.at_level(logging.INFO, logger="llenergymeasure.study.loading"):
+            _finalise_order(
+                [_server_config_with_slo(ttft_ms=1.0), _server_config_with_slo(ttft_ms=5.0)],
+                order="sequential",
+                n_cycles=3,
+            )
+        assert not any(_HINT_FRAGMENT in r.getMessage() for r in caplog.records)
