@@ -402,8 +402,8 @@ already at equilibrium from the previous level exits the gate quickly, while a
 level that shifted the operating point re-converges before it is measured.
 
 :::caution Comparing offline and server side by side
-Server mode inserts **no idle cooldown before a measurement window**, by design
-(D6). In offline mode the pre-window thermal-floor wait settles the GPU from an
+Server mode inserts **no idle cooldown before a measurement window**, by
+design. In offline mode the pre-window thermal-floor wait settles the GPU from an
 idle state; in server mode the analogue is the *loaded* warmup to equilibrium,
 because a running service's steady thermal posture under load is exactly what
 should be measured. Inserting an idle wait would let the GPU cool below its
