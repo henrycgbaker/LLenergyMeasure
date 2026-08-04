@@ -16,18 +16,19 @@ The two offline (batch) implementations here wrap today's dispatch paths:
 Offline sessions produce EXACTLY ONE result per session (one engine lifetime =
 one measured window). The point of the seam is that the session LIFETIME
 (acquire -> produce -> release) is separable from result production: that is what
-admits a future server session (v0.8.0) whose single lifetime produces N results,
-one per request window (constraint C3). This slice adds no window-spec
-vocabulary, no N-result consumption, and no server session - the offline call
-sites still consume one result per session, by design.
+admits the server session (:class:`~llenergymeasure.study.server_session.ServerSession`),
+whose single lifetime produces N results, one per measurement window
+(constraint C3). This module defines only the offline sessions - the server
+session lives in :mod:`llenergymeasure.study.server_session`; the offline call
+sites here still consume one result per session, by design.
 
 Today the sweep loop in :class:`~llenergymeasure.study.runner.StudyRunner` drives
 one session per experiment through ``_run_one`` / ``_run_one_docker`` and consumes
 the single result it produces; the manifest transitions and the circuit breaker
 follow that one result. GPU locks stay deliberately study-scoped (a lock outlives
-any one session), and the SIGINT handler acts on the session's active process. A
-v0.8.0 server session plugs in by adding a call site that consumes many results
-over one lifetime - not by re-keying today's loop.
+any one session), and the SIGINT handler acts on the session's active process. The
+server session plugs in by adding a call site that consumes many results
+over one lifetime - not by re-keying this loop.
 """
 
 from __future__ import annotations

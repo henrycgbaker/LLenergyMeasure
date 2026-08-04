@@ -1,16 +1,18 @@
 """Container process lifecycle: image ensure, launch, wait, and the watchdog.
 
-This module owns everything that runs a docker subprocess. The block-until-exit
-mode is expressed as two separable steps so a future server measurement mode
-(v0.8.0) can reuse the launch without inheriting the watchdog:
+This module owns everything that runs a docker subprocess for offline dispatch.
+The block-until-exit mode is expressed as two separable steps so the
+stdout-silence watchdog stays isolated to the wait path (the same launch/wait
+separation server-mode measurement follows in its own
+:mod:`llenergymeasure.infra.server_lifecycle`):
 
 - :func:`launch` starts the container process (``subprocess.Popen``) and returns
-  it. It is detach-capable: a server lifecycle would call this, then add its own
+  it. It is detach-capable: a detached caller would call this, then add its own
   health-poll and explicit stop.
 - :func:`wait_to_completion` streams stdout, forwards progress events, and owns
   the stdout-silence + wall-clock WATCHDOG. The watchdog lives ONLY here, in the
   wait path - an idle-between-requests server that reused it would look "stuck",
-  so a server lifecycle must not call this.
+  so a detached long-lived server must not call this.
 
 :func:`run_blocking` is the classic no-progress path (``subprocess.run`` blocking
 until exit); :func:`ensure_image` is the image-availability pull guard. Neither

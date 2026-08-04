@@ -10,10 +10,10 @@ The assembly is deliberately split into two producers around one seam:
   a :class:`SourceMetrics` plus the mode-agnostic inputs (energy breakdown from
   the source energy total + baseline, identity, thermal, provenance, warnings)
   and builds the final ExperimentResult. Its signature contains NO
-  InferenceOutput and no engine-specific type - that is the server-admittance
-  test. Server mode (v0.8.0) adds a sibling ``build_server_metrics`` over its
-  LoadGen summary that produces a :class:`SourceMetrics`, and calls this same
-  assembler unchanged.
+  InferenceOutput and no engine-specific type - the mode-agnostic seam that
+  keeps result assembly free of the offline batch path. Server mode ships its
+  own per-window result mapping in :mod:`llenergymeasure.study.server_session`
+  rather than through this assembler.
 
 :func:`build_result` composes the two for the offline path (and is the offline
 entry point used by :mod:`llenergymeasure.harness.staging`).
