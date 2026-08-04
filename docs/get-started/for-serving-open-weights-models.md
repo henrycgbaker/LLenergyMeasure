@@ -20,6 +20,7 @@ For your model on your hardware: which configuration choices most reduce energy 
 - [Quick start](/get-started/quick-start) - one engine, one model, one measurement.
 - [Tutorial: first measurement](/tutorials/first-measurement) - a fuller walkthrough that explains every output field.
 - [Tutorial: multi-engine study](/tutorials/multi-engine-study) - the dedicated example for comparing implementation choices on a fixed model.
+- [Tutorial: server-mode study](/tutorials/server-mode-study) - measure your serving stack under traffic at several request rates.
 - [How-to: run with Docker and vLLM](/how-to/run-with-docker-vllm) - the production pattern; reproducible images, no host CUDA dependency.
 
 ---

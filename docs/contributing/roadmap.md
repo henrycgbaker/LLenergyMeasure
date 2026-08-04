@@ -19,9 +19,11 @@ Released milestones:
 | v0.5.1 | Results correctness: a single coherent per-experiment results bundle, schema consolidation, and provenance sidecars |
 | v0.6.0 | Public packaging: first PyPI release, pip-install Docker dispatch, a lean CLI surface, and cloud-VM documentation |
 
-The current milestone is public packaging: the first PyPI release, pip-install
-Docker dispatch, and a lean CLI surface. An internal refactor-and-tidy pass
-follows, ahead of the stable 1.0.0 release. Run `llem --version` against your
+The most recently released milestone is v0.6.0: public packaging - the first
+PyPI release, pip-install Docker dispatch, and a lean CLI surface. The in-flight
+release pairs an internal architecture refactor with server-mode measurement:
+traffic-driven serving windows alongside the existing offline batch mode. It
+lands ahead of the stable 1.0.0 release. Run `llem --version` against your
 installed package for the authoritative current version.
 
 Pre-1.0 disclaimer: the tool is research-grade for single-machine use. It is

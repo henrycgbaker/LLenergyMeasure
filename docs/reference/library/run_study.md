@@ -20,7 +20,9 @@ across an axis in a single reproducible bundle.
 The distinction from [`run_experiment`](./run_experiment) is straightforward: `run_experiment`
 measures one configuration and returns a single result; `run_study` measures many configurations
 (expanded from sweep declarations at YAML parse time) and returns them together with study-level
-metadata, a manifest on disk, and a result bundle you can share or archive.
+metadata, a manifest on disk, and a result bundle you can share or archive. In offline mode each
+study cell contributes one result to `StudyResult.experiments`; in server mode a single cell is one
+server lifetime that contributes one result per measurement window.
 
 `run_study` always writes a `manifest.json` to disk as a documented side-effect. The manifest is
 both a resumption checkpoint (if the study is interrupted) and an audit trail linking each result

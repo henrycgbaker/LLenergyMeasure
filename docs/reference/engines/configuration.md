@@ -11,8 +11,8 @@ and configures it through a same-named block (`transformers:`, `vllm:`,
 `tensorrt:`).
 
 Every experiment also declares a required top-level `serving_mode:` (`offline`
-or `server`) - see the `serving_mode:` field below. This page covers
-`offline` engine configuration, today's only mode with an execution path.
+or `server`) - see the `serving_mode:` field below. The per-engine
+configuration on this page applies in both serving modes.
 
 Each engine block is a generated model at
 `src/llenergymeasure/config/generated/<engine>.py`, regenerated from the
@@ -108,7 +108,7 @@ identically across engines. Every one is `extra="forbid"`.
 
 | Field | Type | Default | Description | Source |
 |-------|------|---------|-------------|--------|
-| `serving_mode` | `offline` \| `server` | *(required)* | Serving mode discriminator, no default. `offline` measures batch inference over a fixed prompt set (the only mode with an execution path today). `server` selects online serving measurement and requires a `server:` section with a traffic spec. | `ExperimentConfig` |
+| `serving_mode` | `offline` \| `server` | *(required)* | Serving mode discriminator, no default. `offline` measures batch inference over a fixed prompt set; `server` selects online serving measurement and requires a `server:` section with a traffic spec. | `ExperimentConfig` |
 
 `server` mode's `traffic:` namespace (rate, arrival process, window, concurrency
 cap, SLOs) is not engine configuration and is not covered on this page; see
