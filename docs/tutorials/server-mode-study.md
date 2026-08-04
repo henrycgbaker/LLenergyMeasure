@@ -22,7 +22,7 @@ The framing matters. Offline answers "how cheap can this get?"; server
 mode answers "how does cost move as load rises, and where does latency
 break?" The two are complementary, and they share an energy-per-token
 definition so you can put them side by side (with one caveat about the
-pre-window protocol - see [Step 6](#step-6---rules-to-know-at-v070)).
+pre-window protocol - see [Step 6](#server-mode-rules)).
 
 > **Compute time:** longer than the offline tutorials. Each rate level
 > warms the server to thermal equilibrium, then measures three
@@ -46,7 +46,7 @@ pre-window protocol - see [Step 6](#step-6---rules-to-know-at-v070)).
 
 Server mode at v0.7 runs on **vLLM** and **TensorRT-LLM**. Transformers
 in `serving_mode: server` is rejected at config validation (see
-[Step 6](#step-6---rules-to-know-at-v070)); this tutorial uses vLLM.
+[Step 6](#server-mode-rules)); this tutorial uses vLLM.
 
 ## Step 1 - What server mode measures
 
@@ -167,7 +167,7 @@ You should see three resolved cells, one per rate. Because this study
 uses `experiment_order: interleave` and `n_cycles: 1`, the three cells
 fold into a single server launch that is reused across the sweep - the
 loader logs an INFO hint if you pick an order that would launch a fresh
-server per cell instead (see [Step 6](#step-6---rules-to-know-at-v070)).
+server per cell instead (see [Step 6](#server-mode-rules)).
 
 When the counts match your expectation, launch the run:
 
@@ -266,7 +266,7 @@ rows = duckdb.sql("""
 print(rows)
 ```
 
-## Step 6 - Rules to know at v0.7
+## Step 6 - Rules to know at v0.7 {#server-mode-rules}
 
 Server mode is new in v0.7, and a few staging restrictions apply.
 
