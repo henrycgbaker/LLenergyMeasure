@@ -76,7 +76,7 @@ large = base.model_copy(update={"task": base.task.model_copy(update={"model": "g
 |-------|------|---------|-------------|
 | `task` | `TaskConfig` | _(required)_ | What to measure: model, dataset, token limits, seed. |
 | `engine` | `str` | `"transformers"` | Inference engine: `"transformers"`, `"vllm"`, or `"tensorrt"`. |
-| `serving_mode` | `"offline" \| "server"` | _(required)_ | Serving mode discriminator, no default. `"offline"` measures batch inference over a fixed prompt set (the only mode with an execution path today). `"server"` selects online serving measurement and requires `server` to be set with a traffic spec - see [Study config reference](/reference/study-config#server-mode-server) for the full field reference. |
+| `serving_mode` | `"offline" \| "server"` | _(required)_ | Serving mode discriminator, no default. `"offline"` measures batch inference over a fixed prompt set; `"server"` selects online serving measurement and requires `server` to be set with a traffic spec - see [Study config reference](/reference/study-config#server-mode-server) for the full field reference. |
 | `measurement` | `MeasurementConfig` | `MeasurementConfig()` | How to measure: warmup, baseline, energy sampler. |
 | `sampling_preset` | `"deterministic" \| "standard" \| "creative" \| "factual" \| None` | `None` | When set, preset values are merged into the active engine's sampling section at parse time. Explicit YAML values take precedence. |
 | `transformers` | `TransformersConfig \| None` | `None` | Transformers-specific settings (only used when `engine="transformers"`). |

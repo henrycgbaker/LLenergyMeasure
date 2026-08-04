@@ -34,7 +34,7 @@ produced by `model.model_dump(mode="json")` and shares the same field names and 
 | `experiment_id` | `str` | Unique identifier for this experiment run. |
 | `declared_config_hash` | `str` | 16-char SHA-256 hex of the `ExperimentConfig` (environment fields excluded). Matches the hash in the result directory name on disk. |
 | `llenergymeasure_version` | `str \| None` | Package version that produced this result. |
-| `serving_mode` | `str` | The serving mode that produced this result: the offline/server discriminator, mirroring the config-side `ExperimentConfig.serving_mode`. `"offline"` for batch measurement (the only mode today); `"server"` arrives with server mode (v0.8.0). A plain string, not a closed vocabulary. |
+| `serving_mode` | `str` | The serving mode that produced this result: the offline/server discriminator, mirroring the config-side `ExperimentConfig.serving_mode`. `"offline"` for batch measurement, `"server"` for a server-mode measurement window (v0.7). A plain string, not a closed vocabulary. |
 | `engine` | `str` | Inference engine used. Convenience copy; authoritative home is the `config.json` sidecar. |
 | `model_name` | `str` | Model name/path measured. Convenience copy; authoritative home is the `config.json` sidecar. |
 

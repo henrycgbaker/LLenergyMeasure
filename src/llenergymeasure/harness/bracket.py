@@ -4,8 +4,8 @@ The bracket owns the measured window's boundary: energy-sampler selection,
 energy-tracker start/stop, the pre/post CUDA syncs, the PowerThermalSampler
 lifetime, and the wall-clock + perf-counter timestamps. It is deliberately
 independent of WHAT runs inside it - no engine, no prompts, no InferenceOutput in
-its signature - so server mode (v0.8.0) can reuse it around a load-gen-timed run
-unchanged.
+its signature - so server mode reuses it around a load-gen-timed run unchanged
+(the window manager's default energy sink mints one bracket per window).
 
 Window-width subtlety (behavior-frozen): the energy tracker is stopped in
 ``finish()``, strictly after ``__exit__`` has stopped the thermal sampler. The

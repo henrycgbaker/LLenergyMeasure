@@ -854,16 +854,16 @@ class ExperimentConfig(BaseModel):
         json_schema_extra={"display_label": "Engine"},
     )
 
-    # Serving mode - offline batch (today) vs online serving (arriving with server mode).
+    # Serving mode - offline batch vs online serving; both have a measurement path.
     # REQUIRED, no default: the serving regime is a primary experimental condition, so
     # an implicit mode is forbidden (it would mislabel the measurement).
     serving_mode: Literal["offline", "server"] = Field(
         ...,
         description=(
             "Serving mode discriminator (required, no default). 'offline' measures "
-            "batch inference over a fixed prompt set; it is the only mode with an "
-            "execution path today. 'server' selects online serving measurement "
-            "(requires a server: section with a traffic spec). A conditioning "
+            "batch inference over a fixed prompt set; 'server' measures online "
+            "serving from a traffic spec (requires a server: section). Both modes "
+            "have a measurement execution path. A conditioning "
             "identity axis - it enters the declared, resolved, and observed config "
             "hashes, so an offline config and a server config never deduplicate "
             "together. The matching mode namespace (server:) is legal only under "

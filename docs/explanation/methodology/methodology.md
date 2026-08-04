@@ -336,6 +336,124 @@ study_execution:
 
 ---
 
+## Server-Mode Measurement
+
+**Purpose:** Offline mode measures a batch ceiling - one engine lifetime run
+flat out over a fixed prompt set. Server mode measures a running service:
+requests arrive over time at a target rate, and energy and latency are
+attributed over measurement windows once the server reaches steady state. The
+two modes share their energy-per-token definition so their results can be
+compared, but the measurement protocol differs in ways that must be understood
+before putting them side by side.
+
+### Measurement windows
+
+A **window** is the first-class unit of server-mode measurement: a fixed span
+during which the server is held at a target arrival rate and steady state.
+A rate sweep produces one *level* per rate, and each level measures three
+consecutive windows (the default) so a per-level stability gate can confirm the
+per-window energy per token is stable across them before the level is credited.
+
+Two boundary policies coexist within a window and are never conflated:
+
+- **Energy** is amortised over the steady-state span. Energy per token is the
+  window's integrated GPU energy divided by the tokens attributed to the span,
+  with the ramp excluded. The ramp is excluded *prospectively* - the span
+  simply starts a fixed interval after load begins - not trimmed retroactively.
+- **Latency** percentiles use a drain-before-close policy: every request issued
+  within the span contributes its real end-to-end latency, even when it
+  completes after the span closes, because the harness drains all in-flight
+  requests to completion after energy accounting stops.
+
+At v0.7 there is one attribution policy, and it is a disclosed field in the
+result: the energy denominator is the client-counted output tokens received in
+the steady-state span `[start + ramp, stop]`, across all requests regardless of
+terminal status. Because the per-window request log stores the span bounds and
+the receipt-unclipped per-request token series, an alternative attribution can
+be re-derived offline without re-running the study.
+
+The measured-span duration (default 240 s) and the excluded ramp (default 30 s)
+are config-exposed on `server.traffic` and grounded in the E2
+minimum-window-duration study.
+
+### Server warmup
+
+Server warmup has three stages. First, **readiness**: a liveness poll of the
+server's health endpoint is necessary but never sufficient, so readiness is
+satisfied only once a real inference request driven through the serving path
+returns successfully - the tool warms and probes the same path it measures.
+Second, **warmup traffic**: the harness drives issuer traffic at the level's
+target rate, drawn from the same request-shape distribution the measurement
+window will use, never a canned prompt loop. Third, the window opens.
+
+In the default composite mode, the window opens only once a convergence gate of
+three observables holds together - GPU power plateaued (stable through the end
+of a trailing sample window), temperature settled (the trailing-window
+temperature range within a small delta on every monitored GPU, i.e. dT/dt near
+zero), and no active thermal throttle bits. This gate is grounded in the E3
+warmup study. A hard `timeout_seconds` failsafe (default 900 s) prevents a
+hang: at the timeout the harness proceeds and stamps a timed-out flag rather
+than silently passing. `mode: fixed` is the explicit opt-out - the same
+issuer-driven traffic path with no gate, for a fixed `duration_seconds`
+(default 300 s); a duration of 0 skips warmup traffic entirely.
+
+Warmup re-runs before *every* rate level. This fails safe: a level that is
+already at equilibrium from the previous level exits the gate quickly, while a
+level that shifted the operating point re-converges before it is measured.
+
+:::caution Comparing offline and server side by side
+Server mode inserts **no idle cooldown before a measurement window**, by
+design. In offline mode the pre-window thermal-floor wait settles the GPU from an
+idle state; in server mode the analogue is the *loaded* warmup to equilibrium,
+because a running service's steady thermal posture under load is exactly what
+should be measured. Inserting an idle wait would let the GPU cool below its
+loaded operating point and bias energy per token favourably. This offline
+(idle-settled) versus server (loaded-equilibrium) divergence in the pre-window
+protocol is deliberate, and it must be labelled in any report that puts an
+offline figure next to a server figure for the same model.
+:::
+
+:::caution Within-engine offline-vs-server deltas
+For vLLM and TensorRT-LLM the same engine core serves both offline and server
+runs, so a within-engine offline-to-server delta compares like with like. For
+Transformers this would not hold - offline `generate()` and a serving adapter
+are different runtime paths - so a Transformers offline-to-server delta would
+not be apples-to-apples. At v0.7 this is a forward-looking caveat: Transformers
+`serving_mode: server` is rejected at config validation (the server engines are
+vLLM and TensorRT-LLM), so the mismatch cannot arise yet. It is documented here
+for when a Transformers server adapter ships.
+:::
+
+### Open-loop issuance
+
+Arrivals are **open-loop**: request issue times follow an arrival process
+(Poisson by default; Gamma with a tunable burstiness coefficient optionally),
+and a client-side sidecar issues each request on schedule without waiting for
+prior requests to complete. Open-loop issuance is non-negotiable for any run
+that reports latency, because closed-loop issuance (issue the next request only
+when the last returns) hides queueing delay under load - the classic
+coordinated-omission error, where the requests that would have observed the
+worst latency are simply never issued.
+
+Offline mode has **no traffic axis** by design. Offline measures a batch
+ceiling, and arrival timing is meaningless without a serving queue to arrive
+into, so there is no rate, no arrival process, and no window sweep in offline
+mode.
+
+### Shared metric core
+
+Energy per token, energy per request, tokens per second, and the gross / idle /
+net energy figures have **identical definitions in both modes**, which is what
+makes cross-mode comparison of those figures legitimate. Server-distinct
+metrics - TTFT and ITL percentiles under load, goodput, and SLO attainment -
+exist only for server windows. Fields that do not apply to a mode are `null`
+rather than zero, and the `serving_mode` field on every result is the
+discriminator that says which reading applies. The
+[results schema](/reference/results-schema#server-mode-results) documents the
+server-mode result surfaces field by field.
+
+---
+
 ## Thermal Management
 
 **Purpose:** GPU temperature affects power draw and throughput. A GPU running at 85°C

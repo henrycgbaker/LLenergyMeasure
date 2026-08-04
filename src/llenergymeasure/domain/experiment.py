@@ -391,10 +391,10 @@ class ExperimentResult(BaseModel):
         default="offline",
         description="Serving mode that produced this result: the offline/server "
         'discriminator, mirroring the config-side ExperimentConfig.serving_mode. "offline" for '
-        'batch measurement (the only mode today); "server" arrives with server mode (v0.8.0). A '
+        'batch measurement, "server" for online serving measurement. A '
         "plain string, not a closed vocabulary, so the mode set can grow without a schema break. "
-        "Stamped by the assembler from the measurement source (see "
-        "harness.result_assembly.SourceMetrics).",
+        "Stamped per result from its measurement source (the offline assembler, see "
+        "harness.result_assembly.SourceMetrics; the server per-window mapper for server mode).",
     )
 
     # Convenience identity copies. Deliberate small duplication so a result.json
