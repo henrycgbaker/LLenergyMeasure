@@ -361,6 +361,11 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
 
         original_sigint, original_sigterm, gpu_locks = self._install_run_handlers(ordered)
 
+        # Intentionally covers server-mode container images too, not just offline
+        # dispatch. It is the only early-fail + visible-pull point for a pure-server
+        # study: launch_container_server's `docker run -d` pulls a missing image
+        # silently with no subprocess timeout and before the readiness clock starts,
+        # so gating this off would hide pull progress and defer failure.
         self._prepare_images()
 
         # Circuit breaker: tracks consecutive failures, decides abort/probe.
