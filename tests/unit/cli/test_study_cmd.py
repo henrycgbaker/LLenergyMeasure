@@ -202,3 +202,22 @@ def test_plan_zero_experiments_exits_nonzero(tmp_path: Path) -> None:
     assert result.exit_code != 0
     assert "no experiments" in result.output.lower()
     assert "Traceback" not in result.output
+
+
+def test_plan_mixed_serving_mode_exits_nonzero(tmp_path: Path) -> None:
+    """A study mixing serving_mode exits nonzero with the staging message (no traceback)."""
+    study = tmp_path / "mixed.yaml"
+    study.write_text(
+        "experiments:\n"
+        "  - task: {model: gpt2}\n"
+        "    engine: vllm\n"
+        "    serving_mode: offline\n"
+        "  - task: {model: gpt2}\n"
+        "    engine: vllm\n"
+        "    serving_mode: server\n"
+        "    server: {traffic: {rate: 5}}\n"
+    )
+    result = runner.invoke(app, ["study", "plan", str(study)])
+    assert result.exit_code != 0
+    assert "serving_mode" in result.output
+    assert "Traceback" not in result.output

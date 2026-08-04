@@ -13,6 +13,7 @@ parses *and* finalises in one call is ``llenergymeasure.api.load_study``.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import asdict
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -22,13 +23,15 @@ from llenergymeasure.config.grid import (
     compute_study_design_hash,
 )
 from llenergymeasure.config.loader import LoadedStudyRaw
-from llenergymeasure.config.models import StudyConfig
+from llenergymeasure.config.models import ExperimentConfig, StudyConfig
 from llenergymeasure.study.library_resolution import resolve_library_effective
 
 if TYPE_CHECKING:
     from llenergymeasure.config.user_config import UserConfig
 
 __all__ = ["finalise_study"]
+
+logger = logging.getLogger(__name__)
 
 
 def finalise_study(raw: LoadedStudyRaw, *, user_config: UserConfig | None = None) -> StudyConfig:
@@ -98,6 +101,12 @@ def finalise_study(raw: LoadedStudyRaw, *, user_config: UserConfig | None = None
     # identifies the *unique* measurement set, not duplicate declarations.
     study_hash = compute_study_design_hash(run_experiments)
 
+    _maybe_hint_sequential_server_singletons(
+        run_experiments,
+        experiment_order=execution.experiment_order,
+        n_cycles=execution.n_cycles,
+    )
+
     # Apply cycle ordering to produce execution sequence
     ordered = apply_cycles(
         run_experiments,
@@ -143,3 +152,40 @@ def finalise_study(raw: LoadedStudyRaw, *, user_config: UserConfig | None = None
         declared_resolved_config_hashes=list(dedup.declared_resolved_hashes),
         dormant_observations=[asdict(obs) for obs in dedup.dormant_observations],
     )
+
+
+def _maybe_hint_sequential_server_singletons(
+    run_experiments: list[ExperimentConfig],
+    *,
+    experiment_order: str,
+    n_cycles: int,
+) -> None:
+    """Emit a did-you-know when a foldable server sweep runs under sequential order.
+
+    Under ``sequential`` order with ``n_cycles > 1`` each grid point's cycles are
+    adjacent, so a rate sweep's cells are never both consecutive AND same-cycle
+    and each dispatches as its own server session (one server launch per cell per
+    cycle). ``interleave`` replays the base ordering per cycle pass, so each pass
+    folds the sweep into a single launch. Both are correct; this is INFO, not a
+    warning.
+
+    Only a rate sweep is foldable: an slo sweep never folds (slo is excluded from
+    the declared config hash as a post-hoc overlay, so slo-differing cells share a
+    declared hash and either dedup-collapse to one config or cycle-track as
+    repeats), so this hint stays silent for an slo-only sweep under either order.
+
+    The foldability test reuses the session-grouping machinery on the pre-cycle
+    base list: a unit of two or more cells is (by construction) a multi-cell server
+    group that would fold under interleave. No key-stripping logic is duplicated.
+    """
+    if experiment_order != ExperimentOrder.SEQUENTIAL or n_cycles <= 1:
+        return
+
+    from llenergymeasure.study.server_session import partition_server_groups
+
+    units = partition_server_groups(run_experiments)
+    if any(len(unit) >= 2 for unit in units):
+        logger.info(
+            "sequential order launches one server per cell per cycle; set "
+            "experiment_order: interleave to reuse one server launch per sweep pass."
+        )

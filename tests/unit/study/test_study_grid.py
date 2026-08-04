@@ -131,6 +131,25 @@ class TestStudyConfig:
         with pytest.raises(ValidationError):
             StudyConfig(experiments=[exp], unknown_field="x")  # type: ignore[call-arg]  # asserts extra rejected
 
+    def test_mixed_serving_mode_construction_stays_legal(self):
+        """Direct StudyConfig construction with mixed serving_mode must NOT raise.
+
+        The v0.7 mixed-mode staging restriction lives only at the YAML/CLI loader
+        edge, never as a model_validator, so the data model stays mixed-legal and
+        the future engine x serving_mode grid crossing is not foreclosed here.
+        """
+        offline_cfg = ExperimentConfig(
+            task={"model": "gpt2"}, engine="vllm", serving_mode="offline"
+        )
+        server_cfg = ExperimentConfig(
+            task={"model": "gpt2"},
+            engine="vllm",
+            serving_mode="server",
+            server={"traffic": {"rate": 5}},
+        )
+        sc = StudyConfig(experiments=[offline_cfg, server_cfg])
+        assert {e.serving_mode for e in sc.experiments} == {"offline", "server"}
+
 
 # =============================================================================
 # expand_grid() - grid sweep mode
