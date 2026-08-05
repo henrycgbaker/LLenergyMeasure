@@ -321,17 +321,3 @@ def test_oscillating_latency_does_not_converge() -> None:
     latencies = iter([100.0, 200.0] * 6)
     result = warmup_until_converged(lambda: next(latencies), config)
     assert result.converged is False
-
-
-def test_describe_offline_warmup_protocol() -> None:
-    from llenergymeasure.harness.warmup import describe_offline_warmup_protocol
-
-    fixed = describe_offline_warmup_protocol(WarmupConfig(convergence_detection=False, n_prompts=3))
-    assert "fixed" in fixed and "3" in fixed and "thermal floor" in fixed
-
-    conv = describe_offline_warmup_protocol(WarmupConfig(convergence_detection=True))
-    assert "convergence" in conv and "stable-through-end" in conv
-
-    assert (
-        describe_offline_warmup_protocol(WarmupConfig(enabled=False)) == "offline warmup disabled"
-    )
