@@ -214,18 +214,19 @@ class ServerSloEvaluation(BaseModel):
     MEETS it - a violation is strictly-greater-than). ``slo_pass`` is the window
     verdict - ``attainment_fraction >= percentile`` (the MLPerf server-scenario
     reading: at least ``percentile`` of served requests inside the latency bound).
-    ``goodput`` is the DERIVED column ``attainment x throughput`` over the SAME
-    records, never separately sampled. ``energy_at_operating_point_valid`` gates the
-    window's J/token as a valid operating point (``slo_pass AND level_valid``).
+    ``goodput`` is the literature-exact DIRECT JOIN over the SAME records (below).
+    ``energy_at_operating_point_valid`` gates the window's J/token as a valid operating
+    point (``slo_pass AND level_valid``).
 
-    GOODPUT CAVEAT: the ``throughput`` factor is the span-clipped client-token
-    throughput, which counts EVERY in-span delivered token - including the partial
-    tokens of requests that then errored or timed out - whereas ``attainment``'s
-    denominator is the COMPLETED requests only. At a high failure rate (the SLO
-    knee, where failed requests still delivered in-span tokens) ``goodput`` therefore
-    OVERSTATES the true SLO-meeting token throughput; read ``completion_rate`` on the
-    parent metrics block alongside it as the failure disclosure. The formula is the
-    maintainer-ratified O5.2 derived column and is deliberately not refined here.
+    GOODPUT (O5.2, DIRECT JOIN): the in-span output tokens of the requests that BOTH
+    completed (``status == "ok"``) AND met every configured bound, divided by the span
+    duration (DistServe, OSDI'24, arXiv:2401.09670; Wang et al., arXiv:2410.14257 Eq.
+    5). No failed request's tokens enter it at any weight. The numerator is
+    in-span-clipped (each qualifying request's receipts up to ``span_end``, per D7) - a
+    disclosed deviation from Wang et al.'s full per-request count that keeps the span
+    discipline and guarantees ``goodput <= avg_tokens_per_second``. Read
+    ``completion_rate`` on the parent metrics block alongside it as the failure
+    disclosure.
     """
 
     ttft_bound_ms: float | None = Field(
@@ -273,12 +274,13 @@ class ServerSloEvaluation(BaseModel):
     )
     goodput_tokens_s: float | None = Field(
         default=None,
-        description="SLO-meeting throughput: attainment_fraction x the span-clipped client-token "
-        "throughput (tok/s), a derived column. None when attainment or throughput is undefined. "
-        "CAVEAT: the throughput factor counts every in-span delivered token, including failed "
-        "requests' partials, while attainment's denominator is completed-only - so at a high "
-        "failure rate this OVERSTATES SLO-meeting throughput; read completion_rate as the failure "
-        "disclosure.",
+        description="SLO-meeting throughput (tok/s): the in-span output tokens of the requests "
+        "that both completed and met every configured bound, divided by the span duration (the "
+        "literature-exact direct join; no failed request's tokens enter at any weight). None when "
+        "the completed population is empty or the span duration is non-positive; 0.0 when the "
+        "population is non-empty but no request qualifies. The numerator is in-span-clipped (a "
+        "disclosed deviation from a full per-request count), so goodput <= avg_tokens_per_second; "
+        "read completion_rate as the failure disclosure.",
     )
     energy_at_operating_point_valid: bool | None = Field(
         default=None,

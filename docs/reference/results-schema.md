@@ -370,14 +370,14 @@ The SLO overlay is a **pure post-hoc overlay**. The bounds only classify a windo
 | `ttft_at_percentile_ms` / `tpot_at_percentile_ms` | Observed tail values at the shared percentile, for cross-checking |
 | `attainment_fraction` | Fraction of completed requests meeting all configured bounds jointly |
 | `slo_pass` | Window verdict: `attainment_fraction >= percentile` |
-| `goodput_tokens_s` | Goodput (see the caveat below) |
+| `goodput_tokens_s` | SLO-meeting throughput (direct join; see the note below) |
 | `energy_at_operating_point_valid` | Whether this window's operating-point energy is usable (`slo_pass and level_valid`) |
 
 **Attainment is a per-request joint evaluation**, not a per-metric percentile: a completed request counts iff its TTFT is within `ttft_ms` **and** its per-request TPOT is within `tpot_ms` at once. A latency exactly equal to a bound meets it; only strictly-greater-than violates. A missing TTFT under a configured TTFT bound fails; an undefined TPOT (fewer than two tokens) passes the TPOT bound vacuously.
 
 **Length-truncated requests are attainment-eligible.** A completion that stopped at its output-token budget (`finish_reason == "length"`) is a normal completion (`status == "ok"`) - the workload fixes the output budget, so a length stop is a served request, not a failure. Such completions are counted and evaluated against the bounds like any other, and their tally is disclosed in `length_truncated_count` so a caller can re-segment for a different reading.
 
-**Goodput caveat.** `goodput_tokens_s` is `attainment_fraction x token-throughput` over the same records. The throughput factor counts every in-span delivered token, including the partial output of failed requests, while attainment counts only completions. At a high failure rate goodput therefore overstates SLO-meeting throughput; read it alongside `completion_rate`.
+**Goodput.** `goodput_tokens_s` is a direct join: the in-span output tokens of the requests that **both** completed (`status == "ok"`) **and** met every configured bound, divided by the span duration (DistServe, OSDI'24, arXiv:2401.09670; Wang et al., arXiv:2410.14257 Eq. 5). No failed request's tokens enter it at any weight. The numerator is in-span-clipped (each qualifying request's receipts up to the window's `span_end`), a disclosed deviation from a full per-request count that keeps the span discipline and guarantees `goodput_tokens_s <= avg_tokens_per_second`. It is `null` when no request completed or the span duration is non-positive, and `0.0` when requests completed but none qualified; read it alongside `completion_rate`.
 
 ### Files as a record: querying per-window results
 

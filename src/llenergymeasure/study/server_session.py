@@ -1373,8 +1373,8 @@ class ServerSession:
         )
         server_metrics = derive_server_window_metrics(
             request_rows,
-            duration_s=duration,
-            token_throughput_tokens_s=token_throughput,
+            span_start=window.boundaries.span_start,
+            span_end=window.boundaries.span_end,
             j_per_token=j_per_token,
             level_valid=level_valid,
             slo=self._slo_bounds(cell.config),

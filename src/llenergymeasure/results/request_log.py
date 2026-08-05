@@ -291,3 +291,24 @@ def rows_from_parquet(path: Path) -> list[RequestLogRow]:
             )
         )
     return rows
+
+
+def span_from_parquet(path: Path) -> tuple[float | None, float | None]:
+    """Read the window's measured ``(span_start, span_end)`` from the file KV metadata.
+
+    The span bounds ride as Parquet file-level key-value metadata (not columns; the
+    span is file-scoped), written by :func:`write_requests_parquet`. An offline
+    consumer pairs this with :func:`rows_from_parquet` to re-judge a window's SLO
+    overlay against its measured span (the O5.3 re-judgeable promise) without
+    re-running. Returns None for a bound that was not stored. The bounds share the
+    issuer ``time.monotonic`` basis with each row's ``output_token_times``.
+    """
+    import pyarrow.parquet as pq
+
+    meta = pq.read_schema(path).metadata or {}
+
+    def _read(key: str) -> float | None:
+        raw = meta.get(key.encode())
+        return float(raw) if raw is not None else None
+
+    return _read("span_start"), _read("span_end")

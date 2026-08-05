@@ -32,6 +32,7 @@ def _row(
     finish_reason: str | None = "stop",
     in_window: bool = True,
     is_ramp: bool = False,
+    completed_in_drain: bool = False,
     server_completion_tokens: int | None = None,
     e2e_latency_ms: float | None = 100.0,
 ) -> RequestLogRow:
@@ -58,16 +59,16 @@ def _row(
         window_index=0,
         in_measurement_window=in_window,
         is_ramp=is_ramp,
-        completed_in_drain=False,
+        completed_in_drain=completed_in_drain,
         output_token_times=times,
     )
 
 
-def _derive(rows, *, slo=None, duration_s=10.0, throughput=1.0, j_per_token=0.5, level_valid=True):
+def _derive(rows, *, slo=None, span_start=0.0, span_end=10.0, j_per_token=0.5, level_valid=True):
     return derive_server_window_metrics(
         rows,
-        duration_s=duration_s,
-        token_throughput_tokens_s=throughput,
+        span_start=span_start,
+        span_end=span_end,
         j_per_token=j_per_token,
         level_valid=level_valid,
         slo=slo,
@@ -129,7 +130,7 @@ class TestPercentilesAndCounts:
 
     def test_request_throughput_uses_span_duration(self) -> None:
         rows = [_row(i) for i in range(6)]
-        assert _derive(rows, duration_s=3.0).request_throughput_req_s == 2.0
+        assert _derive(rows, span_start=0.0, span_end=3.0).request_throughput_req_s == 2.0
 
     def test_length_truncation_is_disclosed_and_eligible(self) -> None:
         rows = [
@@ -173,7 +174,10 @@ class TestSloOverlay:
         # Joint: ttft<=35 passes 3/4 (40 fails); tpot<=150 passes all -> 3/4.
         assert m.slo.attainment_fraction == 0.75
         assert m.slo.slo_pass is True  # 0.75 >= 0.75 (exactly at bound)
-        assert m.slo.goodput_tokens_s == 0.75  # attainment x throughput(1.0)
+        # Direct join: the 3 qualifying requests each delivered 3 in-span tokens (9
+        # total) over the 10 s span -> 0.9. The failing (ttft=40) request's 3 tokens
+        # are absent from the numerator.
+        assert m.slo.goodput_tokens_s == pytest.approx(0.9)
         assert m.slo.energy_at_operating_point_valid is True
 
     def test_attainment_boundary_exactly_at_bound_passes(self) -> None:
@@ -198,6 +202,9 @@ class TestSloOverlay:
         m = _derive(rows, slo=SloBounds(ttft_ms=1000.0, tpot_ms=1.0, percentile=0.99))
         assert m.slo.attainment_fraction == 1.0
         assert m.slo.tpot_at_percentile_ms is None  # no TPOT sample formed
+        # A vacuous tpot pass is a qualifying request: its 1 in-span token enters the
+        # goodput numerator (1 token / 10 s span).
+        assert m.slo.goodput_tokens_s == pytest.approx(0.1)
 
     def test_missing_ttft_under_bound_fails(self) -> None:
         rows = [_row(0, ttft_ms=None)]  # completed but no first token observed
@@ -210,7 +217,9 @@ class TestSloOverlay:
         m = _derive(rows, slo=SloBounds(ttft_ms=50.0, tpot_ms=None, percentile=0.99))
         assert m.slo.attainment_fraction == 0.0
         assert m.slo.slo_pass is False
-        assert m.slo.goodput_tokens_s == 0.0  # 0 attainment x throughput
+        # Non-empty completed population, zero qualifying -> truthful 0.0 (no tokens
+        # in the numerator), NOT None.
+        assert m.slo.goodput_tokens_s == 0.0
         assert m.slo.energy_at_operating_point_valid is False
 
     def test_all_failed_window_no_completions(self) -> None:
@@ -238,14 +247,25 @@ class TestSloOverlay:
         # slo_pass True but the stability gate failed -> not a valid operating point.
         assert m.slo.energy_at_operating_point_valid is False
 
-    def test_goodput_none_when_throughput_unknown(self) -> None:
+    def test_goodput_none_when_span_duration_non_positive(self) -> None:
+        # A degenerate (zero-length) span has no divisor -> goodput is None even though
+        # the requests qualify; attainment is span-independent and still resolves.
         rows = [_row(i, ttft_ms=10.0) for i in range(4)]
         m = _derive(
             rows,
             slo=SloBounds(ttft_ms=50.0, tpot_ms=None, percentile=0.99),
-            throughput=None,
+            span_start=5.0,
+            span_end=5.0,
         )
         assert m.slo.attainment_fraction == 1.0
+        assert m.slo.goodput_tokens_s is None
+
+    def test_goodput_none_when_completed_population_empty(self) -> None:
+        # No completed request at all -> attainment undefined and goodput None (0/0),
+        # distinct from the truthful-0.0 zero-qualifying case.
+        rows = [_row(0, status=REQUEST_STATUS_ERROR, token_times=[0.0, 0.1, 0.2])]
+        m = _derive(rows, slo=SloBounds(ttft_ms=50.0, tpot_ms=None, percentile=0.99))
+        assert m.slo.attainment_fraction is None
         assert m.slo.goodput_tokens_s is None
 
 
@@ -266,13 +286,80 @@ class TestRejudgeability:
     def test_evaluate_slo_matches_derive_overlay(self) -> None:
         rows = [_row(i, ttft_ms=t) for i, t in enumerate((10, 20, 30, 40))]
         bounds = SloBounds(ttft_ms=25.0, tpot_ms=None, percentile=0.5)
-        overlay = evaluate_slo(rows, bounds, token_throughput_tokens_s=2.0, level_valid=True)
-        derived = _derive(rows, slo=bounds, throughput=2.0)
+        overlay = evaluate_slo(rows, bounds, span_start=0.0, span_end=10.0, level_valid=True)
+        derived = _derive(rows, slo=bounds)
         assert derived.slo == overlay
         # ttft<=25 passes 2/4 = 0.5; at percentile 0.5 -> pass.
         assert overlay.attainment_fraction == 0.5
         assert overlay.slo_pass is True
-        assert overlay.goodput_tokens_s == 1.0  # 0.5 x 2.0
+        # Direct join: the 2 qualifying requests each delivered 1 in-span token (2
+        # total) over the 10 s span -> 0.2.
+        assert overlay.goodput_tokens_s == pytest.approx(0.2)
+
+
+class TestGoodputDirectJoin:
+    """Ground-truth for the literature-exact direct-join goodput (O5.2, section 26).
+
+    Each expectation is chosen so the two superseded formulas FAIL it: the old product
+    (attainment x all-in-span-token throughput) and the halfway candidate (attainment x
+    completed-only-token throughput). The mutation-bite proof relies on these values.
+    """
+
+    def test_failure_knee_excludes_failed_and_violating_tokens(self) -> None:
+        # A qualifying completion (6 in-span tokens), a completed-but-SLO-violating
+        # request (1 token), and a failed request that still delivered 4 tokens. Only
+        # the qualifying request's tokens enter the numerator.
+        rows = [
+            _row(0, ttft_ms=10.0, token_times=[0.0, 0.1, 0.2, 0.3, 0.4, 0.5]),  # qualifies, 6
+            _row(1, ttft_ms=500.0, token_times=[0.0]),  # completed, violates ttft, 1
+            _row(2, ttft_ms=10.0, status=REQUEST_STATUS_ERROR, token_times=[0.0, 0.1, 0.2, 0.3]),
+        ]
+        m = _derive(rows, slo=SloBounds(ttft_ms=50.0, tpot_ms=None, percentile=0.5))
+        # completed = {row0, row1}; qualifying = {row0}. attainment 1/2 = 0.5.
+        assert m.slo.attainment_fraction == 0.5
+        # Direct join = 6 qualifying in-span tokens / 10 s = 0.6.
+        assert m.slo.goodput_tokens_s == pytest.approx(0.6)
+        # Two-sided bite: the old product would credit the failed + violating tokens
+        # through the all-token throughput factor (0.5 x 11/10 = 0.55) and the halfway
+        # candidate the violating token through the completed-only factor (0.5 x 7/10 =
+        # 0.35); neither equals 0.6.
+        assert m.slo.goodput_tokens_s != pytest.approx(0.55)
+        assert m.slo.goodput_tokens_s != pytest.approx(0.35)
+
+    def test_drain_straddler_in_span_tokens_only(self) -> None:
+        # A drain straddler contributes ONLY its in-span tokens to goodput while its
+        # FULL latency judges its SLO compliance (D7 two-policy separation).
+        plain = _row(0, ttft_ms=10.0, token_times=[0.0, 0.1])  # 2 in-span tokens, tpot 100 ms
+        straddler = _row(
+            1,
+            ttft_ms=10.0,
+            token_times=[1.0, 2.0, 3.0, 4.0, 30.0],  # 4 in-span (<=10), 1 drain-tail (30)
+            completed_in_drain=True,
+        )
+        # Generous tpot bound: the straddler qualifies (full-series tpot 7250 ms <= 8000)
+        # and contributes only its 4 in-span tokens (not 5).
+        lenient = _derive(
+            [plain, straddler], slo=SloBounds(ttft_ms=50.0, tpot_ms=8000.0, percentile=0.5)
+        )
+        assert lenient.slo.attainment_fraction == 1.0
+        # (2 + 4) in-span tokens / 10 s = 0.6; counting the drain-tail token would give 0.7.
+        assert lenient.slo.goodput_tokens_s == pytest.approx(0.6)
+
+    def test_drain_straddler_judged_on_full_latency(self) -> None:
+        # Same straddler, tpot bound BETWEEN its clipped-series tpot (1000 ms) and its
+        # full-series tpot (7250 ms): judged on the FULL series it VIOLATES, so it drops
+        # out of both attainment and goodput.
+        plain = _row(0, ttft_ms=10.0, token_times=[0.0, 0.1])
+        straddler = _row(
+            1,
+            ttft_ms=10.0,
+            token_times=[1.0, 2.0, 3.0, 4.0, 30.0],
+            completed_in_drain=True,
+        )
+        m = _derive([plain, straddler], slo=SloBounds(ttft_ms=50.0, tpot_ms=5000.0, percentile=0.5))
+        # Only the plain request qualifies -> attainment 1/2, goodput = 2 tokens / 10 s.
+        assert m.slo.attainment_fraction == 0.5
+        assert m.slo.goodput_tokens_s == pytest.approx(0.2)
 
 
 class TestModeInapplicableStableSchema:
