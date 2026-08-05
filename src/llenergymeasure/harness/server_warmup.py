@@ -395,7 +395,13 @@ class ServerWarmup:
         """
         sampler = self._sampler_factory()
         counting = _CountingTransport(self._transport)
-        source = self._traffic_factory(context, self._config.timeout_seconds)
+        # Provision the traffic schedule two poll intervals LONGER than the gate
+        # window so a clean full-duration run does not exhaust exactly at the
+        # boundary (the finally block stops it explicitly, so the slack is free on
+        # the happy path).
+        source = self._traffic_factory(
+            context, self._config.timeout_seconds + 2 * self._poll_interval
+        )
         start = self._clock()
         deadline = start + self._config.timeout_seconds
         timed_out = False
@@ -408,9 +414,15 @@ class ServerWarmup:
         traffic_task: asyncio.Task[Any] = asyncio.create_task(source.run(counting))
         try:
             while True:
-                # Watch the traffic each poll: a completion (raise OR early clean
-                # exit) before the gate resolves means the warmup mechanism died.
+                # Watch the traffic each poll. A completion strictly BEFORE the
+                # deadline means the warmup mechanism died early (a raise OR a clean
+                # early exit); a completion AT OR AFTER the deadline is the schedule
+                # ending at the gate boundary, which is a timeout-proceed (a loud
+                # timed_out disclosure), NOT traffic death.
                 if traffic_task.done():
+                    if self._clock() >= deadline:
+                        timed_out = True
+                        break
                     traffic_died = True
                     cause = _traffic_cause(traffic_task)
                     break

@@ -177,6 +177,26 @@ class EarlyExitSource:
         return _empty_report(self._n)
 
 
+class ExhaustAfterSource:
+    """Issues ``n`` successful requests then returns cleanly, with NO trailing delay.
+
+    Unlike ``EarlyExitSource`` it never awaits a real timer, so under a fake-clock
+    driver it runs to completion on the poll loop's first yield - letting a test
+    place the clean schedule exhaustion at a controlled point relative to the
+    deadline (at the boundary vs. strictly before it).
+    """
+
+    def __init__(self, n: int = 1) -> None:
+        self._n = n
+        self.issued = 0
+
+    async def run(self, transport: Any, *, drain_timeout: float | None = None) -> IssuerReport:
+        for i in range(self._n):
+            await transport(RequestShape(index=i))
+            self.issued += 1
+        return _empty_report(self.issued)
+
+
 class FakeTransport:
     async def __call__(self, request: Any) -> Any:
         return None
@@ -392,6 +412,65 @@ class TestServerWarmupComposite:
         assert result.converged is False
         # Proceeded (returned) and released everything - never hung.
         assert sampler.stopped and source.cancelled
+
+
+class TestServerWarmupTimeoutBoundary:
+    """Regression: a clean warmup-traffic schedule that ends AT/AFTER the timeout is a
+    timeout-proceed (loud timed_out), NOT traffic death; a schedule that ends strictly
+    BEFORE the timeout is still genuine early exhaustion and fails loudly. Guards the
+    v0.7.0 release-gate defect where a full-duration run failed the experiment cell.
+    """
+
+    def test_clean_exit_at_deadline_proceeds_timed_out(self):
+        # The traffic schedule exhausts cleanly exactly at the gate boundary while the
+        # observables never converge: proceed with the loud timed_out stamp, NO raise.
+        sampler = FakeSampler([])  # never converges
+        source = ExhaustAfterSource(n=1)  # completes on the first poll's yield
+        clk = FakeClock()
+
+        async def advancing_sleep(d: float) -> None:
+            clk.t += max(d, 1.0)  # one poll pushes the clock to the deadline
+            await asyncio.sleep(0)  # yield so the traffic task runs to completion
+
+        sw = _warmup(
+            ServerWarmupConfig(mode="composite", timeout_seconds=1.0),
+            sampler,
+            source,
+            poll_interval=1.0,
+            sleep=advancing_sleep,
+            clock=clk,
+        )
+        asyncio.run(sw(_ctx()))  # must NOT raise
+        result = sw.results[0]
+        assert result.timed_out is True
+        assert result.converged is False
+        assert source.issued == 1  # the warmup traffic actually ran to the boundary
+        assert sampler.stopped  # released, never hung
+
+    def test_clean_exit_before_deadline_still_fails(self):
+        # The same clean schedule exhaustion, but WELL before the deadline: genuine
+        # early death, so WarmupTrafficError still fires (the fix must not mask it).
+        sampler = FakeSampler([])  # never converges
+        source = ExhaustAfterSource(n=3)
+        clk = FakeClock()
+
+        async def advancing_sleep(d: float) -> None:
+            clk.t += max(d, 1.0)
+            await asyncio.sleep(0)
+
+        sw = _warmup(
+            ServerWarmupConfig(mode="composite", timeout_seconds=100.0),
+            sampler,
+            source,
+            poll_interval=1.0,
+            sleep=advancing_sleep,
+            clock=clk,
+        )
+        with pytest.raises(WarmupTrafficError) as exc:
+            asyncio.run(sw(_ctx()))
+        assert exc.value.__cause__ is None  # a clean early exit chains no cause
+        assert "ended" in str(exc.value)
+        assert sw.results == []  # no result recorded for a failed level
 
 
 class TestServerWarmupFixed:
