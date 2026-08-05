@@ -299,6 +299,14 @@ A window `result.json` carries `serving_mode: "server"`, the shared energy metri
 | `input_tokens` | int &#124; null | `null` in server mode. Client-side input-token counting is post-v0.7; the engine's self-reported prompt tokens ride in `requests.parquet` only |
 | `total_tokens` | int &#124; null | `null` in server mode (undefined while `input_tokens` is uncounted) |
 
+### Server provenance (`server` block)
+
+The window `result.json` carries a `server` block that locates the window within its rate level (`level_index`, `window_index`, `level_valid`) and records its warmup and attribution disclosures. It also discloses whether the concurrency cap materially shaped the load:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `cap_bound_fraction` | float &#124; null | Fraction of the level's scheduled issuances the concurrency cap delayed beyond a small tolerance (or never dispatched); `0.0` when the level ran uncapped or the cap never materially bound, `null` when it was not captured (a degraded abort-core bundle). Level-wide, so every window of a level carries the same value. The cap stays legal (a hashed user choice); this stamps its effect |
+
 ### Session facts (`system.json`)
 
 Each server-mode bundle's `system.json` carries a `session` block recording the raw per-phase quantities of the server lifetime the window belongs to:

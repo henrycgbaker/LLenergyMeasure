@@ -181,7 +181,9 @@ class FakeTrafficSource:
         return self._report
 
 
-def _report_with_receipts(times: list[float]) -> tuple[IssuerReport, Any]:
+def _report_with_receipts(
+    times: list[float], *, cap_bound_fraction: float = 0.0
+) -> tuple[IssuerReport, Any]:
     # Each record carries a one-token CompletionResult stamped at its receipt time,
     # so the client-counted denominator and the requests.parquet rows agree (SM11).
     records = [
@@ -206,7 +208,7 @@ def _report_with_receipts(times: list[float]) -> tuple[IssuerReport, Any]:
         records=records,
         issued_count=len(records),
         completed_count=len(records),
-        cap_bound_fraction=0.0,
+        cap_bound_fraction=cap_bound_fraction,
         issuance_duration_s=0.0,
         concurrency_cap=None,
     )
@@ -338,6 +340,7 @@ def _wire(
     launch_energy: float = 40.0,
     drain_energy: float = 7.0,
     manager_cls: Any = None,
+    cap_bound_fraction: float = 0.0,
 ) -> tuple[FakeWarmupHook, FakeClock]:
     """Override the session's heavy seams with fakes; wire a real WindowManager."""
     from llenergymeasure.harness.window_manager import WindowManager
@@ -363,7 +366,9 @@ def _wire(
         plans = []
         for level_index in range(len(session._cells)):
             offset = level_index * (30.0 + windows_per_level * 10.0)
-            report, receipt_fn = _report_with_receipts([t + offset for t in _TOKEN_TIMES])
+            report, receipt_fn = _report_with_receipts(
+                [t + offset for t in _TOKEN_TIMES], cap_bound_fraction=cap_bound_fraction
+            )
             plans.append(
                 LevelPlan(
                     spec=spec,
@@ -751,6 +756,9 @@ class TestCleanSession:
             assert prov["level_index"] == 0
             assert prov["level_valid"] is True
             assert prov["pre_window_protocol"] == "server warmup (test)"
+            # The concurrency-cap disclosure lands, equal to the level's issuer report
+            # (uncapped fixture -> the cap never bound -> 0.0, not null).
+            assert prov["cap_bound_fraction"] == 0.0
             assert prov["warmup"]["converged"] is True
             # The within-window CoV diagnostic is stamped (distinct from the gate).
             assert prov["intra_window_cov"] is not None
@@ -794,6 +802,33 @@ class TestCleanSession:
             assert "declared_config" in cfg
             assert "engine_version" not in cfg
             assert "observed_config_hash" not in cfg
+
+    def test_persisted_provenance_carries_issuer_cap_bound_fraction(self, tmp_path: Path) -> None:
+        """A materially binding cap threads from the level's issuer report into every
+        window's persisted server provenance, and windows of one level share the value."""
+        config = _server_config(10.0)
+        runner = _runner(tmp_path, [config], event=None)
+        session = ServerSession(
+            runner,
+            config,
+            None,
+            config_hash=compute_declared_config_hash(config),
+            cycle=1,
+            index=1,
+            engine=FakeEngine(),
+        )
+        _wire(session, energy_sink=ProducingEnergySink(power_w=100.0), cap_bound_fraction=0.5)
+
+        with session:
+            result = session.run()
+
+        assert isinstance(result, ServerSessionResult)
+        assert result.valid is True
+        bundles = _bundles(tmp_path)
+        assert len(bundles) == 3
+        for bundle in bundles:
+            prov = _read(bundle / RESULT_FILENAME)["server"]
+            assert prov["cap_bound_fraction"] == 0.5
 
     def test_persisted_window_energy_sum_equals_session_total(self, tmp_path: Path) -> None:
         config = _server_config(10.0)
@@ -966,6 +1001,8 @@ class TestMidLevelAbort:
             assert payload["server"]["level_valid"] is False
             # A degraded abort-core bundle has no within-window diagnostic.
             assert payload["server"]["intra_window_cov"] is None
+            # Its issuer report was lost with the abort, so the cap disclosure is null.
+            assert payload["server"]["cap_bound_fraction"] is None
             # The abort site is disclosed (a close-window failure here).
             assert "close failed" in payload["server"]["invalid_reason"]
             assert payload["total_energy_j"] == pytest.approx(1000.0)  # 100 W over 10 s
