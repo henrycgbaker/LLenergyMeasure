@@ -100,8 +100,6 @@ All fields except `model` are optional and have sensible defaults.
 | `concurrency_cap` | integer | None | `null` | Maximum in-flight requests. None = uncapped (pure open-loop arrivals). |
 | `slo` | SloConfig | None | `null` | Optional SLO bounds (ttft_ms, tpot_ms at a shared percentile). Classifies results post-hoc; excluded from both config-hash families but stamped in the config sidecar and result provenance. |
 | `seed` | integer | None | `null` | Seed for the arrival-process RNG. None = unseeded (nondeterministic arrivals). |
-| `min_query_count` | integer | None | `null` | Minimum completed requests before the window may close (statistical-adequacy floor). None = governed by the window alone. |
-| `passthrough_kwargs` | dict | `{}` | Native traffic-generator passthrough options (forwarded verbatim). Empty by default. |
 
 ### Server Traffic SLO (`server.traffic.slo:`)
 
