@@ -18,18 +18,23 @@ Design invariants:
   or its physical measurement, so the measurement fields are byte-stable across
   SLO re-judgement and only the ``slo`` overlay moves (O5.3).
 
-- DENOMINATORS ARE REUSED, NEVER RECOMPUTED. The span-clipped token throughput
-  (``token_throughput_tokens_s``, the result's ``avg_tokens_per_second``) and the
-  window's J/token operating point are passed in already-correct from the window
-  manager's span-clipped bookkeeping; this module never re-clips receipts.
+- THE ENERGY DENOMINATOR IS REUSED, NEVER RECOMPUTED. The window's J/token operating
+  point is passed in already-correct from the window manager's span-clipped
+  bookkeeping; this module never re-derives it. The ONE receipt re-clip this module
+  does is goodput's token NUMERATOR: the SLO overlay counts each qualifying request's
+  ``output_token_times`` at or before ``span_end`` (its in-span output tokens), so a
+  drain straddler's tail tokens are excluded from goodput while its full latency still
+  judges its SLO compliance (D7).
 
 - POPULATION. A window's rows are ISSUE-partitioned and receipt-unclipped
   (request_log CLIPPING SEMANTICS), so the steady-state population is the rows with
   ``in_measurement_window`` set (issued in ``[span_start, span_end]``); this drops
   the level's prospective ramp (window 0's ``is_ramp`` rows). Latency and attainment
   further filter to ``status == "ok"`` (completed) and are DRAIN-INCLUSIVE: a
-  straddler that completed past ``span_end`` keeps its full latency (D7). Token and
-  energy denominators stay span-clipped (they are passed in, not recomputed here).
+  straddler that completed past ``span_end`` keeps its full latency (D7). The energy
+  denominator stays span-clipped and passed in (not recomputed here); goodput's token
+  numerator is the one figure re-clipped here, to the qualifying requests' in-span
+  receipts.
 
 ATTAINMENT SEMANTICS (O5.2, verdict-bearing). Attainment is a PER-REQUEST joint
 evaluation, not a per-metric percentile: the fraction of COMPLETED (``status ==
@@ -41,11 +46,16 @@ strictly-greater-than (``metric > bound``). The window verdict ``slo_pass`` is
 of served requests inside the bound, the MLPerf server-scenario reading. This joint
 per-request form is STRICTER than checking each metric's marginal percentile
 separately (a request can pass TTFT yet fail TPOT), and that strictness is
-deliberate - the ruling is "meeting ALL slo bounds". Goodput is the DERIVED column
-``attainment x throughput`` over the SAME records, never sampled apart; its
-throughput factor counts every in-span delivered token (failed requests' partials
-included) while attainment counts only completions, so goodput OVERSTATES SLO-meeting
-throughput at a high failure rate - pair it with ``completion_rate``. The COUNT-BASED
+deliberate - the ruling is "meeting ALL slo bounds". GOODPUT is the literature-exact
+DIRECT JOIN (DistServe, OSDI'24, arXiv:2401.09670; Wang et al., arXiv:2410.14257 Eq.
+5): the in-span output tokens of the requests that BOTH completed (``status == "ok"``,
+in the steady-state population) AND met every SLO bound, divided by the span duration -
+no failed request's tokens enter at any weight. DISCLOSED DEVIATION from Wang et al.'s
+full per-request output count: the numerator is in-span-clipped (each qualifying
+request's receipts at or before ``span_end``, per D7), which keeps the span discipline
+and guarantees ``goodput <= avg_tokens_per_second`` (a subset sum over the same clipped
+receipt basis and the same span divisor); still read it alongside ``completion_rate``,
+the failure disclosure. The COUNT-BASED
 ``attainment`` is AUTHORITATIVE for the verdict; ``ttft_at_percentile_ms`` /
 ``tpot_at_percentile_ms`` are reported for cross-checking the observed tail against
 the bound and, being interpolated, can straddle the bound at small n or on a discrete
@@ -189,40 +199,60 @@ def _completed_in_window(rows: Sequence[RequestLogRow]) -> list[RequestLogRow]:
     return [r for r in rows if r.in_measurement_window and r.status == REQUEST_STATUS_OK]
 
 
+def _in_span_output_tokens(row: RequestLogRow, span_end: float) -> int:
+    """Count a completed request's output-token receipts at or before ``span_end``.
+
+    The receipt series shares the traffic issuer's ``time.monotonic`` basis with the
+    span bounds, so a drain straddler's tail receipts (arriving past ``span_end``) are
+    excluded while its in-span tokens still count (D7 two-policy separation). No
+    ``span_start`` clip is needed: an in-window row is issued in ``[span_start,
+    span_end]`` and every receipt arrives after its issue, so every receipt already
+    sits at or after ``span_start``.
+    """
+    return sum(1 for t in row.output_token_times if t <= span_end)
+
+
 def evaluate_slo(
     rows: Sequence[RequestLogRow],
     bounds: SloBounds,
     *,
-    token_throughput_tokens_s: float | None,
+    span_start: float,
+    span_end: float,
     level_valid: bool,
 ) -> ServerSloEvaluation:
-    """Judge a window against ``bounds`` - a PURE overlay over (rows, bounds) (O5.3).
+    """Judge a window against ``bounds`` - a PURE overlay over (rows, span) (O5.3).
 
-    Usable at persist time and offline over a loaded ``requests.parquet``: the same
-    rows judged against different bounds yield a different attainment/verdict while
-    every physical measurement is untouched. ``token_throughput_tokens_s`` is the
-    window's already-correct span-clipped client-token throughput (the result's
-    ``avg_tokens_per_second``); it is only multiplied into goodput, never re-derived.
+    Usable at persist time and offline over a loaded ``requests.parquet`` (its span
+    bounds ride as file-level KV metadata; see :func:`request_log.span_from_parquet`):
+    the same rows judged against different bounds yield a different attainment/verdict
+    while every physical measurement is untouched. ``span_start`` / ``span_end`` are the
+    window's measured monotonic span bounds; goodput is the literature-exact DIRECT JOIN
+    - the in-span output tokens (receipts at or before ``span_end``) of the completed
+    requests that met every bound, over the span duration (``span_end - span_start``).
+    No failed request's tokens enter it at any weight.
 
     An empty completed population (no request finished) yields ``attainment=None``
     (0/0 is undefined, not 0.0), a ``slo_pass=False`` verdict (a window that served
-    nothing cannot pass), and ``goodput=None``.
+    nothing cannot pass), and ``goodput=None``. A non-empty completed population with
+    zero qualifying requests yields ``goodput=0.0`` (a truthful zero); a non-positive
+    span duration yields ``goodput=None``.
     """
     completed = _completed_in_window(rows)
     n = len(completed)
+    span_duration = span_end - span_start
     if n == 0:
         attainment: float | None = None
         slo_pass = False
         goodput: float | None = None
     else:
-        passing = sum(1 for r in completed if _request_meets_slo(r, bounds))
-        attainment = passing / n
+        qualifying = [r for r in completed if _request_meets_slo(r, bounds)]
+        attainment = len(qualifying) / n
         slo_pass = attainment >= bounds.percentile
-        goodput = (
-            attainment * token_throughput_tokens_s
-            if token_throughput_tokens_s is not None
-            else None
-        )
+        if span_duration > 0:
+            qualifying_tokens = sum(_in_span_output_tokens(r, span_end) for r in qualifying)
+            goodput = qualifying_tokens / span_duration
+        else:
+            goodput = None
     ttft_vals = sorted(r.ttft_ms for r in completed if r.ttft_ms is not None)
     tpot_vals = sorted(tpot for r in completed if (tpot := _per_request_tpot_ms(r)) is not None)
     return ServerSloEvaluation(
@@ -257,8 +287,8 @@ def _completed_server_token_total(rows: Sequence[RequestLogRow]) -> tuple[int, b
 def derive_server_window_metrics(
     rows: Sequence[RequestLogRow],
     *,
-    duration_s: float,
-    token_throughput_tokens_s: float | None,
+    span_start: float,
+    span_end: float,
     j_per_token: float | None,
     level_valid: bool,
     slo: SloBounds | None,
@@ -266,12 +296,14 @@ def derive_server_window_metrics(
     """Derive a window's server metrics from its per-request rows (no re-sampling).
 
     Every field except ``slo`` is slo-INDEPENDENT: throughput, counts, and latency
-    percentiles are pure functions of the rows and the passed-in span-clipped
-    denominators. ``slo`` is None when ``slo`` bounds are None; otherwise it is the
-    :func:`evaluate_slo` overlay. ``duration_s`` is the measured span duration;
-    ``token_throughput_tokens_s`` and ``j_per_token`` are the window's already-clipped
-    denominators (never recomputed here).
+    percentiles are pure functions of the rows and the window's span. ``slo`` is None
+    when ``slo`` bounds are None; otherwise it is the :func:`evaluate_slo` overlay.
+    ``span_start`` / ``span_end`` are the window's measured monotonic span; the span
+    duration (``span_end - span_start``) is the request-throughput and goodput divisor.
+    ``j_per_token`` is the window's already-clipped energy operating point (never
+    recomputed here).
     """
+    duration_s = max(span_end - span_start, 0.0)
     in_window = [r for r in rows if r.in_measurement_window]
     completed = [r for r in in_window if r.status == REQUEST_STATUS_OK]
     error_count = sum(1 for r in in_window if r.status == REQUEST_STATUS_ERROR)
@@ -298,7 +330,8 @@ def derive_server_window_metrics(
         evaluate_slo(
             rows,
             slo,
-            token_throughput_tokens_s=token_throughput_tokens_s,
+            span_start=span_start,
+            span_end=span_end,
             level_valid=level_valid,
         )
         if slo is not None

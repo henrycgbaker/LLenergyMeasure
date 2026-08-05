@@ -885,7 +885,7 @@ class TestCleanSession:
 
     def test_clean_session_slo_overlay_and_offline_rejudge(self, tmp_path: Path) -> None:
         """With slo configured the overlay lands, and it is re-derivable offline (O5.3)."""
-        from llenergymeasure.results.request_log import rows_from_parquet
+        from llenergymeasure.results.request_log import rows_from_parquet, span_from_parquet
         from llenergymeasure.results.server_metrics import SloBounds, evaluate_slo
 
         config = _server_config_with_slo(10.0, ttft_ms=1.0, percentile=0.99)
@@ -911,23 +911,26 @@ class TestCleanSession:
             assert slo["slo_pass"] is True
             assert slo["percentile"] == pytest.approx(0.99)
             assert slo["ttft_bound_ms"] == pytest.approx(1.0)
-            # Goodput = attainment (1.0) x span-clipped throughput (0.4 tok/s).
+            # Direct join: all four single-token completions qualify -> 4 in-span
+            # tokens over the 10 s span = 0.4 tok/s.
             assert slo["goodput_tokens_s"] == pytest.approx(0.4)
             assert slo["energy_at_operating_point_valid"] is True
             # Re-judge the SAME persisted rows against a STRICTER-population bound
             # offline: the physical rows are unchanged, only the verdict moves. The
-            # fixture TTFT is exactly 0, so use a tpot bound that no single-token
-            # request can violate to confirm the attainment stays a pure function of
-            # (rows, bounds) reachable from requests.parquet alone.
+            # window's measured span rides as parquet file metadata (O5.3), so the
+            # overlay - goodput included - is reachable from requests.parquet alone.
             rows = rows_from_parquet(bundle / "requests.parquet")
+            span_start, span_end = span_from_parquet(bundle / "requests.parquet")
             reeval = evaluate_slo(
                 rows,
                 SloBounds(ttft_ms=1.0, tpot_ms=None, percentile=0.99),
-                token_throughput_tokens_s=0.4,
+                span_start=span_start,
+                span_end=span_end,
                 level_valid=True,
             )
             assert reeval.attainment_fraction == pytest.approx(1.0)
             assert reeval.slo_pass is True
+            assert reeval.goodput_tokens_s == pytest.approx(0.4)
 
 
 # ---------------------------------------------------------------------------
