@@ -399,42 +399,23 @@ class WindowBoundaries:
 
 
 @dataclass(frozen=True)
-class LatencyRecord:
-    """One request's latency record under the drain-before-close policy.
-
-    Present iff the request was ISSUED within the measured span; ``completed_at``
-    (and hence ``latency_s``) may fall PAST ``span_end`` (the drain) or be ``None``
-    if the request never completed (e.g. cancelled at a drain timeout).
-    """
-
-    index: int
-    issued_at: float
-    completed_at: float | None
-    latency_s: float | None
-
-
-@dataclass(frozen=True)
 class WindowBookkeeping:
-    """The window's own bookkeeping: the two boundary policies, kept distinct.
+    """The window's span-clipped energy denominator and attribution policy.
 
     ``energy_denominator_tokens`` (ENERGY policy) counts client-counted output
     tokens whose RECEIPT time fell within ``[span_start, span_end]`` - across ALL
-    requests, regardless of when issued. ``latency_records`` (LATENCY policy) covers
-    requests ISSUED within the span, drained to completion. A boundary-straddling
-    request (issued in-span, completing after ``span_end``) appears in
-    ``latency_records`` with its full latency yet contributes only its in-span
-    tokens to ``energy_denominator_tokens`` - the two numbers never collapse.
+    requests, regardless of when issued. ``attribution_policy`` names the energy
+    attribution rule in force for the window.
 
-    SM12 derives percentiles and goodput from these; SM7 only classifies.
+    SM12 derives percentiles and goodput from the per-request RequestLogRow rows
+    (build_request_rows_by_window), not from this bookkeeping, which carries only
+    the span-clipped energy denominator and the attribution policy; SM7 only
+    classifies.
     """
 
     boundaries: WindowBoundaries
     attribution_policy: str
     energy_denominator_tokens: int
-    latency_records: list[LatencyRecord]
-    issued_in_span_count: int
-    completed_in_span_count: int
-    straddling_count: int
 
 
 def _count_tokens_in_interval(
@@ -465,15 +446,12 @@ def build_window_bookkeeping(
     token_receipt_fn: TokenReceiptFn = _no_token_receipts,
     attribution_policy: str = ATTRIBUTION_STEADY_STATE_SPAN,
 ) -> WindowBookkeeping:
-    """Classify an issuer report into the two boundary policies (never conflated).
+    """Compute the window's span-clipped energy denominator from an issuer report.
 
     ENERGY denominator: tokens received in ``[span_start, span_end]`` across every
     request (a request issued in the ramp but still generating during the span
     still contributes its in-span tokens; a request completing after ``span_end``
     contributes only the tokens it delivered before ``span_end``).
-
-    LATENCY records: one per request ISSUED in ``[span_start, span_end]``, carrying
-    its full latency even when completion falls in the drain past ``span_end``.
     """
     span_start = boundaries.span_start
     span_end = boundaries.span_end
@@ -481,40 +459,10 @@ def build_window_bookkeeping(
     energy_tokens = _count_tokens_in_interval(
         report.records, token_receipt_fn, span_start, span_end, closed_hi=True
     )
-    latency_records: list[LatencyRecord] = []
-    issued_in_span = 0
-    completed_in_span = 0
-    straddling = 0
-
-    for record in report.records:
-        if not (span_start <= record.issued_at <= span_end):
-            continue
-        issued_in_span += 1
-        completed_at = record.completed_at
-        latency_s = (completed_at - record.issued_at) if completed_at is not None else None
-        latency_records.append(
-            LatencyRecord(
-                index=record.index,
-                issued_at=record.issued_at,
-                completed_at=completed_at,
-                latency_s=latency_s,
-            )
-        )
-        if completed_at is not None and completed_at <= span_end:
-            completed_in_span += 1
-        else:
-            # Issued in-span but completing after span_end (or never): a
-            # boundary-straddling request - full latency, energy does not extend.
-            straddling += 1
-
     return WindowBookkeeping(
         boundaries=boundaries,
         attribution_policy=attribution_policy,
         energy_denominator_tokens=energy_tokens,
-        latency_records=latency_records,
-        issued_in_span_count=issued_in_span,
-        completed_in_span_count=completed_in_span,
-        straddling_count=straddling,
     )
 
 
@@ -698,8 +646,6 @@ class WindowRecord:
     window_energy_j: float | None
     window_j_per_token: float | None
     intra_window_cov: float | None
-    start_event: WindowStartEvent
-    stop_event: WindowStopEvent
 
 
 @dataclass
@@ -759,7 +705,8 @@ class WindowManager:
     stop-window (energy closes) events - and finally drain the traffic to completion
     for latency. The energy window is defined by the emitted events, never by
     post-hoc timestamp diffing. Levels are validated on window-to-window J/token
-    stability and separated by an optional cooldown.
+    stability; the caller drives one level per :meth:`run_level` call and owns any
+    inter-level cooldown.
 
     The manager owns the sink lifecycle. If the level fails, it preserves whatever
     was measured: a window OPEN at failure has its live sampler released via an
@@ -776,7 +723,6 @@ class WindowManager:
         energy_sink: WindowEnergySink,
         *,
         windows_per_level: int = DEFAULT_WINDOWS_PER_LEVEL,
-        cooldown_seconds: float = 0.0,
         warmup_hook: WarmupHook | None = None,
         drain_timeout: float | None = None,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
@@ -784,25 +730,12 @@ class WindowManager:
     ) -> None:
         if windows_per_level < 1:
             raise ValueError("windows_per_level must be >= 1.")
-        if cooldown_seconds < 0.0:
-            raise ValueError("cooldown_seconds must be >= 0.")
         self._energy_sink = energy_sink
         self._windows_per_level = windows_per_level
-        self._cooldown_seconds = cooldown_seconds
         self._warmup_hook: WarmupHook = warmup_hook if warmup_hook is not None else _noop_warmup
         self._drain_timeout = drain_timeout
         self._sleep = sleep
         self._clock = clock
-
-    async def run_levels(self, levels: Sequence[LevelPlan]) -> list[LevelOutcome]:
-        """Run every level in order, cooling down between (not after the last)."""
-        outcomes: list[LevelOutcome] = []
-        last = len(levels) - 1
-        for level_index, level in enumerate(levels):
-            outcomes.append(await self.run_level(level_index, level))
-            if level_index != last and self._cooldown_seconds > 0.0:
-                await self._sleep(self._cooldown_seconds)
-        return outcomes
 
     async def run_level(self, level_index: int, level: LevelPlan) -> LevelOutcome:
         """Run one level: warmup -> ramp -> N contiguous windows -> drain -> validate."""
@@ -891,7 +824,7 @@ class WindowManager:
         spec: WindowSpec,
     ) -> list[WindowRecord]:
         records: list[WindowRecord] = []
-        for boundaries, start_event, stop_event, core in emitted:
+        for boundaries, start_event, _stop_event, core in emitted:
             bookkeeping = build_window_bookkeeping(
                 boundaries,
                 report,
@@ -910,8 +843,6 @@ class WindowManager:
                     window_energy_j=energy_j,
                     window_j_per_token=j_per_token,
                     intra_window_cov=intra,
-                    start_event=start_event,
-                    stop_event=stop_event,
                 )
             )
         return records
@@ -993,7 +924,6 @@ __all__ = [
     "STABILITY_CONSECUTIVE_WINDOWS",
     "AbortedLevel",
     "BracketEnergySink",
-    "LatencyRecord",
     "LevelOutcome",
     "LevelPlan",
     "LevelValidation",

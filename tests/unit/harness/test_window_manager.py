@@ -304,11 +304,12 @@ class TestWindowSpec:
 
 
 # ---------------------------------------------------------------------------
-# Dual boundary-policy bookkeeping (D7): the two policies never collapse
+# Span-clipped energy-denominator bookkeeping: only token receipts landing in the
+# measured span count, regardless of when their request was issued or completed.
 # ---------------------------------------------------------------------------
 
 
-class TestDualPolicyBookkeeping:
+class TestEnergyDenominatorBookkeeping:
     # measured span = [1030, 1270] (window_start 1000 + ramp 30, duration 240).
     BOUNDARIES = WindowBoundaries(window_start=1000.0, span_start=1030.0, span_end=1270.0)
 
@@ -327,38 +328,13 @@ class TestDualPolicyBookkeeping:
         }
         return _report(records), (lambda r: receipts[r.index])
 
-    def test_straddling_request_in_latency_but_only_in_span_tokens_in_energy(self) -> None:
+    def test_only_in_span_token_receipts_feed_the_energy_denominator(self) -> None:
         report, receipt_fn = self._fixture()
         bk = build_window_bookkeeping(self.BOUNDARIES, report, token_receipt_fn=receipt_fn)
-
-        straddler = next(r for r in bk.latency_records if r.index == 2)
-        assert straddler.completed_at == 1300.0
-        assert straddler.latency_s == pytest.approx(40.0)  # 1300 - 1260
 
         # Total energy denominator = ramp(1) + in-span(3) + straddler(1) + after(0).
         assert bk.energy_denominator_tokens == 5
         assert bk.attribution_policy == ATTRIBUTION_STEADY_STATE_SPAN
-
-    def test_ramp_issued_request_feeds_energy_but_not_latency(self) -> None:
-        report, receipt_fn = self._fixture()
-        bk = build_window_bookkeeping(self.BOUNDARIES, report, token_receipt_fn=receipt_fn)
-        assert all(r.index != 0 for r in bk.latency_records)
-
-    def test_latency_membership_is_issued_in_span(self) -> None:
-        report, receipt_fn = self._fixture()
-        bk = build_window_bookkeeping(self.BOUNDARIES, report, token_receipt_fn=receipt_fn)
-        assert sorted(r.index for r in bk.latency_records) == [1, 2]
-        assert bk.issued_in_span_count == 2
-        assert bk.completed_in_span_count == 1  # only index 1 completed in-span
-        assert bk.straddling_count == 1  # index 2
-
-    def test_never_completed_request_is_straddling_with_null_latency(self) -> None:
-        report = _report([_rec(0, issued_at=1100.0, completed_at=None)])
-        bk = build_window_bookkeeping(self.BOUNDARIES, report)
-        assert len(bk.latency_records) == 1
-        assert bk.latency_records[0].latency_s is None
-        assert bk.straddling_count == 1
-        assert bk.completed_in_span_count == 0
 
     def test_default_token_receipts_yield_zero_energy_denominator(self) -> None:
         report, _ = self._fixture()
@@ -667,38 +643,6 @@ class TestWindowManagerOrchestration:
             WindowManager(RecordingEnergySink(core=None), windows_per_level=0)
 
 
-class TestMultiLevelAndCooldown:
-    def _run_two_levels(self, cooldown: float) -> FakeClock:
-        clock = FakeClock()
-        manager = WindowManager(
-            RecordingEnergySink(core=None),
-            windows_per_level=3,
-            cooldown_seconds=cooldown,
-            sleep=clock.sleep,
-            clock=clock,
-        )
-        spec = WindowSpec(rate=10.0, duration_seconds=2.0, ramp_exclusion_seconds=1.0)
-        levels = [_level(spec, _report([])), _level(spec, _report([]))]
-        outcomes = asyncio.run(manager.run_levels(levels))
-        assert [o.level_index for o in outcomes] == [0, 1]
-        return clock
-
-    def test_cooldown_between_levels_not_after_last(self) -> None:
-        clock = self._run_two_levels(cooldown=5.0)
-        # per level: ramp(1) + 3 x duration(2); cooldown(5) once, between the levels.
-        one_level = [1.0, 2.0, 2.0, 2.0]
-        assert clock.sleeps == [*one_level, 5.0, *one_level]
-
-    def test_zero_cooldown_inserts_no_pause(self) -> None:
-        clock = self._run_two_levels(cooldown=0.0)
-        one_level = [1.0, 2.0, 2.0, 2.0]
-        assert clock.sleeps == [*one_level, *one_level]
-
-    def test_negative_cooldown_rejected(self) -> None:
-        with pytest.raises(ValueError, match="cooldown_seconds"):
-            WindowManager(RecordingEnergySink(core=None), cooldown_seconds=-1.0)
-
-
 class TestWarmupHookSeam:
     def test_noop_default_hook_runs_clean(self) -> None:
         clock = FakeClock()
@@ -723,7 +667,8 @@ class TestWarmupHookSeam:
         )
         spec = WindowSpec(rate=10.0, duration_seconds=2.0, ramp_exclusion_seconds=1.0)
         levels = [_level(spec, _report([])), _level(spec, _report([]))]
-        asyncio.run(manager.run_levels(levels))
+        for level_index, level in enumerate(levels):
+            asyncio.run(manager.run_level(level_index, level))
         # Warmup fires ONCE per level, before that level's windows open.
         assert trace == [
             ("warmup", 0),

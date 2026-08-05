@@ -43,27 +43,6 @@ def _stable_through_end(values: list[float], window: int, threshold: float) -> b
     )
 
 
-def describe_offline_warmup_protocol(warmup: WarmupConfig) -> str:
-    """Human-readable description of the offline pre-window warmup protocol (D6).
-
-    The offline half of the divergence label SM14 renders offline-vs-server: what
-    the offline path does before measuring (prompt-loop convergence or a fixed
-    prompt count, then a thermal-floor idle wait).
-    """
-    if not warmup.enabled:
-        return "offline warmup disabled"
-    if warmup.convergence_detection:
-        return (
-            "offline convergence warmup: prompt-loop until latency CoV <= "
-            f"{warmup.cv_threshold:g} stable-through-end (>= {warmup.min_prompts} prompts, "
-            f"cap {warmup.max_prompts}), then a {warmup.thermal_floor_seconds:g}s thermal floor"
-        )
-    return (
-        f"offline fixed warmup: {warmup.n_prompts} prompt-loop inferences, then a "
-        f"{warmup.thermal_floor_seconds:g}s thermal floor"
-    )
-
-
 def thermal_floor_wait(config: ExperimentConfig) -> float:
     """Sleep for thermal_floor_seconds after warmup. Returns actual wait time in seconds.
 

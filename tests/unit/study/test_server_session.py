@@ -48,8 +48,6 @@ from llenergymeasure.harness.window_manager import (
     WindowBoundaries,
     WindowRecord,
     WindowSpec,
-    WindowStartEvent,
-    WindowStopEvent,
 )
 from llenergymeasure.study import server_session as ss
 from llenergymeasure.study.server_session import (
@@ -190,16 +188,11 @@ def _report(records: list[RequestRecord]) -> IssuerReport:
 
 
 def _window_record(index: int, *, energy: float | None, j_per_token: float | None) -> WindowRecord:
-    spec = WindowSpec(rate=10.0)
     boundaries = WindowBoundaries(window_start=0.0, span_start=1.0, span_end=2.0)
     bookkeeping = WindowBookkeeping(
         boundaries=boundaries,
         attribution_policy=ATTRIBUTION_STEADY_STATE_SPAN,
         energy_denominator_tokens=10,
-        latency_records=[],
-        issued_in_span_count=0,
-        completed_in_span_count=0,
-        straddling_count=0,
     )
     return WindowRecord(
         window_index=index,
@@ -209,8 +202,6 @@ def _window_record(index: int, *, energy: float | None, j_per_token: float | Non
         window_energy_j=energy,
         window_j_per_token=j_per_token,
         intra_window_cov=0.01,
-        start_event=WindowStartEvent(0, index, spec, 1.0),
-        stop_event=WindowStopEvent(0, index, spec, 2.0),
     )
 
 
@@ -391,16 +382,11 @@ class TestTokenReceipts:
 
 
 def _win(window_index: int, span_start: float, span_end: float) -> WindowRecord:
-    spec = WindowSpec(rate=10.0)
     boundaries = WindowBoundaries(window_start=0.0, span_start=span_start, span_end=span_end)
     bookkeeping = WindowBookkeeping(
         boundaries=boundaries,
         attribution_policy=ATTRIBUTION_STEADY_STATE_SPAN,
         energy_denominator_tokens=0,
-        latency_records=[],
-        issued_in_span_count=0,
-        completed_in_span_count=0,
-        straddling_count=0,
     )
     return WindowRecord(
         window_index=window_index,
@@ -410,8 +396,6 @@ def _win(window_index: int, span_start: float, span_end: float) -> WindowRecord:
         window_energy_j=None,
         window_j_per_token=None,
         intra_window_cov=None,
-        start_event=WindowStartEvent(0, window_index, spec, span_start),
-        stop_event=WindowStopEvent(0, window_index, spec, span_end),
     )
 
 
@@ -824,8 +808,6 @@ class TestRun:
 
         assert isinstance(result, ServerSessionResult)
         assert result.valid is True
-        # N results = one per window (C3).
-        assert result.window_count == 3
         assert result.token_counting == ss.TOKEN_COUNTING_CLIENT_STREAMED
         # Warmup provenance stamped into EVERY window result (point 4 / D6 label).
         level = result.levels[0]

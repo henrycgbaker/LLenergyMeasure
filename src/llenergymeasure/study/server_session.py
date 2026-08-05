@@ -222,10 +222,6 @@ class ServerSessionResult:
     def valid(self) -> bool:
         return any(level.valid for level in self.levels)
 
-    @property
-    def window_count(self) -> int:
-        return sum(len(level.windows) for level in self.levels)
-
 
 # ---------------------------------------------------------------------------
 # Token-receipt seam wiring (contract 2, O8). The CANONICAL denominator is the

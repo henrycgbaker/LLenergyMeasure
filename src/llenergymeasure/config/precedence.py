@@ -170,16 +170,17 @@ def resolve_server_warmup(
 ) -> ServerWarmupConfig:
     """Resolve the effective server warmup protocol through the R7 precedence chain.
 
-    The v0.7 RESOLVER for the warmup-protocol overlay (R5/R7); STAGED, not yet wired
-    at a production call site (see the module docstring). The built-in
-    ``ServerWarmupConfig`` defaults are the lowest layer; the study YAML's
-    ``server.warmup`` block, an optional tool-wide user default, an env overlay, and
-    an explicit call-site override stack above it in the ruled order. Any layer may
-    be :data:`UNSET` ('not supplied - defer'). The resolved dict is validated back
-    into a :class:`~llenergymeasure.config.models.ServerWarmupConfig`, so the
-    identity discipline holds when this is eventually wired: the DECLARED hash still
-    names user intent (the study config), while this resolved protocol is what the
-    run actually realises.
+    The v0.7 RESOLVER for the warmup-protocol overlay (R5/R7), wired into production
+    through :func:`apply_server_warmup_overlay` (study loading and orchestration).
+    The built-in ``ServerWarmupConfig`` defaults are the lowest layer; the study
+    YAML's ``server.warmup`` block, an optional tool-wide user default, an env
+    overlay, and an explicit call-site override stack above it in the ruled order
+    (the env and call-site layers stay supported-but-unfed at v0.7 - see the module
+    docstring). Any layer may be :data:`UNSET` ('not supplied - defer'). The resolved
+    dict is validated back into a
+    :class:`~llenergymeasure.config.models.ServerWarmupConfig`, so the identity
+    discipline holds: the DECLARED hash still names user intent (the study config),
+    while this resolved protocol is what the run actually realises.
     """
     from llenergymeasure.config.models import ServerWarmupConfig
 
