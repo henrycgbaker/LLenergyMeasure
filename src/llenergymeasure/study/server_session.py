@@ -153,13 +153,16 @@ class ServerWindowResult:
     ``pre_window_protocol`` are the D6 divergence label (SM12/SM14 render the
     offline-vs-server pre-window difference); they are identical across a level's
     windows (one warmup per level) but stamped per window so the persistence layer
-    (which never learns sessions exist) has them locally.
+    (which never learns sessions exist) has them locally. ``cap_bound_fraction`` is
+    the level's concurrency-cap-binding disclosure, likewise level-wide but stamped
+    per window for the same reason.
     """
 
     level_index: int
     window: WindowRecord
     warmup: ServerWarmupResult | None
     pre_window_protocol: str
+    cap_bound_fraction: float
 
 
 @dataclass
@@ -943,6 +946,7 @@ class ServerSession:
                     window=window,
                     warmup=warmup,
                     pre_window_protocol=protocol,
+                    cap_bound_fraction=outcome.issuer_report.cap_bound_fraction,
                 )
                 for window in outcome.windows
             ]
@@ -1026,6 +1030,7 @@ class ServerSession:
                 window=window,
                 warmup=warmup,
                 pre_window_protocol=protocol,
+                cap_bound_fraction=outcome.issuer_report.cap_bound_fraction,
             )
             result = self._map_window(
                 wr,
@@ -1365,6 +1370,7 @@ class ServerSession:
             warmup=wr.warmup,
             pre_window_protocol=wr.pre_window_protocol,
             attribution_policy=bk.attribution_policy,
+            cap_bound_fraction=wr.cap_bound_fraction,
             server_reported_output_tokens=server_output_tokens,
         )
         server_metrics = derive_server_window_metrics(
@@ -1482,6 +1488,7 @@ class ServerSession:
         pre_window_protocol: str,
         attribution_policy: str,
         intra_window_cov: float | None = None,
+        cap_bound_fraction: float | None = None,
         server_reported_output_tokens: int | None = None,
     ) -> ServerWindowProvenance:
         return ServerWindowProvenance(
@@ -1494,6 +1501,7 @@ class ServerSession:
             warmup=_warmup_provenance(warmup),
             pre_window_protocol=pre_window_protocol,
             attribution_policy=attribution_policy,
+            cap_bound_fraction=cap_bound_fraction,
             token_counting=TOKEN_COUNTING_CLIENT_STREAMED,
             server_reported_output_tokens=server_reported_output_tokens,
         )
