@@ -305,7 +305,7 @@ def span_from_parquet(path: Path) -> tuple[float | None, float | None]:
     """
     import pyarrow.parquet as pq
 
-    meta = pq.read_table(Path(path)).schema.metadata or {}
+    meta = pq.read_schema(path).metadata or {}
 
     def _read(key: str) -> float | None:
         raw = meta.get(key.encode())
