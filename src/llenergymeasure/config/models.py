@@ -553,9 +553,9 @@ class TrafficConfig(BaseModel):
     window.
 
     Every field except ``slo`` is part of the config identity: a sweep over rate,
-    arrival, window, concurrency, seed, or the passthrough dict must produce
-    distinct hashes rather than collapsing under dedup. ``slo`` is a post-hoc
-    overlay and is excluded from both hash families (see :class:`SloConfig`).
+    arrival, window, concurrency, or seed must produce distinct hashes rather than
+    collapsing under dedup. ``slo`` is a post-hoc overlay and is excluded from both
+    hash families (see :class:`SloConfig`).
     """
 
     model_config = {"extra": "forbid"}
@@ -632,18 +632,6 @@ class TrafficConfig(BaseModel):
     seed: int | None = Field(
         default=None,
         description="Seed for the arrival-process RNG. None = unseeded (nondeterministic arrivals).",
-    )
-    min_query_count: int | None = Field(
-        default=None,
-        ge=1,
-        description=(
-            "Minimum completed requests before the window may close "
-            "(statistical-adequacy floor). None = governed by the window alone."
-        ),
-    )
-    passthrough_kwargs: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Native traffic-generator passthrough options (forwarded verbatim). Empty by default.",
     )
 
     @model_validator(mode="after")
