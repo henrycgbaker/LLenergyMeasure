@@ -1,4 +1,4 @@
-"""Principled config-resolution core (R7): an UNSET-sentinel precedence chain.
+"""Principled config-resolution core: an UNSET-sentinel precedence chain.
 
 The settings a run resolves against arrive in layers - built-in defaults, the
 tool-wide user config, the study YAML, environment overrides, and explicit
@@ -14,15 +14,15 @@ small, principled core that expresses exactly that:
 - :func:`resolve_layers` deep-merges the pruned layers in ascending precedence
   (lowest first), reusing :func:`llenergymeasure.config._dict_utils.deep_merge`.
 - :class:`PrecedenceChain` names the ruled order - call-site > env > study YAML >
-  user config > pydantic defaults (R7) - so a resolution reads as the chain it is.
+  user config > pydantic defaults - so a resolution reads as the chain it is.
 
 Not to be confused with :mod:`llenergymeasure.config.resolution`, which is the
 post-hoc provenance LOG (which value won, and why) - this module is the forward
 resolution that decides which value wins in the first place.
 
-v0.7 SCOPE (R7 boundary): this is the resolution CORE, the warmup-protocol
+v0.7 SCOPE: this is the resolution CORE, the warmup-protocol
 RESOLVER (:func:`resolve_server_warmup`), and its WIRING for the server warmup
-overlay (:func:`apply_server_warmup_overlay`, R7W). The ``UserConfig`` now carries a
+overlay (:func:`apply_server_warmup_overlay`). The ``UserConfig`` now carries a
 ``server.warmup`` home (``config.user_config.UserServerConfig``), and the
 resolved-vs-declared split lives on ``ExperimentConfig``: the overlay output is
 attached as side-channel state (``attach_resolved_server_warmup``) that
@@ -136,7 +136,7 @@ def resolve_layers(*layers: Mapping[str, Any]) -> dict[str, Any]:
 
 @dataclass(frozen=True)
 class PrecedenceChain:
-    """The R7 precedence chain, named by layer (call-site highest, defaults lowest).
+    """The precedence chain, named by layer (call-site highest, defaults lowest).
 
     Ruled order (high -> low): call-site override > env > study YAML > user config >
     pydantic defaults. Each layer is a mapping that may carry :data:`UNSET` values
@@ -168,9 +168,9 @@ def resolve_server_warmup(
     env: Mapping[str, Any] | _Unset = UNSET,
     call_site: Mapping[str, Any] | _Unset = UNSET,
 ) -> ServerWarmupConfig:
-    """Resolve the effective server warmup protocol through the R7 precedence chain.
+    """Resolve the effective server warmup protocol through the precedence chain.
 
-    The v0.7 RESOLVER for the warmup-protocol overlay (R5/R7), wired into production
+    The v0.7 RESOLVER for the warmup-protocol overlay, wired into production
     through :func:`apply_server_warmup_overlay` (study loading and orchestration).
     The built-in ``ServerWarmupConfig`` defaults are the lowest layer; the study
     YAML's ``server.warmup`` block, an optional tool-wide user default, an env
@@ -200,10 +200,10 @@ def _as_layer(value: Mapping[str, Any] | _Unset) -> dict[str, Any]:
 
 
 def apply_server_warmup_overlay(config: ExperimentConfig, user_config: UserConfig) -> None:
-    """Overlay a tool-wide user-config server warmup onto a server-mode config (R7W).
+    """Overlay a tool-wide user-config server warmup onto a server-mode config.
 
     The production wiring of :func:`resolve_server_warmup`. For a server-mode
-    config, resolves the effective warmup protocol through the R7 chain - built-in
+    config, resolves the effective warmup protocol through the precedence chain - built-in
     defaults < user config < study YAML - and attaches the OUTPUT as side-channel
     state (:meth:`~llenergymeasure.config.models.ExperimentConfig.attach_resolved_server_warmup`).
     Precedence is per-field: a warmup field the study YAML wrote always wins (study

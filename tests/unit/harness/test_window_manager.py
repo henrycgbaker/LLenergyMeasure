@@ -1,21 +1,21 @@
-"""Unit tests for the server-mode window object + multi-level window manager (SM7).
+"""Unit tests for the server-mode window object + multi-level window manager.
 
 Host-only, no GPU, no real server: the traffic source, transport, and energy sink
 are always injected fakes, and the clock/sleep are injected so the async
 orchestration is deterministic and instant.
 
-Charter (server-mode plan section 4, Wave 3 / SM7, as re-ruled 2026-07-29):
-- window boundaries are EVENT-driven, not clock-diff (D19);
+Charter:
+- window boundaries are EVENT-driven, not clock-diff;
 - the ramp is excluded PROSPECTIVELY, once per level (the first window starts after
   it; subsequent windows are contiguous, no re-warm);
-- the two boundary policies never collapse into one number (D7) - a
+- the two boundary policies never collapse into one number - a
   boundary-straddling request appears in latency records yet contributes only its
   in-span tokens to the energy denominator;
 - the stability gate is calibrated on J/TOKEN (not power): a per-window k=4
   sub-window J/token CoV (diagnostic) and a per-level window-to-window J/token gate
   over >= 3 consecutive windows, reusing windowing.py's CV / stable-through-end /
   clean / clip machinery and the trapezoidal integrator;
-- MeasurementBracket is reused, not re-hardwired (C2/C5).
+- MeasurementBracket is reused, not re-hardwired.
 """
 
 from __future__ import annotations
@@ -235,7 +235,7 @@ def _one_token_per_record(times: list[float]) -> tuple[IssuerReport, Any]:
 
 
 # ---------------------------------------------------------------------------
-# WindowSpec - the first-class window object (D7)
+# WindowSpec - the first-class window object
 # ---------------------------------------------------------------------------
 
 
@@ -362,7 +362,7 @@ class TestWindowMeasurements:
         assert intra == pytest.approx(0.0, abs=1e-9)
 
     def test_request_granular_receipts_attribute_by_completion(self) -> None:
-        # E2's completion-timestamp rule falls out of the ONE seam: a request whose
+        # The calibrated completion-timestamp rule falls out of the ONE seam: a request whose
         # tokens are all stamped at its completion time lands entirely in the quarter
         # containing that completion. One 2-token request completing per quarter ->
         # each quarter 2 tokens, intra CoV 0.
@@ -405,7 +405,7 @@ class TestWindowMeasurements:
 
 
 # ---------------------------------------------------------------------------
-# Per-level stability validation (E2 window-to-window J/token gate)
+# Per-level stability validation (window-to-window J/token gate)
 # ---------------------------------------------------------------------------
 
 
@@ -450,7 +450,7 @@ class TestLevelValidation:
 
 
 # ---------------------------------------------------------------------------
-# BracketEnergySink - reuses MeasurementBracket (C2)
+# BracketEnergySink - reuses MeasurementBracket
 # ---------------------------------------------------------------------------
 
 
@@ -507,7 +507,7 @@ class TestBracketEnergySink:
             sink.close_window(_stop())
 
     def test_fresh_bracket_per_window(self) -> None:
-        # One bundle per window (SM10): a new bracket is minted for each window.
+        # One bundle per window: a new bracket is minted for each window.
         built: list[FakeBracket] = []
 
         def factory() -> FakeBracket:
@@ -719,7 +719,7 @@ async def _capture_abort(coro: Any, exc_type: type[BaseException]) -> BaseExcept
 
     Catching at this level (rather than via asyncio.run's outer Task boundary)
     preserves the raised instance and any attached AbortedLevel - exactly how an
-    immediate awaiter (SM9) sees it.
+    immediate awaiter (the server session) sees it.
     """
     try:
         await coro

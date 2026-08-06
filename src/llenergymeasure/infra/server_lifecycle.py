@@ -11,11 +11,11 @@ compose these primitives.
 
 Design constraints this module enforces:
 
-- **C1 (sibling, not a tightening):** nothing here touches ``run_inference`` or
+- **Sibling, not a tightening:** nothing here touches ``run_inference`` or
   the offline dispatch path. The long-lived server lifecycle (launch -> ready ->
   stop) is a parallel sibling of the run-to-completion batch dispatch that
   ``DockerRunner`` owns.
-- **R8 (readiness is a real probe):** :func:`await_ready` polls liveness THEN
+- **Readiness is a real probe:** :func:`await_ready` polls liveness THEN
   drives a real inference request through the serving path; a passing ``/health``
   never satisfies readiness on its own.
 - **Leak-free:** :func:`shutdown` is idempotent and escalates SIGTERM -> SIGKILL
@@ -34,9 +34,9 @@ Design constraints this module enforces:
 
 Probe transport: a narrow stdlib ``urllib`` client (no ``httpx`` / third-party
 dependency, so no server extra is pulled in just to probe readiness). The
-traffic-issuer transport seam (SM5 / the ``TrafficSource``) is a separate,
+traffic-issuer transport seam (the ``TrafficSource``) is a separate,
 richer async client; unifying this readiness probe behind that seam is deferred
-to SM9, where the server session owns both the issuer and the readiness wait.
+to the server session, which owns both the issuer and the readiness wait.
 """
 
 from __future__ import annotations
@@ -137,9 +137,10 @@ class ServerTopologyError(ServerLifecycleError):
 class ProbeRequest:
     """The readiness probe's request shape.
 
-    SM6 owns probe MECHANICS (drive this request through the serving path); SM8
-    owns the request SHAPE (drawn from the measured traffic distribution - warm
-    the path you measure), supplied here as a parameter. ``payload`` is the JSON
+    This lifecycle layer owns the probe MECHANICS (drive this request through the
+    serving path); the server warmup protocol owns the request SHAPE (drawn from
+    the measured traffic distribution - warm the path you measure), supplied here
+    as a parameter. ``payload`` is the JSON
     body (``None`` for a bodyless request); ``path`` is the serving endpoint
     (e.g. ``/v1/completions``).
     """
@@ -155,7 +156,7 @@ class ServerPlacement:
 
     ``image`` and ``gpu_indices`` are consumed only by the container leg; the
     adapter resolves a ``None`` image via the image registry. Constructed by the
-    caller (the SM9 server session, from the resolved ``RunnerSpec`` +
+    caller (the server session, from the resolved ``RunnerSpec`` +
     ``study_execution.gpu_indices``); tests construct it directly.
     """
 
@@ -170,8 +171,8 @@ class ServerHandle:
 
     Exposes the ``base_url`` the issuer talks to, the process/container identity
     (exactly one of ``process`` / ``container_name`` is set), and log access -
-    :meth:`read_logs` is the SM9 failure-artefact hand-off (it reads the process
-    log file, or shells ``docker logs`` for the container leg).
+    :meth:`read_logs` is the server-session failure-artefact hand-off (it reads the
+    process log file, or shells ``docker logs`` for the container leg).
     """
 
     base_url: str
@@ -277,7 +278,7 @@ def build_server_container_argv(
 
     Detached (``-d``) so the launch returns immediately and readiness is polled.
     Deliberately NO ``--rm``: a container that crashes during startup must
-    SURVIVE so ``docker logs`` can recover the startup diagnostic (the SM9
+    SURVIVE so ``docker logs`` can recover the startup diagnostic (the
     failure-artefact hand-off ``read_logs`` promises). ``--rm`` destroys the
     exited container within ~1s of the crash and the logs with it, so the
     diagnostic would be permanently lost. Leak-freeness is instead the explicit
@@ -348,7 +349,7 @@ def launch_process_server(
     parent-side analogue of the worker's ``os.setpgrp()`` precedent), so
     :func:`shutdown` can signal the whole group - engine worker subprocesses and
     all - via ``killpg``. stdout+stderr are redirected to ``log_path`` for the
-    SM9 failure-artefact hand-off. A launch that cannot even start (bad argv,
+    failure-artefact hand-off. A launch that cannot even start (bad argv,
     missing executable) cleans up its own log file and raises
     :class:`ServerLaunchError`.
     """
@@ -410,7 +411,7 @@ def launch_container_server(
 
 
 # ---------------------------------------------------------------------------
-# Readiness (R8: liveness poll THEN a real probe through the serving path)
+# Readiness (liveness poll THEN a real probe through the serving path)
 # ---------------------------------------------------------------------------
 
 
@@ -425,7 +426,7 @@ def await_ready(
 ) -> None:
     """Block until the server is ready, or raise.
 
-    Two phases (R8): (1) a liveness poll of ``health_path`` - necessary but
+    Two phases: (1) a liveness poll of ``health_path`` - necessary but
     NEVER sufficient; (2) a REAL inference request (``probe_request``) driven
     through the serving path - readiness is only satisfied when that completes
     with HTTP 200. Raises :class:`ServerReadinessError` on timeout (with recent
@@ -694,7 +695,7 @@ def _run_docker_quiet(argv: list[str]) -> None:
 
 
 # ---------------------------------------------------------------------------
-# HTTP probe transport (narrow stdlib client; see module docstring / SM9 seam)
+# HTTP probe transport (narrow stdlib client; see module docstring / server-session seam)
 # ---------------------------------------------------------------------------
 
 

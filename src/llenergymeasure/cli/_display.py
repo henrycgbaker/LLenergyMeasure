@@ -88,7 +88,7 @@ def print_result_summary(result: ExperimentResult) -> None:
 
 
 def _print_server_metrics(m: ServerWindowMetrics) -> None:
-    """Print the online-serving window metrics (SM12).
+    """Print the online-serving window metrics.
 
     Display-only and truthful: shows the headline server figures (request rate,
     tail latencies, and - when an SLO was configured - attainment / verdict /

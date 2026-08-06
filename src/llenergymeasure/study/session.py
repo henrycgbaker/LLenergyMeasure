@@ -17,8 +17,8 @@ Offline sessions produce EXACTLY ONE result per session (one engine lifetime =
 one measured window). The point of the seam is that the session LIFETIME
 (acquire -> produce -> release) is separable from result production: that is what
 admits the server session (:class:`~llenergymeasure.study.server_session.ServerSession`),
-whose single lifetime produces N results, one per measurement window
-(constraint C3). This module defines only the offline sessions - the server
+whose single lifetime produces N results, one per measurement window.
+This module defines only the offline sessions - the server
 session lives in :mod:`llenergymeasure.study.server_session`; the offline call
 sites here still consume one result per session, by design.
 
@@ -389,7 +389,7 @@ class SubprocessSession(_OfflineSession):
         # Stop the progress consumer (no-op if run() already did).
         with contextlib.suppress(Exception):
             self._stop_consumer()
-        # Close the read end of the Pipe (C4 FD-leak fix): exactly once, here.
+        # Close the read end of the Pipe (FD-leak fix): exactly once, here.
         if self._parent_conn is not None:
             with contextlib.suppress(Exception):
                 self._parent_conn.close()

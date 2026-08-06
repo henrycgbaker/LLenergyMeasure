@@ -56,8 +56,8 @@ def load_study(
     imports upward into ``study`` and the CLI never imports ``study`` directly.
 
     It also loads the tool-wide user config and hands it to ``finalise_study``,
-    which overlays its ``server.warmup`` defaults onto each declared server config
-    (R7W). The overlay shapes the resolved-config hash (which dedup binds on) but
+    which overlays its ``server.warmup`` defaults onto each declared server config.
+    The overlay shapes the resolved-config hash (which dedup binds on) but
     never the declared hash, so a shared study file keeps its declared identity
     across machines. Resume and drift-detection remain declared-hash-only, so they
     are blind to a user-config warmup change between an original run and a resume.
@@ -79,7 +79,7 @@ def load_study(
     from llenergymeasure.config.user_config import load_user_config
     from llenergymeasure.study.loading import finalise_study
 
-    # R7W: the production edge that folds the tool-wide user config into the study.
+    # The production edge that folds the tool-wide user config into the study.
     # finalise_study overlays its server.warmup defaults onto each declared server
     # config, so the resolved-config hash binds on the realised warmup protocol.
     return finalise_study(

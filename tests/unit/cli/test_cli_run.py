@@ -309,7 +309,7 @@ def test_run_dry_run_calls_estimate_vram(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Study-only flags ignored on single-experiment runs (C4)
+# Study-only flags ignored on single-experiment runs
 # ---------------------------------------------------------------------------
 
 

@@ -132,7 +132,7 @@ class UserExecutionConfig(BaseModel):
 class UserServerConfig(BaseModel):
     """Server-mode preferences: a tool-wide warmup protocol default overlay.
 
-    Mirrors the R1 mode grammar - a ``server:`` namespace whose ``warmup`` block
+    Mirrors the per-mode warmup grammar - a ``server:`` namespace whose ``warmup`` block
     supplies machine-local defaults for the server warmup protocol. The block is
     ``ServerWarmupConfig``-shaped and overlaid PER FIELD: only the warmup fields the
     user actually writes take effect, and a study YAML that sets a field always wins

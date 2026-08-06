@@ -44,7 +44,7 @@ def finalise_study(raw: LoadedStudyRaw, *, user_config: UserConfig | None = None
 
     Steps:
       0. Overlay the tool-wide user-config server warmup onto each declared server
-         config (R7W), BEFORE dedup, so the resolved-config hash binds on the
+         config, BEFORE dedup, so the resolved-config hash binds on the
          realised warmup protocol.
       1. Library-resolution mechanism + resolved-config-hash dedup of the
          declared configs (see sweep-dedup.md §2).
@@ -65,7 +65,7 @@ def finalise_study(raw: LoadedStudyRaw, *, user_config: UserConfig | None = None
         Resolved StudyConfig with ordered experiments, study_design_hash, dedup
         mode, and pre-run equivalence groups.
     """
-    # R7W: overlay the tool-wide user-config server warmup onto each declared
+    # Overlay the tool-wide user-config server warmup onto each declared
     # server config BEFORE dedup, so the resolved-config hash - and hence dedup -
     # binds on the realised warmup protocol. Declared hashes are untouched (the
     # overlay is side-channel state, never a field), and the overlay rides the

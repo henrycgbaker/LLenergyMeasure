@@ -362,7 +362,7 @@ class BundleWriter:
     ) -> Path:
         """Write the window's per-request log (requests.parquet) into the bundle.
 
-        The single writer method for the ``requests`` registry artefact (O7.7):
+        The single writer method for the ``requests`` registry artefact:
         the server session hands one window's request rows and ``finalize()``
         sweeps the outcome via the registry with no hand-glue. Must run after
         :meth:`write_result` (it writes into the bundle dir). The Parquet carries
@@ -399,7 +399,7 @@ class BundleWriter:
     def patch_session_block(self, session: SessionBlock) -> None:
         """Re-stamp the session block into an already-written (not yet finalized) bundle.
 
-        The in-write-path patch (O7.5/O7.6): a window bundle is written at level
+        The in-write-path patch: a window bundle is written at level
         close carrying a PRELIMINARY session block (drain fields null, totals not
         yet final); at clean session close the drain raws and final totals are
         known, so this re-writes result.json and system.json with the complete

@@ -23,7 +23,7 @@ STUB_SERVER = Path(__file__).parent / "_stub_server.py"
 
 
 # ---------------------------------------------------------------------------
-# Protocol conformance (C1: offline contract intact; R8: server extension present)
+# Protocol conformance (offline contract intact; server extension present)
 # ---------------------------------------------------------------------------
 
 
@@ -34,7 +34,7 @@ def test_tensorrt_engine_satisfies_both_protocols():
 
 
 def test_offline_inference_method_still_present():
-    """The additive extension did not remove or rename the offline surface (C1)."""
+    """The additive extension did not remove or rename the offline surface."""
     engine = TensorRTEngine()
     for method in ("load_model", "run_inference", "run_warmup_prompt", "cleanup"):
         assert callable(getattr(engine, method))

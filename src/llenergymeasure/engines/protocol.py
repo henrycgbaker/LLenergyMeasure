@@ -183,11 +183,11 @@ class ServerCapable(Protocol):
     """Additive server-lifecycle extension for engines that can serve online.
 
     This is a SIBLING of :class:`EnginePlugin`'s single-call ``run_inference``
-    contract (constraint C1), never a tightening of it: an engine opts into
+    contract, never a tightening of it: an engine opts into
     online-serving measurement by ALSO implementing these three methods, and the
     offline ``run_inference`` surface is untouched. An engine "claims server
     support" only by implementing all three - there are no partial
-    implementations, and the readiness probe is a required member (ruling R8):
+    implementations, and the readiness probe is a required member:
     an engine cannot be server-capable without driving a real request through
     its serving path.
 
@@ -200,9 +200,10 @@ class ServerCapable(Protocol):
       base URL, the process/container identity, and log access.
     - :meth:`await_ready` polls liveness THEN drives a real inference request
       through the serving path; readiness is satisfied ONLY when that request
-      completes (R8: ``/health`` alone never suffices). SM6 owns the probe
-      MECHANICS; the request SHAPE (``probe_request``) is supplied by the caller
-      (SM8 draws it from the measured traffic distribution).
+      completes (``/health`` alone never suffices). The server-lifecycle layer
+      owns the probe MECHANICS; the request SHAPE (``probe_request``) is supplied
+      by the caller (the server warmup protocol draws it from the measured traffic
+      distribution).
     - :meth:`shutdown` stops the server gracefully with a hard-kill escalation;
       it is idempotent and leaves nothing leaked on any exit path.
     """
@@ -226,8 +227,8 @@ class ServerCapable(Protocol):
     ) -> None:
         """Block until the server is ready, or raise.
 
-        Liveness poll THEN a real inference request through the serving path
-        (R8). Returns ``None`` on success; raises a
+        Liveness poll THEN a real inference request through the serving path.
+        Returns ``None`` on success; raises a
         :class:`~llenergymeasure.infra.server_lifecycle.ServerLifecycleError`
         subclass on launch failure, readiness timeout, or an unreachable
         docker-outside-of-docker topology.

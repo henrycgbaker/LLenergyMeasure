@@ -43,7 +43,7 @@ def test_full_lifecycle_process_leg(launch_stub):
 
     sl.await_ready(handle, COMPLETIONS_PROBE, timeout=20.0, poll_interval=0.2)
 
-    # Log access is the SM9 failure-artefact hand-off: the stub announced itself.
+    # Log access is the failure-artefact hand-off: the stub announced itself.
     assert "stub server listening" in handle.read_logs()
     assert handle.identity.startswith("process pid=")
 
@@ -53,7 +53,7 @@ def test_full_lifecycle_process_leg(launch_stub):
 
 
 def test_readiness_requires_real_probe_not_just_health(launch_stub):
-    """/health passing is NEVER sufficient (R8): an always-503 probe times out."""
+    """/health passing is NEVER sufficient: an always-503 probe times out."""
     # health is 200 immediately, but /v1/completions stays 503 for far longer
     # than the readiness timeout, so readiness must fail on the probe phase.
     handle = launch_stub(completions_ready_after=9999.0)
@@ -354,7 +354,7 @@ def test_container_argv_has_ruled_flags():
     assert argv[:2] == ["docker", "run"]
     assert "-d" in argv
     # No --rm: a crashed container must survive so `docker logs` can recover the
-    # startup diagnostic (the SM9 hand-off); leak-freeness is explicit in shutdown.
+    # startup diagnostic (the failure-artefact hand-off); leak-freeness is explicit in shutdown.
     assert "--rm" not in argv
     # --network host is unconditional and adjacent.
     assert argv[argv.index("--network") + 1] == "host"

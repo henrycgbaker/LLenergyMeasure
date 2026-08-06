@@ -300,7 +300,7 @@ def test_httpx_transport_construction_requires_server_extra(
 
 
 # ---------------------------------------------------------------------------
-# Client-side streaming token counting (SM11 / O8) - a fake httpx stream
+# Client-side streaming token counting - a fake httpx stream
 # ---------------------------------------------------------------------------
 
 
@@ -421,7 +421,7 @@ class _FailingAsyncClient:
 def test_httpx_transport_preserves_partial_on_mid_stream_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A stream that dies mid-response attaches the tokens delivered so far (H1)."""
+    """A stream that dies mid-response attaches the tokens delivered so far."""
     lines = [
         'data: {"choices":[{"text":"Hel","finish_reason":null}]}',
         'data: {"choices":[{"text":"lo","finish_reason":null}]}',

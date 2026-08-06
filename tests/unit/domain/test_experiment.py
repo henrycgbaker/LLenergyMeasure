@@ -155,7 +155,7 @@ class TestMeasurementConfigHash:
         """serving_mode is an identity axis: offline and server hash differently.
 
         Both sides use a server-capable engine (vllm) so serving_mode is the axis
-        under test; transformers server mode is gated off (E5 fast-follow).
+        under test; transformers server mode is gated off (a fast-follow).
         """
         h_offline = compute_declared_config_hash(make_config(engine="vllm", serving_mode="offline"))
         h_server = compute_declared_config_hash(

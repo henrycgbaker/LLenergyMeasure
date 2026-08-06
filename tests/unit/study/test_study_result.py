@@ -35,7 +35,7 @@ def test_study_result_has_full_schema():
 
 
 def test_study_result_backwards_compat():
-    """StudyResult still works with M1-style minimal construction."""
+    """StudyResult still works with minimal construction."""
     result = StudyResult(experiments=[], study_name="test")
     assert result.study_design_hash is None
     assert result.measurement_protocol == {}

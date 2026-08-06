@@ -1,9 +1,9 @@
-"""End-to-end persistence tests for server-mode per-window bundles (SM10).
+"""End-to-end persistence tests for server-mode per-window bundles.
 
 These drive a REAL :class:`WindowManager` through the REAL ``_drive_levels`` with
 a fake engine / transport / energy sink, and assert the on-disk bundles across the
-clean, mid-level-abort, and SIGINT variants. The empirical pins the verifier
-re-runs live here: the clean close stamps the drain raws into every sibling; SIGINT
+clean, mid-level-abort, and SIGINT variants. The empirical invariants
+pinned here: the clean close stamps the drain raws into every sibling; SIGINT
 leaves the completed windows on disk with the drain null; the persisted window
 energies sum to the in-memory session total; and a rate-only group folds into one
 launch.
@@ -108,7 +108,7 @@ class FakePhaseBracket:
 
 
 class FakeWarmupHook:
-    """Records a ServerWarmupResult (with known energy) per level, as SM8 would."""
+    """Records a ServerWarmupResult (with known energy) per level, as the warmup protocol would."""
 
     def __init__(self, energy_j: float = 5.0) -> None:
         self.results: list[ServerWarmupResult] = []
@@ -185,7 +185,7 @@ def _report_with_receipts(
     times: list[float], *, cap_bound_fraction: float = 0.0
 ) -> tuple[IssuerReport, Any]:
     # Each record carries a one-token CompletionResult stamped at its receipt time,
-    # so the client-counted denominator and the requests.parquet rows agree (SM11).
+    # so the client-counted denominator and the requests.parquet rows agree.
     records = [
         RequestRecord(
             index=i,
@@ -428,7 +428,7 @@ class TestOfflineSessionBlock:
         )
         assert result_files
         block = json.loads(Path(result_files[0]).read_text())["session"]
-        # Offline degenerates to one window with all phase raws null (O7.2).
+        # Offline degenerates to one window with all phase raws null.
         assert block["window_count"] == 1
         assert block["level_count"] == 1
         assert block["launch_energy_j"] is None
@@ -437,7 +437,7 @@ class TestOfflineSessionBlock:
 
 
 # ---------------------------------------------------------------------------
-# H1: circuit-breaker abort on a server-group failure is group-aware
+# Circuit-breaker abort on a server-group failure is group-aware
 # ---------------------------------------------------------------------------
 
 
@@ -568,7 +568,7 @@ class TestFirstClassOrchestration:
         from llenergymeasure.study.orchestration import _count_outcomes
 
         # A whole-group launch failure is ONE dict for N cells: it counts as N
-        # failed, so completed + failed matches the cell total (M4). A bare dict
+        # failed, so completed + failed matches the cell total. A bare dict
         # (single cell) defaults to one.
         completed, failed, _ = _count_outcomes(
             [{"type": "E", "message": "boom", "cells": 3}, {"type": "E", "message": "x"}, None]
@@ -578,7 +578,7 @@ class TestFirstClassOrchestration:
 
 
 # ---------------------------------------------------------------------------
-# partition_server_groups (O7.3)
+# partition_server_groups
 # ---------------------------------------------------------------------------
 
 
@@ -608,7 +608,7 @@ class TestGrouping:
     def test_sequential_multi_cycle_yields_singletons(self) -> None:
         # Under the default sequential order a 3-rate x 2-cycle sweep lays out as
         # [A,A,B,B,C,C]: no two cells are both consecutive AND same-cycle, so every
-        # grid point dispatches as its own singleton session (H2).
+        # grid point dispatches as its own singleton session.
         from llenergymeasure.config.cycle_ordering import ExperimentOrder, apply_cycles
         from llenergymeasure.study.server_session import partition_server_groups
 
@@ -645,7 +645,7 @@ class TestGrouping:
             result = session.run()
 
         assert isinstance(result, ServerSessionResult)
-        # ONE launch + readiness for the whole group (O7.3).
+        # ONE launch + readiness for the whole group.
         assert engine.launched == 1
         # Two rate levels x three windows = six bundles, split by grid-point hash.
         bundles = _bundles(tmp_path)
@@ -660,7 +660,7 @@ class TestGrouping:
         # A grouped session that ran to completion but whose every level GATE-FAILED
         # (no valid window) returns a failure dict, not a ServerSessionResult. That
         # dict must carry cells=N so _count_outcomes charges N failed cells - keeping
-        # completed + failed == total_experiments. The M4 fix added cells only to the
+        # completed + failed == total_experiments. The whole-group-failure fix added cells only to the
         # launch-failure dict; this exercises the missed PRODUCER path (_finalise).
         from llenergymeasure.study.orchestration import _count_outcomes
 
@@ -748,7 +748,7 @@ class TestCleanSession:
             assert block["drain_energy_j"] == pytest.approx(7.0)  # drain stamped on clean close
             assert block["drain_duration_s"] is not None
             # Server per-window provenance is present and truthful.
-            # M2: experiment_id carries the cycle so cycle 1 and 2 of one grid point
+            # experiment_id carries the cycle so cycle 1 and 2 of one grid point
             # never collide.
             assert payload["experiment_id"].startswith("server-")
             assert "-c1-L0-W" in payload["experiment_id"]
@@ -762,7 +762,7 @@ class TestCleanSession:
             assert prov["warmup"]["converged"] is True
             # The within-window CoV diagnostic is stamped (distinct from the gate).
             assert prov["intra_window_cov"] is not None
-            # SM11: the denominator is the client-side streamed-delta count; the
+            # The denominator is the client-side streamed-delta count; the
             # engine's self-reported total rides as auxiliary provenance, and the
             # interim server-reported token warning is gone.
             assert prov["token_counting"] == "client_streamed_deltas"
@@ -773,7 +773,7 @@ class TestCleanSession:
             assert sys_block["drain_energy_j"] == pytest.approx(7.0)
         # Timeseries parquet rode the existing writer path (the core carried samples).
         assert all((b / "timeseries.parquet").exists() for b in bundles)
-        # SM11: each window bundle carries its per-request log with client counts;
+        # Each window bundle carries its per-request log with client counts;
         # the four fixture requests per window land as in-measurement-window rows.
         import pyarrow.parquet as pq
 
@@ -787,11 +787,11 @@ class TestCleanSession:
             assert all(r["in_measurement_window"] is True for r in rows)
             assert all(r["is_ramp"] is False for r in rows)
             assert all(r["server_completion_tokens"] == 1 for r in rows)  # auxiliary preserved
-            # M1: the window's measured span rides as file metadata (re-clip support).
+            # The window's measured span rides as file metadata (re-clip support).
             meta = pq.read_table(bundle / "requests.parquet").schema.metadata
             assert float(meta[b"span_end"]) > float(meta[b"span_start"])
         # config.json is written host-side with the declared + resolved hashes; the
-        # observed half and engine_version stay absent (container-boundary, SM12).
+        # observed half and engine_version stay absent (container-boundary).
         for bundle in bundles:
             cfg = _read(bundle / "config.json")
             assert (
@@ -874,7 +874,7 @@ class TestCleanSession:
         assert all(r.session is not None for r in result.experiment_results)
 
     def test_clean_session_derives_server_metrics(self, tmp_path: Path) -> None:
-        """Each window bundle lands the SM12 derived metrics (no slo configured)."""
+        """Each window bundle lands the derived metrics (no slo configured)."""
         config = _server_config(10.0)
         runner = _runner(tmp_path, [config], event=None)
         session = ServerSession(
@@ -919,7 +919,7 @@ class TestCleanSession:
             assert payload["output_tokens"] == 4
 
     def test_clean_session_slo_overlay_and_offline_rejudge(self, tmp_path: Path) -> None:
-        """With slo configured the overlay lands, and it is re-derivable offline (O5.3)."""
+        """With slo configured the overlay lands, and it is re-derivable offline."""
         from llenergymeasure.results.request_log import rows_from_parquet, span_from_parquet
         from llenergymeasure.results.server_metrics import SloBounds, evaluate_slo
 
@@ -952,7 +952,7 @@ class TestCleanSession:
             assert slo["energy_at_operating_point_valid"] is True
             # Re-judge the SAME persisted rows against a STRICTER-population bound
             # offline: the physical rows are unchanged, only the verdict moves. The
-            # window's measured span rides as parquet file metadata (O5.3), so the
+            # window's measured span rides as parquet file metadata, so the
             # overlay - goodput included - is reachable from requests.parquet alone.
             rows = rows_from_parquet(bundle / "requests.parquet")
             span_start, span_end = span_from_parquet(bundle / "requests.parquet")
@@ -1006,7 +1006,7 @@ class TestMidLevelAbort:
             # The abort site is disclosed (a close-window failure here).
             assert "close failed" in payload["server"]["invalid_reason"]
             assert payload["total_energy_j"] == pytest.approx(1000.0)  # 100 W over 10 s
-            # SM11: the per-request log was lost with the bookkeeping, so a degraded
+            # The per-request log was lost with the bookkeeping, so a degraded
             # bundle writes no requests.parquet (and its backstop is suppressed).
             assert not (bundle / "requests.parquet").exists()
         # The single grid point is marked failed (no valid level).
@@ -1062,13 +1062,13 @@ class TestSigint:
             assert block["drain_duration_s"] is None
             # Launch/warmup raws (measured before the interrupt) are still present.
             assert block["launch_energy_j"] == pytest.approx(40.0)
-            # M1: every sibling carries the FINAL window_count (uniform), not the
+            # Every sibling carries the FINAL window_count (uniform), not the
             # incremental preliminary [1, 2, 3].
             assert block["window_count"] == 3
         manifest = session._runner.manifest
         # The study is left running (the sweep loop's mark_interrupted downgrades it).
         assert manifest.manifest.status == "running"
-        # M3: level 0 closed valid -> cell 0 credited completed now (resume won't
+        # Level 0 closed valid -> cell 0 credited completed now (resume won't
         # re-run it); level 1 was interrupted before closing -> cell 1 stays running.
         assert manifest.entry_status(compute_declared_config_hash(a), 1) == "completed"
         assert manifest.manifest.experiments[0].result_file
@@ -1247,7 +1247,7 @@ class TestTeardownHardening:
 
 
 # ---------------------------------------------------------------------------
-# finalise_study session-order hint (SM13)
+# finalise_study session-order hint
 # ---------------------------------------------------------------------------
 
 _HINT_FRAGMENT = "one server per cell per cycle"

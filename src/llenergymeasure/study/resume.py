@@ -152,7 +152,7 @@ def validate_resolved_config_drift(manifest: StudyManifest, new_study: StudyConf
     Each completed manifest entry that carries a resolved_config_hash is re-checked
     against the resolved hash recomputed for the matching declared config in the
     resumed study. A mismatch aborts with an actionable message. Entries without a
-    resolved hash (a pre-SM10 manifest) leave the guard inert.
+    resolved hash (an older manifest predating that field) leave the guard inert.
 
     Args:
         manifest: Manifest loaded from the resumable study directory.

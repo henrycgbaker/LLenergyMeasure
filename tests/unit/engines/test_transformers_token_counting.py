@@ -1,4 +1,4 @@
-"""Tests for PyTorch engine token counting with padded batches (C1 fix)."""
+"""Tests for PyTorch engine token counting with padded batches."""
 
 import pytest
 

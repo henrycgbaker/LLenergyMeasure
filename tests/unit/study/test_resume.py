@@ -295,7 +295,7 @@ def test_validate_config_drift_raises_on_hash_mismatch() -> None:
 
 
 # ---------------------------------------------------------------------------
-# validate_resolved_config_drift (SM10)
+# validate_resolved_config_drift
 # ---------------------------------------------------------------------------
 
 
@@ -367,7 +367,7 @@ def test_validate_resolved_config_drift_raises_on_warmup_overlay_change() -> Non
 
 
 def test_validate_resolved_config_drift_inert_without_resolved_hash() -> None:
-    """A pre-SM10 manifest entry (no resolved hash) leaves the guard inert."""
+    """An older manifest entry (no resolved hash) leaves the guard inert."""
     from llenergymeasure.study.manifest import ExperimentManifestEntry
     from llenergymeasure.study.resume import validate_resolved_config_drift
 

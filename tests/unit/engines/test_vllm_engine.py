@@ -862,7 +862,7 @@ class TestVramCurrentDevice:
 
 
 # =============================================================================
-# Test Group 17: M1 - flash_attn fields wired in _build_llm_kwargs
+# Test Group 17: flash_attn fields wired in _build_llm_kwargs
 # =============================================================================
 
 

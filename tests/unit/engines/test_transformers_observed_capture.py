@@ -1,4 +1,4 @@
-"""Tests for TransformersEngine._capture_observed_params (EN2 + D2 resolved dtype).
+"""Tests for TransformersEngine._capture_observed_params (resolved-dtype capture).
 
 Host-safe: no GPU, no torch, no transformers import. The model's
 ``generation_config`` and resolved ``dtype`` are modelled with a fake object
@@ -107,7 +107,7 @@ class TestEN2MergedGenerationConfig:
 
 
 class TestD2ResolvedDtypeCapture:
-    """D2: record the resolved dtype the model actually ran in."""
+    """Record the resolved dtype the model actually ran in."""
 
     def test_resolved_dtype_recorded(self) -> None:
         model = _FakeHFModel(

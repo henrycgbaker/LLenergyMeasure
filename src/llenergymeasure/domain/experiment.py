@@ -45,7 +45,7 @@ def compute_declared_config_hash(config: ExperimentConfig) -> str:
 
     ``server.traffic.slo`` is the one field deliberately excluded from this
     wholesale dump (``exclude={"server": {"traffic": {"slo"}}}``): SLO bounds are
-    a pure post-hoc overlay (O5.3) - two runs differing only in their slo bounds
+    a pure post-hoc overlay - two runs differing only in their slo bounds
     are the same physical experiment, so they must hash identically and
     deduplicate together. The exclusion is applied HERE, at the hash call site,
     NOT via ``Field(exclude=True)`` on the slo field - a field-level exclude would
@@ -96,7 +96,7 @@ class AggregationMetadata(BaseModel):
 class ServerWarmupProvenance(BaseModel):
     """One level's warmup outcome, stamped into each of the level's window bundles.
 
-    The server pre-window protocol's outcome (D6 divergence label): identical
+    The server pre-window protocol's outcome (the cross-mode divergence label): identical
     across a level's windows (one warmup per level) but carried per window so the
     persistence layer, which never learns sessions exist, has it locally.
     """
@@ -113,7 +113,7 @@ class ServerWarmupProvenance(BaseModel):
     elapsed_s: float = Field(..., description="Wall-clock seconds spent in this level's warmup.")
 
 
-#: Client-side token-counting mechanism vocabulary (O8). The canonical J/token
+#: Client-side token-counting mechanism vocabulary. The canonical J/token
 #: denominator for server mode is llem's OWN count of the streamed response
 #: deltas (one receipt per streamed content chunk), measured identically for
 #: every OpenAI-compatible engine in the SUT callback - never the engine's
@@ -194,7 +194,7 @@ class LatencyPercentiles(BaseModel):
     """Tail-latency percentiles of one per-request (or per-interval) series, in ms.
 
     A slo-INDEPENDENT measurement block: the p50/p90/p99 of one latency series over
-    a window's completed (``status == "ok"``) requests, drain-inclusive (D7 - a
+    a window's completed (``status == "ok"``) requests, drain-inclusive (a
     request issued in-span keeps its full latency even when it completes in the
     post-span drain). ``samples`` is the number of contributing requests (or, for
     the inter-token series, intervals). Every percentile is None when the series is
@@ -209,7 +209,7 @@ class LatencyPercentiles(BaseModel):
 
 
 class ServerSloEvaluation(BaseModel):
-    """SLO overlay: a PURE post-hoc re-judgement of a window against slo bounds (O5.3).
+    """SLO overlay: a PURE post-hoc re-judgement of a window against slo bounds.
 
     None on the parent metrics block when no slo was configured. Every field here is
     a pure function of (the window's request records, the slo bounds) and the
@@ -217,7 +217,7 @@ class ServerSloEvaluation(BaseModel):
     identity or its physical measurement, so one window is re-judgeable against any
     bounds offline over its ``requests.parquet`` and this whole block is regenerated.
 
-    ATTAINMENT (O5.2, verdict-bearing): the share of COMPLETED (``status == "ok"``)
+    ATTAINMENT (verdict-bearing): the share of COMPLETED (``status == "ok"``)
     requests that met ALL configured bounds jointly (a request must satisfy the ttft
     bound AND the tpot bound to count; a request whose latency is exactly AT a bound
     MEETS it - a violation is strictly-greater-than). ``slo_pass`` is the window
@@ -227,11 +227,11 @@ class ServerSloEvaluation(BaseModel):
     ``energy_at_operating_point_valid`` gates the window's J/token as a valid operating
     point (``slo_pass AND level_valid``).
 
-    GOODPUT (O5.2, DIRECT JOIN): the in-span output tokens of the requests that BOTH
+    GOODPUT (DIRECT JOIN): the in-span output tokens of the requests that BOTH
     completed (``status == "ok"``) AND met every configured bound, divided by the span
     duration (DistServe, OSDI'24, arXiv:2401.09670; Wang et al., arXiv:2410.14257 Eq.
     5). No failed request's tokens enter it at any weight. The numerator is
-    in-span-clipped (each qualifying request's receipts up to ``span_end``, per D7) - a
+    in-span-clipped (each qualifying request's receipts up to ``span_end``) - a
     disclosed deviation from Wang et al.'s full per-request count that keeps the span
     discipline and guarantees ``goodput <= avg_tokens_per_second``. Read
     ``completion_rate`` on the parent metrics block alongside it as the failure
@@ -300,15 +300,15 @@ class ServerSloEvaluation(BaseModel):
 
 
 class ServerWindowMetrics(BaseModel):
-    """Server-mode per-window DERIVED metrics (SM12). None for offline results.
+    """Server-mode per-window DERIVED metrics. None for offline results.
 
     Derived at persist time from the SAME in-memory request records that feed
     ``requests.parquet`` (no re-sampling), and stamped into ``result.json`` as part
     of the derived document. Every field except ``slo`` is slo-INDEPENDENT: the
     physical measurement (throughput, counts, latency percentiles, J/token) does not
-    move when the slo bounds change - only the ``slo`` overlay is re-judged (O5.3).
+    move when the slo bounds change - only the ``slo`` overlay is re-judged.
 
-    Latency percentiles filter ``status == "ok"`` and are drain-inclusive (D7 full
+    Latency percentiles filter ``status == "ok"`` and are drain-inclusive (full
     request lifecycles). ``request_throughput_req_s`` and the J/token operating
     point stay span-clipped (the authoritative span-clipped denominators are reused,
     never recomputed). ``completion_rate`` is the error-rate disclosure: attainment
@@ -537,7 +537,7 @@ class ExperimentResult(BaseModel):
 
     # Session facts - dual-serialised into result.json AND the system.json sidecar
     # (mirrors the runner block). Present in both modes (offline: session id +
-    # window_count=1, raws null). None for pre-session-facts bundles (D22 loadable).
+    # window_count=1, raws null). None for pre-session-facts bundles (still loadable).
     session: SessionBlock | None = Field(
         default=None,
         description="Session facts for the measurement session this window belongs to. "

@@ -1,7 +1,7 @@
-"""Tests for the per-mode warmup grammar (SM8 R1): the D22 clean-break migration
+"""Tests for the per-mode warmup grammar: the clean-break migration
 of ``measurement.warmup`` into the ``offline:`` / ``server:`` mode namespaces.
 
-Covers the SM8 verify charter's config half:
+Covers the config half:
 - ``measurement.warmup`` is a clean break with an actionable migration error;
 - ``offline.warmup`` carries the migrated warmup verbatim and is OPTIONAL;
 - ``server.warmup`` is the new composite/fixed protocol block with structural
@@ -108,7 +108,7 @@ class TestServerWarmup:
         assert cfg.server.warmup.duration_seconds == 300.0
 
     def test_no_thermal_floor_knob(self):
-        # Structural absence (R1): loaded equilibrium IS the server thermal posture.
+        # Structural absence: loaded equilibrium IS the server thermal posture.
         assert "thermal_floor_seconds" not in ServerWarmupConfig.model_fields
 
     def test_mode_is_closed_literal(self):
@@ -150,7 +150,7 @@ class TestWarmupIdentity:
         assert mode_section["warmup"]["mode"] == "composite"
 
     def test_offline_mode_section_empty_when_no_section(self):
-        # "empty for default-offline" (R1): the mode_section slot stays {}.
+        # "empty for default-offline": the mode_section slot stays {}.
         assert _offline().mode_section_identity() == {}
 
     def test_offline_mode_section_projects_warmup_when_present(self):

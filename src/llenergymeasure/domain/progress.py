@@ -315,9 +315,9 @@ STEP_SERVER_READY = "server_ready"
 # run emits. A step declares which surfaces it belongs to and where it sits in
 # each. Future modes (server mode) add their own surface here without touching
 # any consumer.
-#: Surface identifiers, aligned with the SM2 runner-mode vocabulary
+#: Surface identifiers, aligned with the runner-mode vocabulary
 #: (process / container, formerly local / docker). Not serialized - internal
-#: step-list keys only - so the rename rides freely (banked from SM2).
+#: step-list keys only - so the rename rides freely.
 SURFACE_PROCESS = "process"  # direct host harness run, no container
 SURFACE_CONTAINER = "container"  # container run, baseline measured in-container (fresh)
 SURFACE_CONTAINER_HOST_BASELINE = "container_host_baseline"  # baseline measured on host first

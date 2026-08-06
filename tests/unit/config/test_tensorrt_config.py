@@ -14,11 +14,11 @@ Coverage:
           max_batch_size, max_input_len, max_seq_len, max_num_tokens, dtype,
           fast_build)
 - CFG-02: Quantisation dict (quant_algo, kv_cache_quant_algo)
-- CFG-03: (Removed) Calibration sub-config dropped - D3 build-only PTQ.
+- CFG-03: (Removed) Calibration sub-config dropped - build-only PTQ.
 - CFG-04: KV cache dict (enable_block_reuse, free_gpu_memory_fraction, ...)
 - CFG-05: Scheduler dict (capacity_scheduling_policy)
-- CFG-06: (Removed) Build cache sub-config dropped - D1 engine-cache plumbing.
-- CFG-07: Sampling (min_tokens, n, ignore_eos; return_perf_metrics dropped D1)
+- CFG-06: (Removed) Build cache sub-config dropped - engine-cache plumbing.
+- CFG-07: Sampling (min_tokens, n, ignore_eos; return_perf_metrics dropped)
 """
 
 from __future__ import annotations
@@ -169,7 +169,7 @@ class TestQuantisation:
         assert quant_config["quant_algo"] == "fp8"
 
 
-# CFG-03: Calibration sub-config dropped (D3) - tests removed.
+# CFG-03: Calibration sub-config dropped - tests removed.
 # calib fields remain settable via engine_params extra="allow" passthrough.
 
 
@@ -259,7 +259,7 @@ class TestScheduler:
         assert sched["capacity_scheduling_policy"] == "INVALID_POLICY"
 
 
-# CFG-06: Build cache sub-config dropped (D1) - tests removed.
+# CFG-06: Build cache sub-config dropped - tests removed.
 # build_cache fields remain settable via engine_params extra="allow" passthrough.
 
 
@@ -272,7 +272,7 @@ class TestSampling:
     """Tests for TensorRT sampling_params block."""
 
     def test_sampling_config_accepted(self):
-        """Sampling section with valid values validates (return_perf_metrics dropped D1)."""
+        """Sampling section with valid values validates (return_perf_metrics dropped)."""
         config = ExperimentConfig(
             **_TRT_DEFAULTS,
             tensorrt={"sampling_params": {"min_tokens": 10, "n": 4, "ignore_eos": True}},

@@ -137,7 +137,7 @@ def test_serving_mode_server_accepted():
     """serving_mode='server' is a valid config value (data model admits it).
 
     Uses a server-capable engine (vllm): transformers server mode is gated off as
-    a fast-follow (E5), so the admissible server-mode engines are vllm/tensorrt.
+    a fast-follow, so the admissible server-mode engines are vllm/tensorrt.
     """
     config = ExperimentConfig(
         task={"model": "gpt2"},
@@ -155,9 +155,9 @@ def test_serving_mode_typo_rejected():
 
 
 def test_transformers_server_mode_rejected():
-    """transformers + server mode is gated off as a fast-follow (E5 verdict).
+    """transformers + server mode is gated off as a fast-follow.
 
-    The E5 stability gate failed for `transformers serve` at the pinned version
+    The stability check failed for `transformers serve` at the pinned version
     (upstream-scoped to moderate load, no first-class health endpoint), so
     transformers server support is deferred and rejected at config validation
     with an actionable message pointing at vllm/tensorrt. vLLM and TensorRT-LLM

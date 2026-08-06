@@ -1,6 +1,6 @@
-"""Tests for the R7W user-config server-warmup overlay wiring.
+"""Tests for the user-config server-warmup overlay wiring.
 
-The overlay resolves the effective server warmup protocol through the R7 chain
+The overlay resolves the effective server warmup protocol through the precedence chain
 (built-in defaults < user config < study YAML) and attaches the OUTPUT as
 side-channel state on the ExperimentConfig. The declared-config hash is untouched
 (it keeps naming the shareable study intent); the resolved/observed hashes carry
@@ -67,7 +67,7 @@ def _resolved(config: ExperimentConfig) -> str:
 
 
 # ---------------------------------------------------------------------------
-# UserConfig home (the R1 mode-grammar mirror)
+# UserConfig home (the per-mode warmup-grammar mirror)
 # ---------------------------------------------------------------------------
 
 

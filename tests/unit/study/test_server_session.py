@@ -1,21 +1,21 @@
-"""Tests for the server-mode measurement session (SM9).
+"""Tests for the server-mode measurement session.
 
 Host-only, no GPU, no real server: the engine (ServerCapable), the window
 manager, the energy sink, the traffic source, and the warmup hook are all
 injected fakes, so the full launch -> warm up -> windows -> shutdown lifecycle is
 exercised deterministically.
 
-Charter (server-mode plan section 4 / section 18):
+Charter:
 - one server lifetime produces N window results without re-keying the offline
-  loop (C3);
+  loop;
 - cleanup-exactly-once on the normal, exception, and interrupt paths, with the
-  server reaped on every exit (the F6 session-hardening invariant);
+  server reaped on every exit (the session-hardening invariant);
 - the three banked contracts: the issuance horizon covers ramp + N windows; the
   client-counted tokens flow through the TokenReceiptFn seam (client-side
-  streamed-delta counts, O8); an AbortedLevel is caught at the run_level await
+  streamed-delta counts); an AbortedLevel is caught at the run_level await
   site and a WarmupTrafficError aborts the session;
-- per-level ServerWarmupResult is stamped into each window result (D6 divergence
-  label);
+- per-level ServerWarmupResult is stamped into each window result (the cross-mode
+  divergence label);
 - the resolved warmup is read in-process (the serialization-boundary contract).
 """
 
@@ -292,7 +292,7 @@ def _wire_run(
 
 
 # ---------------------------------------------------------------------------
-# Contract 2 - client-side token receipts are the canonical denominator (O8)
+# Contract 2 - client-side token receipts are the canonical denominator
 # ---------------------------------------------------------------------------
 
 
@@ -323,7 +323,7 @@ class TestTokenReceipts:
             result=_completion([2.0, 3.0, 4.0], completion=99),
         )
         # Token-granular: one receipt at each streamed delta's arrival time. The
-        # server-reported usage (99) never reaches the denominator seam (O8).
+        # server-reported usage (99) never reaches the denominator seam.
         assert client_token_receipts(rec) == (2.0, 3.0, 4.0)
 
     def test_non_completion_result_yields_no_receipts(self) -> None:
@@ -345,7 +345,7 @@ class TestTokenReceipts:
         assert client_token_receipts(never) == ()
 
     def test_errored_or_timed_out_request_preserves_partial_receipts(self) -> None:
-        # H1: a mid-stream failure's delivered tokens still count in the denominator,
+        # A mid-stream failure's delivered tokens still count in the denominator,
         # regardless of the error flag or a missing completion timestamp.
         errored = RequestRecord(
             index=1,
@@ -377,7 +377,7 @@ class TestTokenReceipts:
 
 
 # ---------------------------------------------------------------------------
-# SM11 - per-window request-log rows (attribution flags, client-vs-server count)
+# Per-window request-log rows (attribution flags, client-vs-server count)
 # ---------------------------------------------------------------------------
 
 
@@ -421,7 +421,7 @@ def _req(
 
 class TestRequestRows:
     def test_attribution_ramp_window_and_drain_tail(self) -> None:
-        """Ramp, in-window, and drain-straddling requests get the right D7 flags."""
+        """Ramp, in-window, and drain-straddling requests get the right boundary flags."""
         windows = [_win(0, 10.0, 20.0), _win(1, 20.0, 30.0)]
         ramp = _req(0, 5.0, completed_at=12.0, result=_completion([11.0, 12.0]))
         straddler = _req(1, 15.0, completed_at=25.0, result=_completion([15.5, 24.0, 25.0]))
@@ -476,15 +476,15 @@ class TestRequestRows:
         assert row.client_output_tokens == 3  # canonical = client count, never 99
         assert row.server_completion_tokens == 99  # preserved as auxiliary
         assert row.server_prompt_tokens == 41
-        assert row.finish_reason == "length"  # threaded from the stream (SM12 SLO input)
+        assert row.finish_reason == "length"  # threaded from the stream (SLO input)
         # The window aggregate of the auxiliary is a sum, None when never reported.
         assert _sum_server_completion_tokens([row]) == 99
 
     def test_status_ok_error_timeout(self) -> None:
-        """Rows carry physical facts per status; SM12 filters, the row never does."""
+        """Rows carry physical facts per status; the consumer filters, the row never does."""
         windows = [_win(0, 10.0, 20.0)]
         ok = _req(0, 11.0, completed_at=12.0, result=_completion([11.5], finish_reason="stop"))
-        # H1: error / timeout requests carry their REAL partial receipts.
+        # Error / timeout requests carry their REAL partial receipts.
         errored = _req(
             1, 12.0, completed_at=12.5, result=_completion([12.2, 12.3]), error=RuntimeError("x")
         )
@@ -512,7 +512,7 @@ class TestRequestRows:
         assert rows[2].completed_at is None
 
     def test_mid_stream_failure_tokens_count_in_denominator(self) -> None:
-        """H1 regression: a clean straddler and a mid-stream-failed request with
+        """Regression: a clean straddler and a mid-stream-failed request with
         identical in-span receipts contribute equally to the energy denominator."""
         from llenergymeasure.harness.window_manager import build_window_bookkeeping
 
@@ -809,7 +809,7 @@ class TestRun:
         assert isinstance(result, ServerSessionResult)
         assert result.valid is True
         assert result.token_counting == ss.TOKEN_COUNTING_CLIENT_STREAMED
-        # Warmup provenance stamped into EVERY window result (point 4 / D6 label).
+        # Warmup provenance stamped into EVERY window result (the cross-mode divergence label).
         level = result.levels[0]
         assert all(w.warmup is not None for w in level.windows)
         assert all(
@@ -937,8 +937,8 @@ class TestResolvedWarmupSeam:
 
 
 # ---------------------------------------------------------------------------
-# Contract 3 / O7.4 - a failed level's cleanly-closed cores are preserved and
-# their measured GPU energy still counts (the verifier's HIGH must-fix)
+# Contract 3 - a failed level's cleanly-closed cores are preserved and
+# their measured GPU energy still counts
 # ---------------------------------------------------------------------------
 
 

@@ -57,8 +57,9 @@ def build_completions_probe(
 ) -> ProbeRequest:
     """Return a minimal OpenAI-completions readiness probe for TRT-LLM.
 
-    A default request SHAPE for readiness when the caller supplies none; SM8
-    replaces it with a request drawn from the measured traffic distribution
+    A default request SHAPE for readiness when the caller supplies none; the
+    server warmup protocol replaces it with a request drawn from the measured
+    traffic distribution
     (warm the path you measure). Kept tiny (1 token, greedy) so the probe itself
     perturbs nothing measurable.
     """

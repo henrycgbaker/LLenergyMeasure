@@ -106,7 +106,7 @@ def orchestrate_study(
     # ensuring preflight uses the same runner resolution as the actual dispatch path.
     user_config = load_user_config()
 
-    # Server-capable-entry-path contract (R7W CONTRACT NOTE): every entry that
+    # Server-capable-entry-path contract: every entry that
     # dispatches a server config must apply the user-config warmup overlay (or
     # reject). ``api.load_study`` overlays before dedup, but ``run_experiment`` and
     # ``run_study(StudyConfig)`` bypass it; this single choke point overlays every
@@ -289,7 +289,7 @@ def _resolve_runner_specs(
 def _apply_server_warmup_overlay_to_study(study: StudyConfig, user_config: Any) -> None:
     """Overlay the tool-wide user-config server warmup onto every server experiment.
 
-    The server-capable-entry-path contract (R7W): ``api.load_study`` applies the
+    The server-capable-entry-path contract: ``api.load_study`` applies the
     overlay before dedup, but ``run_experiment`` / ``run_study(StudyConfig)`` reach
     the runner without it. Applying it here - the universal orchestration choke
     point that already loaded the user config - guarantees the ServerSession reads
@@ -520,8 +520,8 @@ def _run_via_runner(
         elif isinstance(r, dict):
             warnings.append(r.get("message", "Unknown error"))
             # Keep the failure dict (not a None) so the summary can count a
-            # whole-group launch failure as its N cells via the dict's "cells" field
-            # (M4); StudyResult.experiments filters to ExperimentResult instances.
+            # whole-group launch failure as its N cells via the dict's "cells" field;
+            # StudyResult.experiments filters to ExperimentResult instances.
             experiment_results.append(r)
         else:
             experiment_results.append(r)

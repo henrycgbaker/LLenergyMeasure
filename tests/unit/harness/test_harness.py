@@ -438,12 +438,12 @@ def test_harness_defaults_to_no_gpu_indices(minimal_config):
 
 
 # ---------------------------------------------------------------------------
-# H2: Thermal floor ordering - start_tracking after thermal_floor_wait
+# Thermal floor ordering - start_tracking after thermal_floor_wait
 # ---------------------------------------------------------------------------
 
 
 def test_harness_start_tracking_called_after_thermal_floor_wait(minimal_config):
-    """start_tracking() must be called after thermal_floor_wait() (H2 ordering verification).
+    """start_tracking() must be called after thermal_floor_wait() (ordering verification).
 
     This verifies that energy measurement begins only after the thermal floor wait,
     so idle GPU heat does not inflate the measured energy window.

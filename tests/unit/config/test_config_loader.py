@@ -614,7 +614,7 @@ def test_load_study_config_design_hash_is_stable(tmp_path):
     # mode namespace: serving_mode became required (no default) and the new
     # server: key plus the resolved-view mode_section slot both enter the hashed
     # projection, and again (342e907d -> 7e97b3ab) when warmup migrated from
-    # measurement.warmup to the offline: mode namespace (a D22 clean break): this
+    # measurement.warmup to the offline: mode namespace (a clean break): this
     # default-offline study sets no warmup knobs, so measurement/mode_section both
     # drop the warmup content and the fingerprint moves. The resolve -> dedup ->
     # hash pipeline is unchanged (6 declared -> 4 unique below still holds). A value

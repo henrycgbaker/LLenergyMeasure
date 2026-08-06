@@ -1,4 +1,4 @@
-"""Tests for the R7 config-resolution core (config/precedence.py).
+"""Tests for the config-resolution core (config/precedence.py).
 
 The UNSET-sentinel precedence chain: a distinct 'use the layer below' sentinel,
 recursive pruning, ascending-precedence deep merge, and the ruled layer order

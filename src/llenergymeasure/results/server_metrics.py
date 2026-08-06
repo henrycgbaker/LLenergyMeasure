@@ -1,4 +1,4 @@
-"""Server-mode per-window metric derivation and the SLO overlay (SM12).
+"""Server-mode per-window metric derivation and the SLO overlay.
 
 Derives a window's server-distinct metrics from the SAME per-request records that
 feed ``requests.parquet`` (:mod:`llenergymeasure.results.request_log`), with NO
@@ -8,7 +8,7 @@ slo_pass, goodput, energy-at-operating-point). It lives in the results layer bes
 ``request_log`` so both call sites reach it without crossing a layer boundary: the
 study layer calls it at persist time, and an offline consumer calls it over a loaded
 bundle's ``requests.parquet`` (via :func:`request_log.rows_from_parquet`) to
-re-judge a window against any SLO bounds - the O5.3 re-judgeable promise.
+re-judge a window against any SLO bounds - the re-judgeable promise.
 
 Design invariants:
 
@@ -16,7 +16,7 @@ Design invariants:
   backend, opens no transport, and reads no clock. The metric derivation is a pure
   function of (records, slo bounds): no SLO value leaks into the window's identity
   or its physical measurement, so the measurement fields are byte-stable across
-  SLO re-judgement and only the ``slo`` overlay moves (O5.3).
+  SLO re-judgement and only the ``slo`` overlay moves.
 
 - THE ENERGY DENOMINATOR IS REUSED, NEVER RECOMPUTED. The window's J/token operating
   point is passed in already-correct from the window manager's span-clipped
@@ -24,19 +24,19 @@ Design invariants:
   does is goodput's token NUMERATOR: the SLO overlay counts each qualifying request's
   ``output_token_times`` at or before ``span_end`` (its in-span output tokens), so a
   drain straddler's tail tokens are excluded from goodput while its full latency still
-  judges its SLO compliance (D7).
+  judges its SLO compliance.
 
 - POPULATION. A window's rows are ISSUE-partitioned and receipt-unclipped
   (request_log CLIPPING SEMANTICS), so the steady-state population is the rows with
   ``in_measurement_window`` set (issued in ``[span_start, span_end]``); this drops
   the level's prospective ramp (window 0's ``is_ramp`` rows). Latency and attainment
   further filter to ``status == "ok"`` (completed) and are DRAIN-INCLUSIVE: a
-  straddler that completed past ``span_end`` keeps its full latency (D7). The energy
+  straddler that completed past ``span_end`` keeps its full latency. The energy
   denominator stays span-clipped and passed in (not recomputed here); goodput's token
   numerator is the one figure re-clipped here, to the qualifying requests' in-span
   receipts.
 
-ATTAINMENT SEMANTICS (O5.2, verdict-bearing). Attainment is a PER-REQUEST joint
+ATTAINMENT SEMANTICS (verdict-bearing). Attainment is a PER-REQUEST joint
 evaluation, not a per-metric percentile: the fraction of COMPLETED (``status ==
 "ok"``) requests that met ALL configured bounds AT ONCE - a request counts iff its
 TTFT is within ``ttft_ms`` AND its per-request TPOT is within ``tpot_ms``. AT-BOUND
@@ -52,7 +52,7 @@ DIRECT JOIN (DistServe, OSDI'24, arXiv:2401.09670; Wang et al., arXiv:2410.14257
 in the steady-state population) AND met every SLO bound, divided by the span duration -
 no failed request's tokens enter at any weight. DISCLOSED DEVIATION from Wang et al.'s
 full per-request output count: the numerator is in-span-clipped (each qualifying
-request's receipts at or before ``span_end``, per D7), which keeps the span discipline
+request's receipts at or before ``span_end``), which keeps the span discipline
 and guarantees ``goodput <= avg_tokens_per_second`` (a subset sum over the same clipped
 receipt basis and the same span divisor); still read it alongside ``completion_rate``,
 the failure disclosure. The COUNT-BASED
@@ -171,7 +171,7 @@ def _per_request_tpot_ms(row: RequestLogRow) -> float | None:
 def _inter_token_latencies_ms(row: RequestLogRow) -> list[float]:
     """Pooled inter-token latencies (ms): consecutive receipt differences.
 
-    Approximate at fine grain (client-loop receipt jitter, request_log M2); reported
+    Approximate at fine grain (client-loop receipt jitter); reported
     for the tail-shape picture, never as an SLO denominator.
     """
     times = row.output_token_times
@@ -179,7 +179,7 @@ def _inter_token_latencies_ms(row: RequestLogRow) -> list[float]:
 
 
 def _request_meets_slo(row: RequestLogRow, bounds: SloBounds) -> bool:
-    """Whether one COMPLETED request met ALL configured bounds jointly (O5.2).
+    """Whether one COMPLETED request met ALL configured bounds jointly.
 
     A latency exactly AT a bound MEETS it - only ``metric > bound`` violates. A
     missing TTFT under a configured TTFT bound FAILS; an undefined TPOT (fewer than
@@ -204,7 +204,7 @@ def _in_span_output_tokens(row: RequestLogRow, span_end: float) -> int:
 
     The receipt series shares the traffic issuer's ``time.monotonic`` basis with the
     span bounds, so a drain straddler's tail receipts (arriving past ``span_end``) are
-    excluded while its in-span tokens still count (D7 two-policy separation). No
+    excluded while its in-span tokens still count (the two-policy separation). No
     ``span_start`` clip is needed: an in-window row is issued in ``[span_start,
     span_end]`` and every receipt arrives after its issue, so every receipt already
     sits at or after ``span_start``.
@@ -220,7 +220,7 @@ def evaluate_slo(
     span_end: float,
     level_valid: bool,
 ) -> ServerSloEvaluation:
-    """Judge a window against ``bounds`` - a PURE overlay over (rows, span) (O5.3).
+    """Judge a window against ``bounds`` - a PURE overlay over (rows, span).
 
     Usable at persist time and offline over a loaded ``requests.parquet`` (its span
     bounds ride as file-level KV metadata; see :func:`request_log.span_from_parquet`):

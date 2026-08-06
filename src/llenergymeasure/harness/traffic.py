@@ -3,10 +3,10 @@
 This module owns the ``TrafficSource`` seam - the single window-manager-facing
 interface for driving online-serving load - and the built-in async Poisson/gamma
 issuer that implements it. It is the load-generation half of server mode; the
-window manager, warmup, and engine server lifecycle live in later slices and
+window manager, warmup, and engine server lifecycle live in separate modules and
 consume this seam rather than re-implementing it.
 
-Semantic cluster (stated explicitly, per the loop-semantics research). Four
+Semantic cluster (stated explicitly). Four
 conventions exist in the wild - MLPerf LoadGen (schedule-anchored latency),
 vllm-bench / ML.ENERGY (admission-anchored, cap-queue time invisible),
 perf_analyzer (mutually-exclusive rate/concurrency axes), and k6
@@ -30,14 +30,10 @@ convention:
   run outright; LLenergyMeasure keeps the cap legal (it is a deliberate,
   hashed user choice) but stamps its effect.
 
-Design source: ``.product/designs/server-mode-implementation-plan-2026-07-23.md``
-section 12 (as amended 2026-07-27); evidence base in
-``.product/research/wave2-sut-and-loop-semantics-2026-07-27/``.
-
 The real HTTP transport (:class:`HttpxTransport`) lazily imports ``httpx`` from
 the ``server`` extra; the seam itself imports nothing beyond the standard
 library and numpy, so the window manager can consume it without the extra
-installed. Later slices inject a base-URL-bound transport; conformance tests
+installed. A base-URL-bound transport is injected by the caller; conformance tests
 inject fakes.
 """
 
@@ -66,9 +62,9 @@ _CAP_BOUND_TOLERANCE_S = 0.010
 class RequestShape:
     """One request's payload, supplied by the injected request-shape source.
 
-    Deliberately opaque at this layer: SM5 only needs an index and an optional
-    payload to hand to the transport. The per-engine request encoding (prompt,
-    token budget, sampling params) is owned by later slices and rides
+    Deliberately opaque at this layer: the traffic source only needs an index and
+    an optional payload to hand to the transport. The per-engine request encoding
+    (prompt, token budget, sampling params) is owned by later work and rides
     ``payload``.
     """
 
@@ -77,7 +73,7 @@ class RequestShape:
 
 
 #: A request-shape source maps a request index to its shape. Built-in default
-#: mints index-only shapes; later slices inject a dataset-backed source.
+#: mints index-only shapes; later work injects a dataset-backed source.
 ShapeSource = Callable[[int], RequestShape]
 
 
@@ -251,7 +247,7 @@ class TrafficSource(Protocol):
     A traffic source is built from ``(TrafficConfig, seed, request-shape
     source)`` and driven by exactly one call - :meth:`run` - against an injected
     transport. Completions are bookkeeping only and never influence the
-    schedule. This is the D14 / O2 plugin point: a LoadGen-backed source can
+    schedule. This is the plugin point: a LoadGen-backed source can
     arrive later behind the same interface.
     """
 
@@ -338,7 +334,7 @@ class OpenLoopPoissonSource:
             record.result = await transport(record.request)
         except asyncio.CancelledError as exc:
             # A drain-timeout / cancellation still delivered whatever streamed so
-            # far: preserve the partial receipts (H1) so its in-span tokens count.
+            # far: preserve the partial receipts so its in-span tokens count.
             # completed_at stays None (timeout), and the cancellation propagates.
             partial = _recover_partial_completion(exc)
             if partial is not None:
@@ -346,8 +342,8 @@ class OpenLoopPoissonSource:
             raise
         except Exception as exc:  # bookkeeping only; a failed call never stops issuance
             record.error = exc
-            # A mid-stream failure keeps its delivered tokens in the denominator
-            # (H1): stash the partial the transport attached before re-raising.
+            # A mid-stream failure keeps its delivered tokens in the denominator:
+            # stash the partial the transport attached before re-raising.
             partial = _recover_partial_completion(exc)
             if partial is not None:
                 record.result = partial
@@ -415,7 +411,7 @@ class CompletionResult:
     Stored as ``RequestRecord.result``. Timestamps share the issuer's
     ``time.monotonic`` basis. ``output_token_times`` is the CLIENT-SIDE canonical
     token receipt series - one monotonic timestamp per streamed content delta,
-    counted identically for every OpenAI-compatible engine in this callback (O8).
+    counted identically for every OpenAI-compatible engine in this callback.
     Its length is the canonical output-token count that feeds the energy
     denominator and the stability gate; ``first_token_at`` is its first entry
     (None when nothing streamed). ``server_prompt_tokens`` /
@@ -447,8 +443,8 @@ class CompletionResult:
 
 
 #: Attribute name under which a streaming transport attaches its partially
-#: accumulated :class:`CompletionResult` to the exception that aborts a stream
-#: (H1). The AbortedLevel precedent: the exception is re-raised unchanged and the
+#: accumulated :class:`CompletionResult` to the exception that aborts a stream.
+#: The AbortedLevel precedent: the exception is re-raised unchanged and the
 #: issuer reads this off it, so a mid-stream failure still preserves the tokens
 #: actually delivered (they count toward the in-span energy denominator).
 PARTIAL_COMPLETION_ATTR = "llem_partial_completion"
@@ -471,7 +467,7 @@ class HttpxTransport:
     request's ``payload`` the JSON body.
 
     Each call POSTs the payload with ``stream: true`` and counts the streamed
-    response deltas CLIENT-SIDE (O8): one output-token receipt timestamp per
+    response deltas CLIENT-SIDE: one output-token receipt timestamp per
     content delta, measured identically for every engine here so the J/token
     denominator is engine-agnostic. It returns a :class:`CompletionResult`
     carrying those receipts (for TTFT / ITL / the denominator) plus the engine's
@@ -556,8 +552,8 @@ class HttpxTransport:
                         )
         except BaseException as exc:
             # A connection reset, read-timeout between deltas, malformed chunk, or
-            # a drain cancellation must not discard the tokens already delivered
-            # (H1): attach the partial and re-raise unchanged (both Exception and
+            # a drain cancellation must not discard the tokens already delivered:
+            # attach the partial and re-raise unchanged (both Exception and
             # BaseException/cancellation paths). The issuer stashes it on the record.
             setattr(exc, PARTIAL_COMPLETION_ATTR, snapshot())
             raise

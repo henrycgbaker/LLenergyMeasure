@@ -1,46 +1,47 @@
-"""Server-mode measurement session - the C1/C3 sibling of the offline sessions.
+"""Server-mode measurement session - the sibling of the offline sessions.
 
 A :class:`ServerSession` is one online-serving measurement session, the
-one-dispatch:N-results consumer the F6 ``ExperimentSession`` seam was built for
-(constraint C3). Its context-manager lifetime mirrors the offline
+one-dispatch:N-results consumer the ``ExperimentSession`` seam was built for.
+Its context-manager lifetime mirrors the offline
 ``SubprocessSession`` / ``DockerSession``:
 
-- ``__enter__`` LAUNCHES the engine server (SM6 ``ServerCapable.launch``) and
+- ``__enter__`` LAUNCHES the engine server (``ServerCapable.launch``) and
   drives it to READY (``await_ready`` with a real probe request whose SHAPE is
-  drawn from the measured traffic distribution, SM8 ``build_probe_request``),
+  drawn from the measured traffic distribution, via ``build_probe_request``),
   then marks the experiment running. A failure DURING acquisition releases the
   partially-launched server and re-raises, so a failed launch never leaks.
-- ``run()`` drives the SM7 :class:`WindowManager` over the level(s) the session
-  was built for, per level: the SM8 ``ServerWarmup`` hook runs once, the ramp is
+- ``run()`` drives the :class:`WindowManager` over the level(s) the session
+  was built for, per level: the ``ServerWarmup`` hook runs once, the ramp is
   excluded prospectively, ``windows_per_level`` contiguous measured windows
   produce one result each, and the traffic drains for latency. It returns a
   :class:`ServerSessionResult` carrying the N window results (one per window)
   with each level's warmup outcome stamped in - the "N results over one lifetime"
-  shape (C3). A rate sweep maps to multiple levels (C4); v0.7 feeds one level per
-  dispatch (session grouping of a rate sweep is SM10, not foreclosed here).
+  shape. A rate sweep maps to multiple levels; v0.7 feeds one level per
+  dispatch (session grouping of a rate sweep is deferred, not foreclosed here).
 - ``__exit__`` SHUTS the server down (idempotent, leak-free) and runs the
   drain-finalize, exactly once on the normal, SIGINT, and exception paths alike
-  (the F6 session-hardening invariant).
+  (the session-hardening invariant).
 
 The measurement loop runs IN-PROCESS on the host (the traffic issuer + the
 host-side NVML energy/thermal sampling); only the engine SERVER runs
 out-of-process (a sibling container or a host subprocess). No serialized config
-crosses a process boundary for the measurement, so the R7W resolved-warmup
+crosses a process boundary for the measurement, so the resolved-warmup
 side-channel (an ``ExperimentConfig`` PrivateAttr that JSON would drop) is read
-directly in-process via ``resolved_server_warmup()`` - the SM9/SM12 serialization
+directly in-process via ``resolved_server_warmup()`` - the serialization
 contract holds structurally, and the server itself never consumes the resolved
 warmup (warmup traffic is host-driven).
 
-Contract notes satisfied here (banked from SM7/SM8/R7W delivery):
+Contract notes satisfied here:
 
 1. ISSUANCE HORIZON: the level's traffic source issues across the whole level -
    ``ramp_exclusion + windows_per_level * window_seconds`` - as one continuous
    run (the manager owns window timing and never resizes the schedule).
-2. TOKEN RECEIPTS: client-side counts flow through the SM7 ``TokenReceiptFn``
-   seam so the energy denominator and the stability gate receive counts. The
-   canonical count is llem's OWN count of the streamed response deltas
-   (``client_token_receipts`` reading each transport ``CompletionResult``),
-   measured identically for every engine (O8); the engine's self-reported usage
+2. TOKEN RECEIPTS: client-side counts flow through the window manager's
+   ``TokenReceiptFn`` seam so the energy denominator and the stability gate
+   receive counts. The canonical count is llem's OWN count of the streamed
+   response deltas (``client_token_receipts`` reading each transport
+   ``CompletionResult``), measured identically for every engine; the engine's
+   self-reported usage
    rides as auxiliary provenance in ``requests.parquet`` and the per-window
    provenance, never as the denominator. The mechanism is disclosed in
    ``token_counting`` (``TOKEN_COUNTING_CLIENT_STREAMED``).
@@ -114,7 +115,7 @@ logger = logging.getLogger(__name__)
 
 #: The OpenAI-compatible completions endpoint every v0.7 server engine exposes.
 #: vLLM (``/v1/completions``) and TRT-LLM (``/v1/completions``) agree, and
-#: transformers is E5-gated out of server mode, so a session-layer constant is
+#: transformers is gated out of server mode, so a session-layer constant is
 #: the minimal faithful encoding; a future non-OpenAI engine would promote this
 #: to a ``ServerCapable`` member (flagged).
 SERVING_COMPLETIONS_PATH = "/v1/completions"
@@ -141,7 +142,7 @@ __all__ = [
 
 # ---------------------------------------------------------------------------
 # Result types (the session's product - the N window results + provenance).
-# SM10 persists these as per-window bundles; here they are the in-memory shape.
+# These are persisted as per-window bundles; here they are the in-memory shape.
 # ---------------------------------------------------------------------------
 
 
@@ -149,8 +150,9 @@ __all__ = [
 class ServerWindowResult:
     """One measured window's result, with the level's warmup provenance stamped in.
 
-    The per-window unit SM10 turns into one bundle. ``warmup`` /
-    ``pre_window_protocol`` are the D6 divergence label (SM12/SM14 render the
+    The per-window unit the persistence layer turns into one bundle. ``warmup`` /
+    ``pre_window_protocol`` are the cross-mode divergence label (the derived-metrics
+    overlay and the server-mode docs render the
     offline-vs-server pre-window difference); they are identical across a level's
     windows (one warmup per level) but stamped per window so the persistence layer
     (which never learns sessions exist) has them locally. ``cap_bound_fraction`` is
@@ -169,15 +171,15 @@ class ServerWindowResult:
 class ServerLevelResult:
     """One rate level's product: its windows + steady-state verdict + warmup outcome.
 
-    ``validation`` is the SM7 window-to-window J/token gate verdict, or ``None``
+    ``validation`` is the window-to-window J/token gate verdict, or ``None``
     when the level failed before it could run (aborted / warmup-failed).
     ``invalid_reason`` names the failure site when the level did not complete
     cleanly (never dropped - recorded invalid-with-reason, contract 3).
     ``completed_cores`` holds the RAW measured cores of a failed level's
-    cleanly-closed windows (O7.4): full per-window bookkeeping was lost with the
+    cleanly-closed windows: full per-window bookkeeping was lost with the
     abort, so no synthetic ``ServerWindowResult`` is built, but the measured GPU
-    energy is preserved and counted in the session total. SM10 decides their
-    bundle fate (drain-fields-null semantics).
+    energy is preserved and counted in the session total. The persistence layer
+    decides their bundle fate (drain-fields-null semantics).
     """
 
     level_index: int
@@ -200,9 +202,9 @@ class ServerSessionResult:
 
     The session's internal return type. ``valid`` is True iff at least one level
     passed its stability gate. ``token_counting`` names the client-side counting
-    mechanism whose count is the J/token denominator (``TOKEN_COUNTING_CLIENT_STREAMED``,
-    O8). ``experiment_results`` / ``result_files`` are the per-window bundles the
-    session persisted (SM10): the mapped ExperimentResults that enter
+    mechanism whose count is the J/token denominator
+    (``TOKEN_COUNTING_CLIENT_STREAMED``). ``experiment_results`` / ``result_files``
+    are the per-window bundles the session persisted: the mapped ExperimentResults that enter
     ``StudyResult.experiments`` and their on-disk paths - orchestration consumes
     these (there is no experiments=None side-channel any more).
     """
@@ -227,7 +229,7 @@ class ServerSessionResult:
 
 
 # ---------------------------------------------------------------------------
-# Token-receipt seam wiring (contract 2, O8). The CANONICAL denominator is the
+# Token-receipt seam wiring (contract 2). The CANONICAL denominator is the
 # client-side count of the streamed response deltas the transport captured on
 # each RequestRecord.result (a CompletionResult), one receipt timestamp per
 # streamed token. Token-granular, so the window manager counts tokens RECEIVED
@@ -238,12 +240,12 @@ class ServerSessionResult:
 
 
 def client_token_receipts(record: RequestRecord) -> Sequence[float]:
-    """Return a request's client-counted output-token receipt timestamps (O8).
+    """Return a request's client-counted output-token receipt timestamps.
 
     The monotonic receipt time of each streamed content delta, as the transport
     counted them in its own callback (identical across engines). Receipts are
     returned for a request whose ``result`` carries them REGARDLESS of terminal
-    status (H1): a request that streamed tokens in-span then died still delivered
+    status: a request that streamed tokens in-span then died still delivered
     that compute, so its tokens must count in the denominator (physics: J/token is
     energy over tokens DELIVERED in-span). The transport preserves the partial
     receipts of a mid-stream failure on the record, so error / timeout requests
@@ -284,13 +286,13 @@ def _attribute_window(issued_at: float, span_ends: Sequence[float]) -> int:
 def _build_request_row(
     record: RequestRecord, *, window: WindowRecord, level_index: int, ramp_boundary: float
 ) -> RequestLogRow:
-    """Build one request-log row from a request record and its owning window (D7).
+    """Build one request-log row from a request record and its owning window.
 
     Raw-record discipline: every column states its physical fact when it exists and
     is null only when it does not - the row does not filter or judge by status
-    (that is SM12's consumer-side job). The client receipt series
+    (that is the consumer's job). The client receipt series
     (``output_token_times`` / ``client_output_tokens``) is carried for ALL statuses
-    (H1: a mid-stream failure still delivered those tokens, preserved on the
+    (a mid-stream failure still delivered those tokens, preserved on the
     record). ``first_token_at`` / ``ttft_ms`` are the real first-token receipt and
     latency whenever a token physically arrived (so an error / timeout row that
     streamed keeps them, matching ``output_token_times[0]``); ``finish_reason`` is
@@ -307,7 +309,7 @@ def _build_request_row(
     in_window = boundaries.span_start <= issued_at <= boundaries.span_end
     # Raw physical facts, no status gate: first_token_at is real whenever a token
     # arrived (it IS output_token_times[0]); finish_reason is real only when a
-    # finish chunk arrived (null on a mid-stream death). SM12 filters by status.
+    # finish chunk arrived (null on a mid-stream death). The consumer filters by status.
     first_token_at = completion.first_token_at if completion is not None else None
     finish_reason = completion.finish_reason if completion is not None else None
     return RequestLogRow(
@@ -330,7 +332,7 @@ def _build_request_row(
         in_measurement_window=in_window,
         # Only window 0 carries the level's prospective ramp (issued before its span).
         is_ramp=issued_at < ramp_boundary,
-        # D7 straddler: issued in-span, completing in the post-span drain tail.
+        # Straddler: issued in-span, completing in the post-span drain tail.
         completed_in_drain=(
             in_window and completed_at is not None and completed_at > boundaries.span_end
         ),
@@ -344,18 +346,18 @@ def build_request_rows_by_window(
     *,
     level_index: int,
 ) -> list[list[RequestLogRow]]:
-    """Partition a level's issued requests into per-window request-log rows (D7).
+    """Partition a level's issued requests into per-window request-log rows.
 
     Returns one row list per window, aligned to ``windows`` order. Every record is
     attributed to EXACTLY ONE window by issue time so none is dropped: window 0
     owns everything issued up to its span_end (so the level's prospective ramp
     requests ride in window 0 flagged ``is_ramp``); window ``i`` owns records
     issued after window ``i-1``'s span_end through its own span_end. Per-row flags
-    follow the D7 boundary policies: ``in_measurement_window`` (issued in the
+    follow the boundary policies: ``in_measurement_window`` (issued in the
     window's [span_start, span_end]), ``is_ramp`` (issued before window 0's
     span_start), and ``completed_in_drain`` (issued in-span, completing past
-    span_end). Timestamps are the issuer's ``time.monotonic`` basis (SM12 derives
-    every latency as a difference).
+    span_end). Timestamps are the issuer's ``time.monotonic`` basis (the consumer
+    derives every latency as a difference).
     """
     if not windows:
         return []
@@ -394,7 +396,7 @@ def _sum_server_completion_tokens(rows: Sequence[RequestLogRow]) -> int | None:
 # Request-shape source: OpenAI completions payloads drawn from the config's
 # dataset prompts (the minimal faithful shape so warmup + measurement + probe all
 # drive the path they measure; the streaming flags + client-side token counting
-# are added by the transport, SM11, not the shape).
+# are added by the transport, not the shape).
 # ---------------------------------------------------------------------------
 
 
@@ -522,7 +524,7 @@ async def _drive_levels(
     recorded invalid-with-reason and the session continues (contract 3), so one
     bad level never crashes the study (mirrors the offline DockerError path).
 
-    ``on_level`` is invoked with each clean outcome AS the level closes (SM10: a
+    ``on_level`` is invoked with each clean outcome AS the level closes (a
     level's window bundles are persisted at level close so a later interrupt cannot
     lose them). It runs between levels while no traffic is in flight; a failure in
     it is logged and never crashes the drive.
@@ -539,7 +541,7 @@ async def _drive_levels(
                 await sleep(cooldown_seconds)
             if on_level_start is not None:
                 # Per-cell manifest lifecycle: mark this level's cell running as its
-                # level opens (SM10). A hook failure must not crash the drive.
+                # level opens. A hook failure must not crash the drive.
                 try:
                     on_level_start(level_index)
                 except Exception:
@@ -551,7 +553,7 @@ async def _drive_levels(
                 outcome = await manager.run_level(level_index, level)
                 outcomes_out.append(outcome)
                 if on_level is not None:
-                    # Persist this level's window bundles at level close (SM10). A
+                    # Persist this level's window bundles at level close. A
                     # persistence failure must not crash the drive; it is logged.
                     try:
                         on_level(outcome)
@@ -619,16 +621,16 @@ async def _drive_levels(
 
 
 # ---------------------------------------------------------------------------
-# ServerSession - the C1/C3 sibling context manager.
+# ServerSession - the sibling context manager (of the offline sessions).
 # ---------------------------------------------------------------------------
 
 
 @dataclass
 class ServerCell:
-    """One grid point folded into a session: a config + its identity (O7.3).
+    """One grid point folded into a session: a config + its identity.
 
     A session groups grid points that are identical except ``server.traffic.rate``
-    (rate is identity per C4). Each cell drives ONE rate level of the session and
+    (rate is identity). Each cell drives ONE rate level of the session and
     owns its own declared-config hash and cycle, so its window bundles land under
     its own grid-point hash and its manifest entry resolves per-cell.
     """
@@ -645,7 +647,7 @@ class ServerSession:
     resolved runner spec); ``engine`` is injectable for tests, else resolved from
     the config. A session drives ONE or MORE grid points (cells) over one server
     lifetime: a single-cell session is one grid point; a grouped session folds
-    consecutive rate-only-varying cells (O7.3) into one launch with a rate level
+    consecutive rate-only-varying cells into one launch with a rate level
     per cell. The seam-building methods (``_make_shape_source`` / ``_make_transport``
     / ``_make_energy_sink`` / ``_make_sampler_factory``) are small and overridable
     so unit tests exercise ``run()`` with fakes.
@@ -663,7 +665,7 @@ class ServerSession:
         engine: ServerCapable | None = None,
         cells: list[ServerCell] | None = None,
     ) -> None:
-        # A single-cell session is the degenerate group of one (O7.1). ``config`` /
+        # A single-cell session is the degenerate group of one. ``config`` /
         # ``config_hash`` / ``cycle`` remain the FIRST cell's for the shared launch
         # (model/engine are identical across members; only rate differs) and for the
         # existing single-cell call sites; ``cells`` carries the per-rate-level grid
@@ -682,7 +684,7 @@ class ServerSession:
         self._torn_down = False
         self._exp_start = 0.0
         # Session identity + phase raws (the SessionBlock stamped into every window
-        # bundle of this session; O7.2). One session id per session realisation.
+        # bundle of this session). One session id per session realisation.
         self._session_id = uuid.uuid4().hex
         self._level_count = 0
         self._window_count = 0
@@ -692,7 +694,7 @@ class ServerSession:
         self._drain_energy_j: float | None = None
         self._interrupted = False
         # Per-window bundle writers, held from level-close write until session close
-        # so the drain raws patch + finalize sweep run once per bundle (O7.4).
+        # so the drain raws patch + finalize sweep run once per bundle.
         self._pending_writers: list[BundleWriter] = []
         # The mapped per-window ExperimentResults + their on-disk paths, surfaced on
         # the session result so orchestration enters them into StudyResult (point 6).
@@ -700,7 +702,7 @@ class ServerSession:
         self._result_files: list[str] = []
         # Each level's representative bundle rel-path for the manifest result_file.
         self._level_result_file: dict[int, str] = {}
-        # Per-cell resolved-config hash cache (the config.json sidecar's R7W
+        # Per-cell resolved-config hash cache (the config.json sidecar's
         # realised-protocol provenance; computed once per grid point).
         self._resolved_hash_cache: dict[str, str | None] = {}
         # Runner provenance is fixed for the session lifetime (self.spec is), so it
@@ -723,7 +725,7 @@ class ServerSession:
         index: int,
         engine: ServerCapable | None = None,
     ) -> ServerSession:
-        """Build a session over a grid-point group (O7.3): one rate level per cell."""
+        """Build a session over a grid-point group: one rate level per cell."""
         first = cells[0]
         return cls(
             runner,
@@ -754,7 +756,7 @@ class ServerSession:
 
             # Launch-to-ready is ONE instrumented phase (model load rides inside it):
             # bracket the launch + readiness with the SAME MeasurementBracket the
-            # windows use (C2), so the session block carries the launch duration and
+            # windows use, so the session block carries the launch duration and
             # GPU energy. Host-side NVML samples the GPU regardless of whether the
             # server is a sibling container or a host subprocess (co-located v0.7).
             def _launch_to_ready() -> None:
@@ -836,9 +838,9 @@ class ServerSession:
             return None
         self._torn_down = True
         # Clean close = no exception propagating AND not interrupted: only then is
-        # the drain measured and its raws patched into the sibling bundles (O7.4).
+        # the drain measured and its raws patched into the sibling bundles.
         clean = exc_type is None and not self._interrupted
-        # Teardown is best-effort AS A WHOLE (F6 session-hardening posture): a fault
+        # Teardown is best-effort AS A WHOLE (the session-hardening posture): a fault
         # in cleanup must never convert a completed measurement into a failure by
         # escaping to the dispatch site. It is logged LOUDLY, never swallowed
         # silently. KeyboardInterrupt / SystemExit (BaseException) still propagate.
@@ -867,12 +869,12 @@ class ServerSession:
         levels = self._build_level_results(outcomes, failures, warmup_by_level)
         # Clean levels wrote their window bundles at level close (the on_level hook);
         # now flush each failed level's preserved abort cores as degraded-but-truthful
-        # bundles (energy core present, boundary/bookkeeping null, O7.4).
+        # bundles (energy core present, boundary/bookkeeping null).
         self._persist_abort_cores(levels)
         # Attach a uniform session block (final totals, drain null) to the in-memory
         # mapped results so StudyResult.experiments reads one shape. The drain raws are
         # a post-return session-close measurement (stamped only into the on-disk
-        # bundles, which are the system of record - O7.5).
+        # bundles, which are the system of record).
         close_block = self._build_session_block(final=False)
         self._experiment_results = [
             r.model_copy(update={"session": close_block}) for r in self._experiment_results
@@ -903,7 +905,7 @@ class ServerSession:
             # Credit cleanly-closed levels now (their outcome is known and their
             # bundles are persisted+finalized), so resume does not re-run them and
             # duplicate their bundles; in-flight / aborted / unreached cells stay
-            # running for the sweep loop's mark_interrupted downgrade (M3).
+            # running for the sweep loop's mark_interrupted downgrade.
             self._resolve_manifest_per_cell(
                 levels, aborted=aborted, abort_reason=abort_reason, interrupted=True
             )
@@ -923,7 +925,7 @@ class ServerSession:
             # "cells" carries the group size so _count_outcomes counts a fully-invalid
             # grouped session (warmup-abort or no-valid-window) as its N failed cells,
             # not one. The launch-failure dict in runner._run_one_server_group already
-            # carries it (M4); this producer path was the gap. A single-cell session has
+            # carries it; this producer path was the gap. A single-cell session has
             # len == 1, matching the dict's default.
             return {"type": error_type, "message": message, "cells": len(self._cells)}
 
@@ -960,12 +962,12 @@ class ServerSession:
             )
         for failure in failures:
             warmup = warmup_by_level.get(failure.level_index)
-            # A failed level keeps its cleanly-closed cores RAW (O7.4): full
+            # A failed level keeps its cleanly-closed cores RAW: full
             # per-window bookkeeping was lost with the abort (the traffic report is
             # gone once the issuer task was cancelled), so no ServerWindowResult is
             # built, but the measured cores are preserved on the level result and
-            # their energy still counts toward the session total. SM10 owns their
-            # bundle fate (drain-fields-null).
+            # their energy still counts toward the session total. The persistence
+            # layer owns their bundle fate (drain-fields-null).
             by_level[failure.level_index] = ServerLevelResult(
                 level_index=failure.level_index,
                 spec=None,
@@ -1002,7 +1004,7 @@ class ServerSession:
             return "; ".join(gate)
         return "the server session produced no valid measured window."
 
-    # -- persistence (per-window bundles, SM10) ------------------------------
+    # -- persistence (per-window bundles) ------------------------------------
 
     def _persist_clean_level(self, outcome: LevelOutcome) -> None:
         """Persist one clean level's window bundles at level close (the on_level hook).
@@ -1011,8 +1013,7 @@ class ServerSession:
         the manager + manifest logic without a bundle root). Each window maps to one
         ExperimentResult (serving_mode="server") and is written through the existing
         BundleWriter path; the level's issued requests are partitioned per window
-        into requests.parquet (SM11), and finalize is deferred to session close
-        (O7.4).
+        into requests.parquet, and finalize is deferred to session close.
         """
         if getattr(self._runner, "study_dir", None) is None:
             return
@@ -1107,17 +1108,17 @@ class ServerSession:
         there is no in-container staging directory. The runner block still carries
         the image provenance. config.json is written host-side directly (the
         declared config + declared/resolved hashes; the observed half is
-        container-boundary state deferred to SM12), and the timeseries parquet -
+        container-boundary state, deferred), and the timeseries parquet -
         when the window core carried samples - is written directly into the bundle
         from those in-memory samples via the same writer the offline harness uses
         (no new sampling machinery).
 
-        ``request_rows`` is the window's per-request log (SM11): a list (possibly
+        ``request_rows`` is the window's per-request log: a list (possibly
         empty) writes requests.parquet via the registry writer method; ``None`` (a
         degraded abort core, whose bookkeeping was lost) writes none and suppresses
         the finalize backstop for that server bundle. ``request_span`` is the
         window's measured monotonic (span_start, span_end), stored as file metadata
-        so the receipt-unclipped rows are re-clippable offline (M1). A parquet-write
+        so the receipt-unclipped rows are re-clippable offline. A parquet-write
         hiccup is swallowed so the finalize sweep reports the missing artefact
         loudly rather than crashing persistence.
         """
@@ -1181,7 +1182,7 @@ class ServerSession:
         """Write the per-window config.json host-side (declared config + hashes).
 
         Server bundles carry a config.json like offline bundles so the resolved
-        config hash (the R7W realised-protocol provenance the resume guard keys on)
+        config hash (the realised-protocol provenance the resume guard keys on)
         lands on disk and a config.json glob over the results does not fork on
         serving mode. The OBSERVED half (observed_engine_params /
         observed_sampling_params / observed_config_hash) and the running
@@ -1259,7 +1260,7 @@ class ServerSession:
         cleanly-CLOSED levels (validation resolved) are credited now - their outcome
         is known and their bundles are finalized, so resume must not re-run them;
         in-flight, aborted, and unreached cells stay running for the sweep loop's
-        mark_interrupted downgrade (M3).
+        mark_interrupted downgrade.
         """
         levels_by_index = {level.level_index: level for level in levels}
         error_type = "WarmupTrafficError" if aborted else "ServerSessionInvalid"
@@ -1334,20 +1335,20 @@ class ServerSession:
         output tokens, window duration, J/token) and derives the server-distinct
         metrics (latency percentiles, throughput, attainment/slo overlay, goodput,
         energy-at-operating-point) from the SAME ``request_rows`` that feed
-        requests.parquet, with no re-sampling (SM12). ``output_tokens`` is the
-        client-side canonical count (span-received streamed deltas, O8); prefill
+        requests.parquet, with no re-sampling. ``output_tokens`` is the
+        client-side canonical count (span-received streamed deltas); prefill
         tokens are None (client-side input-token counting is post-v0.7 - the engine's
         prompt_tokens ride only in requests.parquet), and total_tokens is therefore
         None too (input + output is undefined while input is uncounted). The counting
         mechanism and the auxiliary server-reported total are disclosed in the server
-        provenance. Identity is the CELL's grid-point hash (rate is identity per C4),
+        provenance. Identity is the CELL's grid-point hash (rate is identity),
         so the bundle lands under its own hash.
 
         The SLO overlay inside the derived metrics is a PURE function of the rows and
-        the configured bounds (O5.3): the bounds only classify the window post-hoc,
+        the configured bounds: the bounds only classify the window post-hoc,
         so they never entered its identity, and the overlay is re-derivable offline
-        against any bounds. Latency metrics filter status=="ok" and are drain-inclusive
-        (D7); the token/energy denominators are the already-clipped window figures
+        against any bounds. Latency metrics filter status=="ok" and are drain-inclusive;
+        the token/energy denominators are the already-clipped window figures
         (avg_tokens_per_second, window_j_per_token) reused, never recomputed.
         """
         from llenergymeasure.domain.experiment import ExperimentResult
@@ -1466,7 +1467,7 @@ class ServerSession:
     def _slo_bounds(config: ExperimentConfig) -> SloBounds | None:
         """Project the config's slo bounds into the pure overlay input (None when unset).
 
-        The slo bounds are a post-hoc overlay excluded from both hash families (O5.3);
+        The slo bounds are a post-hoc overlay excluded from both hash families;
         they only classify the derived metrics, so they are read here and passed to
         the pure derivation, never folded into the window's identity.
         """
@@ -1567,8 +1568,8 @@ class ServerSession:
         when the bracket cannot be constructed / entered / finished (e.g. no GPU /
         energy backend on the host), with one warning - it does NOT abort the phase.
         Only an exception raised by ``run`` itself propagates (a launch/drain failure
-        must still fail). This reuses the SAME bracket machinery the windows use
-        (C2); windows, unlike these phases, legitimately hard-require the backend.
+        must still fail). This reuses the SAME bracket machinery the windows use;
+        windows, unlike these phases, legitimately hard-require the backend.
         """
         start = time.monotonic()
         bracket: MeasurementBracket | None = None
@@ -1723,7 +1724,7 @@ class ServerSession:
         )
 
     def _make_level_plans(self, shape_source: ShapeSource, transport: Transport) -> list[LevelPlan]:
-        # One level per cell (O7.3): a grouped session's cells differ only in
+        # One level per cell: a grouped session's cells differ only in
         # server.traffic.rate, so each drives its own rate level over the shared
         # server lifetime. A single-cell session yields exactly one plan (unchanged).
         plans: list[LevelPlan] = []
@@ -1825,11 +1826,11 @@ class ServerSession:
         """Shut the server down + drain-finalise; runs exactly once from __exit__.
 
         Idempotent and best-effort (it runs on the normal, SIGINT, and exception
-        paths). The engine's ``shutdown`` is itself idempotent + leak-free (SM6),
+        paths). The engine's ``shutdown`` is itself idempotent + leak-free,
         so a double invocation is a no-op; the transport's connection pool is
         closed too so a launched-but-never-run session leaks nothing.
 
-        On a CLEAN close the server shutdown IS the session drain phase (D19: the
+        On a CLEAN close the server shutdown IS the session drain phase (the
         drain is an event-delineated phase, not a clock-diff reconstruction), so it
         is bracketed for duration + energy and those raws are patched into every
         sibling bundle before finalize. On the interrupted / exception path the
@@ -1871,7 +1872,7 @@ class ServerSession:
         The window bundles were written at level close carrying a PRELIMINARY
         session block (drain null, counts not yet final). On a clean close the drain
         raws and final totals are now known, so the complete block is patched into
-        each sibling before its finalize sweep (O7.4/O7.5). On the interrupted path
+        each sibling before its finalize sweep. On the interrupted path
         the drain patch is skipped (fields stay null) and the bundles are finalized
         as written.
         """
@@ -1881,7 +1882,7 @@ class ServerSession:
         # finalize, so all siblings carry the FINAL window/level counts (not the
         # incremental preliminary window_count they were written with). The drain
         # raws are included ONLY on a clean close (final=clean); they stay null on
-        # the interrupt path (O7.4). The block build is the one non-trivial call on
+        # the interrupt path. The block build is the one non-trivial call on
         # this otherwise fully-defensive teardown path, so it is guarded: a fault
         # degrades to unpatched-but-finalized bundles rather than escaping (which
         # would flip completed manifest entries to failed).
@@ -1917,7 +1918,7 @@ class ServerSessionError(Exception):
 
 
 # ---------------------------------------------------------------------------
-# Session grouping (O7.3): partition the ordered study into dispatch units.
+# Session grouping: partition the ordered study into dispatch units.
 # ---------------------------------------------------------------------------
 
 
@@ -1925,7 +1926,7 @@ def _group_key(config: ExperimentConfig) -> str:
     """Canonical identity of a server config with server.traffic.rate stripped.
 
     Two server configs fold into one session iff they are identical except
-    ``server.traffic.rate`` (rate is identity per C4), so the group key is the
+    ``server.traffic.rate`` (rate is identity), so the group key is the
     JSON-stable declared dump minus that field (and minus ``slo``, already excluded
     from identity as a post-hoc overlay - so an slo-only difference never splits a
     group either).
@@ -1937,7 +1938,7 @@ def _group_key(config: ExperimentConfig) -> str:
 
 
 def partition_server_groups(configs: Sequence[ExperimentConfig]) -> list[list[int]]:
-    """Partition the ordered configs into dispatch units by session grouping (O7.3).
+    """Partition the ordered configs into dispatch units by session grouping.
 
     Returns a list of units, each a list of indices into ``configs``, in order and
     never reordered. A unit is either a single cell (an offline experiment, or a
@@ -2082,7 +2083,7 @@ def _sum_window_energy(levels: list[ServerLevelResult]) -> float | None:
                 seen = True
         # A failed level's preserved raw cores (no ServerWindowResult) still carry
         # measured GPU energy: fold it in so the session total does not silently
-        # drop it (contract 3 / O7.4).
+        # drop it (contract 3).
         for core in level.completed_cores:
             energy = _core_energy_j(core)
             if energy is not None:

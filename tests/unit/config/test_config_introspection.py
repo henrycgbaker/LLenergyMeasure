@@ -63,7 +63,7 @@ def test_get_engine_params_tensorrt_returns_params():
     assert "tensorrt.engine_params.quant_config" in params
     assert "tensorrt.engine_params.kv_cache_config" in params
     assert "tensorrt.engine_params.scheduler_config" in params
-    # build_cache and calib sub-configs dropped (D1/D3); return_perf_metrics dropped (D1)
+    # build_cache and calib sub-configs dropped; return_perf_metrics dropped
     assert "tensorrt.build_cache.max_records" not in params
     assert "tensorrt.sampling.return_perf_metrics" not in params
     # New fields from C.2

@@ -1296,12 +1296,12 @@ def test_pipe_direction_parent_reads_child_writes() -> None:
 
 
 # =============================================================================
-# Pipe FD leak fix (C4)
+# Pipe FD leak fix
 # =============================================================================
 
 
 def test_parent_conn_closed_after_collect_result(study_config: StudyConfig) -> None:
-    """parent_conn.close() is called after _collect_result returns (C4 FD leak fix).
+    """parent_conn.close() is called after _collect_result returns (FD leak fix).
 
     The write-end (child_conn) is closed before p.start(); the read-end
     (parent_conn) must be closed after result collection to avoid leaking
