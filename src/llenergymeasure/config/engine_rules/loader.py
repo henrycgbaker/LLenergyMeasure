@@ -64,7 +64,7 @@ Source = Literal["deterministic_miner", "analyst", "manual", "migrated"]
   ``file:line``, then confirmed by the verification ladder.
 - ``manual``              - hand-encoded by a maintainer for cases the
   automated proposers cannot reach.
-- ``migrated``            - carried in from an earlier corpus topology.
+- ``migrated``            - carried over from an earlier version of the rules corpus.
 """
 
 Verified = Literal["construction", "runtime", "human"]

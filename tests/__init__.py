@@ -1,1 +1,1 @@
-"""Tests for LLM Bench."""
+"""Tests for LLenergyMeasure."""

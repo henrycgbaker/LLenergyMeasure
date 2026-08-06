@@ -1,4 +1,4 @@
-"""Domain models for LLM Bench."""
+"""Domain models for LLenergyMeasure."""
 
 from llenergymeasure.domain.experiment import (
     AggregationMetadata,

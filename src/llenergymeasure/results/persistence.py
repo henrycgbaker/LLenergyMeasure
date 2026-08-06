@@ -1,4 +1,4 @@
-"""v3.0 results persistence - save, load, atomic writes.
+"""Results persistence - save, load, atomic writes.
 
 Handles directory lifecycle, collision avoidance,
 JSON serialisation (primary), and Parquet sidecar management.

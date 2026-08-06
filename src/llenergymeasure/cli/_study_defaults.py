@@ -24,8 +24,8 @@ def build_study_cli_overrides(yaml_execution: dict[str, Any]) -> dict[str, Any]:
     ``n_cycles=3`` and ``experiment_order="shuffle"`` are injected only when the
     YAML ``study_execution`` block does not set them; the Pydantic model defaults
     are intentionally more conservative (n_cycles=1). These are unconditional
-    research defaults, not flag overrides - the semantic-override flags were
-    removed and the YAML is the source of truth for anything it declares.
+    research defaults, not flag overrides; the YAML is the source of truth for
+    anything it declares.
     """
     exec_overrides: dict[str, Any] = {}
     if "n_cycles" not in yaml_execution:

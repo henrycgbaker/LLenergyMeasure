@@ -58,7 +58,7 @@ Propose engine rule set entries from runtime observations
 | `--study-dir` |  | path |  | Study directory to scan. Repeat the flag to pass multiple. |
 | `--engine` |  | str |  | Filter: only propose rules for this engine (transformers/vllm/tensorrt). |
 | `--out` |  | path |  | Output path for proposed YAML fragments (one YAML document per gap, separated by '---'). |
-| `--include-exceptions` |  | flag | `false` | Also propose rules from runtime exceptions. Disabled by default; exceptions ship through a different review path. |
+| `--include-exceptions` |  | flag | `false` | Also propose rules from runtime exceptions. Disabled by default; when off, exception records are skipped and only warning and log emissions are proposed. |
 | `--verbose` | `-v` | int | `0` | Increase verbosity (-v=INFO, -vv=DEBUG) |
 
 ### `llem study`
