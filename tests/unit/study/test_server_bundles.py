@@ -999,7 +999,7 @@ class TestMidLevelAbort:
         for bundle in bundles:
             payload = _read(bundle / RESULT_FILENAME)
             assert payload["server"]["level_valid"] is False
-            # A degraded abort-core bundle has no within-window diagnostic.
+            # A bundle written after an abort has no within-window diagnostic.
             assert payload["server"]["intra_window_cov"] is None
             # Its issuer report was lost with the abort, so the cap disclosure is null.
             assert payload["server"]["cap_bound_fraction"] is None

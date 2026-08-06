@@ -170,8 +170,8 @@ class ServerWindowProvenance(BaseModel):
         description="Fraction of the level's scheduled issuances whose dispatch the concurrency "
         "cap delayed beyond a small tolerance (or that were never dispatched). 0.0 when the level "
         "ran uncapped or the cap never materially bound. Level-wide, so every window of a level "
-        "carries the same value. None for a degraded abort-core bundle, whose issuer report was "
-        "lost with the abort. The cap stays legal (a hashed user choice); this stamps its effect "
+        "carries the same value. None when the level aborted before its issuer report was "
+        "recorded. The cap stays legal (a hashed user choice); this stamps its effect "
         "for result provenance.",
     )
     token_counting: str = Field(
