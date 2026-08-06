@@ -196,6 +196,19 @@ def render_markdown(schema: dict[str, Any]) -> str:
         "Full reference for all `ExperimentConfig` fields.",
         "All fields except `model` are optional and have sensible defaults.",
         "",
+        "**Config identity and hashing.** Each experiment carries three config hashes: "
+        "the *declared* hash digests the fields you wrote in the YAML config (user "
+        "intent); the *resolved* hash digests the config after the engine applies its "
+        "own defaults and normalisation (what the run actually uses); and the *observed* "
+        "hash digests the config as the live library reports it after construction (the "
+        "resolved and observed hashes project the same values at present). The declared "
+        "hash and the resolved/observed hashes form two separate hash *families* that "
+        "never intersect. The *mode_section* is the active serving mode's slice of that "
+        "identity - in server mode the traffic spec (minus the post-hoc SLO bounds), the "
+        "warmup protocol, and the inter-level cooldown; in offline mode the warmup block "
+        "- so a rate or warmup sweep produces distinct hashes while two runs differing "
+        "only in SLO bounds deduplicate together.",
+        "",
     ]
 
     # Table of contents

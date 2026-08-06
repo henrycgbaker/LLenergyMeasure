@@ -191,7 +191,7 @@ Concrete near-term directions:
   generated tokens produces something near 10x energy variance, yet
   the resulting distribution is not well-summarised by a single
   mean-energy-per-call figure.
-- **Agentic harnesses.** Open-source agent harnesses are appearing in increasing; these tool-use chains, re-prompting scaffolds, and
+- **Agentic harnesses.** Open-source agent harnesses are appearing in increasing numbers; these tool-use chains, re-prompting scaffolds, and
   verifier passes turn a single user request into many model calls
   with adaptive depth. Implementation detail dominates energy budgets
   even more than in the single-pass case, and the unit of useful

@@ -33,7 +33,7 @@ uv sync --dev --extra zeus --extra codecarbon
 The dispatch path for experiments goes through `docker_runner.py`, which
 bind-mounts the project source + a tiny entrypoint script + the host's
 runtime-deps cache into the container. The image tag is derived from the
-SSOT (`engine_versions/{engine}/current.yaml`); the framework code is bind-mounted
+single source of truth (SSOT) in `engine_versions/{engine}/current.yaml`; the framework code is bind-mounted
 rather than baked.
 
 ```bash
@@ -85,9 +85,8 @@ for the transformers image lifecycle.
 
 vLLM and TensorRT-LLM use upstream-direct images as the engine substrate,
 and those images don't ship every runtime dep `llenergymeasure` needs
-(empirical spike 2026-05-12 found `vllm/vllm-openai:v0.7.3` lacks
-`platformdirs`, `nvidia-ml-py`, `pyarrow`; the NGC TRT-LLM image lacks
-`python-dotenv`). Rather than bake a thin wrapper image per engine, the
+(`vllm/vllm-openai:v0.7.3` lacks `platformdirs`, `nvidia-ml-py`, `pyarrow`;
+the NGC TRT-LLM image lacks `python-dotenv`). Rather than bake a thin wrapper image per engine, the
 in-container entrypoint script primes the missing deps lazily on first
 dispatch into a host-mounted persistent cache.
 

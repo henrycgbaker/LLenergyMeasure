@@ -19,7 +19,7 @@ For the rules-side counterpart, see
 
 ---
 
-## The pin is the SSOT
+## The pin is the single source of truth (SSOT)
 
 An engine's version is pinned in one place: its `current.yaml`.
 

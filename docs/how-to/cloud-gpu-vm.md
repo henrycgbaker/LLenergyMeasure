@@ -19,7 +19,7 @@ skip straight to [Install LLenergyMeasure](#install-llenergymeasure).
 
 ## Supported environments
 
-This is the milestone's supported-environment statement. LLenergyMeasure's
+LLenergyMeasure's
 dispatch mechanics are written generically - Docker is resolved from `PATH`, GPU
 selection is a pure passthrough to `docker run --gpus`, and no host-specific
 tuning is baked in as a default - so the same install works across the following:

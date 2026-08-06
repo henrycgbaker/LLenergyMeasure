@@ -73,10 +73,9 @@ vars needed for version selection.
 
 ## One-time maintainer setup
 
-These steps activate the CF Pages integration. Until they're done, the
-build script and config files in this PR sit dormant - no preview URL is
-generated. Once complete, every existing open PR (including ones merged
-in before this setup) gets previews on next push.
+These steps activate the CF Pages integration. Until it is configured, no
+preview URL is generated. Once configured, every open PR gets previews on
+its next push.
 
 1. **Create a Cloudflare account** at `dash.cloudflare.com` if you don't
    have one. Free tier covers this project comfortably (500 builds/mo,

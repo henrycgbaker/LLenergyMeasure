@@ -301,7 +301,7 @@ see whether the registry was even reached.
    the registry.
 2. Verify network: `curl -I https://ghcr.io/v2/henrycgbaker/llenergymeasure/transformers/manifests/latest`
    should return 200 or 401 (both fine; 000/timeout means no connectivity).
-3. If you recently bumped the SSOT version but haven't run
+3. If you recently bumped the single source of truth (SSOT) version but haven't run
    `make docker-seed-transformers` at the new pin yet, the per-version
    buildcache ref does not exist and the build falls back to `:latest`
    (already last in the cache_from chain). Seed locally to create it; no
