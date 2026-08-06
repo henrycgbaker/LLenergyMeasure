@@ -4,8 +4,7 @@ Why this exists: a host-measured baseline underestimates the container's idle
 GPU power by ~8.7 W per A100 (~19% on typical 4-GPU, 2-minute runs) because
 the host has no CUDA context and no torch memory pool seeded. Measuring the
 baseline inside a container whose CUDA state matches the experiment container
-eliminates the bias. See ``.product/research/baseline-measurement-location.md``
-for the controlled experiment.
+eliminates the bias.
 
 This helper deliberately does not use ``infra.docker_runner.DockerRunner``:
 baseline dispatch needs none of DockerRunner's experiment-specific machinery
