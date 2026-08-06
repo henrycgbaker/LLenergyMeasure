@@ -132,11 +132,10 @@ class Provenance:
     citation: str | None = None
     date: str = ""
     note: str | None = None
-    """Optional one-line reviewer note (e.g. "manual overlay after a recall audit;
-
-    see #921"). Free text for reviewer legibility only - like the rest of this
-    block it never influences runtime matching. Absent on rules that carry no
-    note; the loader accepts a corpus with or without it.
+    """Optional one-line reviewer note, e.g. "manual overlay after a recall
+    audit; see #921". Free text for reviewer legibility only - like the rest of
+    this block it never influences runtime matching. Absent on rules that carry
+    no note; the loader accepts a corpus with or without it.
     """
 
 

@@ -72,6 +72,11 @@ UNVERIFIED = "unverified"
 _UNION_FILE = "union.yaml"
 _LADDER_FILE = "ladder.yaml"
 _SIGNOFF_FILE = "absorb_signoff.yaml"
+# Maintainer-owned fresh-evidence fields on a sign-off entry. Single source for
+# the promote() call sites and write_signoff's carry-forward: a field listed
+# here rides into _mark_human's rebuilt provenance AND survives sign-off-file
+# regeneration; a field missing from one site would ship once then vanish.
+_SIGNOFF_OVERRIDE_FIELDS = ("citation", "note")
 _REPORT_FILE = "absorb_review.txt"
 
 _CORPUS_HEADER = (
@@ -707,8 +712,7 @@ def promote(
                         rule,
                         version,
                         run_date,
-                        citation=entry.get("citation"),
-                        note=entry.get("note"),
+                        **{k: entry.get(k) for k in _SIGNOFF_OVERRIDE_FIELDS},
                     )
                 )
                 delta.survived.append(rid)
@@ -747,8 +751,7 @@ def promote(
                 body,
                 version,
                 run_date,
-                citation=record.get("citation"),
-                note=record.get("note"),
+                **{k: record.get(k) for k in _SIGNOFF_OVERRIDE_FIELDS},
             )
         )
         delta.survived.append(rid)
@@ -829,7 +832,7 @@ def write_signoff(
         # regeneration. Absent fields add nothing (entries without them are
         # byte-identical to before).
         prior = prior_rows.get(rid) or {}
-        for key in ("citation", "note"):
+        for key in _SIGNOFF_OVERRIDE_FIELDS:
             if prior.get(key) is not None:
                 row[key] = prior[key]
         if body:
