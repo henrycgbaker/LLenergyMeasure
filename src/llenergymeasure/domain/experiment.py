@@ -96,7 +96,8 @@ class AggregationMetadata(BaseModel):
 class ServerWarmupProvenance(BaseModel):
     """One level's warmup outcome, stamped into each of the level's window bundles.
 
-    The server pre-window protocol's outcome (the cross-mode divergence label): identical
+    The server pre-window protocol's outcome (the offline-vs-server pre-window
+    divergence label): identical
     across a level's windows (one warmup per level) but carried per window so the
     persistence layer, which never learns sessions exist, has it locally.
     """

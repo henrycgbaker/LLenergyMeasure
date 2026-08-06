@@ -609,8 +609,9 @@ class TrafficConfig(BaseModel):
         default=DEFAULT_RAMP_EXCLUSION_SECONDS,
         ge=0.0,
         description=(
-            "Pre-stable ramp excluded from the measured span, in seconds (absolute, "
-            "default). The measured span STARTS this many seconds after load begins "
+            "Pre-stable ramp excluded from the measured span, in seconds (an absolute "
+            "duration; the default is grounded in the minimum-window-duration study). "
+            "The measured span STARTS this many seconds after load begins "
             "and is excluded PROSPECTIVELY (never trimmed retroactively). 0 disables "
             "ramp exclusion. A measurement-methodology knob, so it joins the config "
             "identity like the other traffic fields (only slo is excluded)."
@@ -800,8 +801,7 @@ class ExperimentConfig(BaseModel):
     # SERIALIZATION BOUNDARY: a PrivateAttr is dropped by model_dump/JSON, so it
     # does NOT cross a process/container boundary. A server-capable path that ships
     # the config into a container must carry the resolved warmup explicitly, or the
-    # in-container observed view will project the DECLARED warmup (the serialization
-    # contract note).
+    # in-container observed view will project the DECLARED warmup.
     _resolved_server_warmup: ServerWarmupConfig | None = PrivateAttr(default=None)
 
     @model_validator(mode="before")
