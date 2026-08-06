@@ -286,8 +286,8 @@ def build_server_container_argv(
     the crashed-startup fast-detection (:func:`_ensure_container_alive`), and the
     failed-launch cleanup - all of which force-remove.
 
-    ``--network host`` is UNCONDITIONAL (the ruled shape and the uncontested peer
-    convention: genai-perf, vllm benchmark_serving and MLPerf vendor repros
+    ``--network host`` is UNCONDITIONAL (the peer convention: genai-perf, vllm
+    benchmark_serving and MLPerf vendor repros
     co-locate client + server on one host; docker bridge overhead is real and
     directional). Because the container shares the host network namespace, the
     port is NOT published with ``-p`` - the server binds the host port directly,

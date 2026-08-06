@@ -13,7 +13,7 @@ small, principled core that expresses exactly that:
   lower layer during the merge.
 - :func:`resolve_layers` deep-merges the pruned layers in ascending precedence
   (lowest first), reusing :func:`llenergymeasure.config._dict_utils.deep_merge`.
-- :class:`PrecedenceChain` names the ruled order - call-site > env > study YAML >
+- :class:`PrecedenceChain` names the precedence order - call-site > env > study YAML >
   user config > pydantic defaults - so a resolution reads as the chain it is.
 
 Not to be confused with :mod:`llenergymeasure.config.resolution`, which is the
@@ -33,9 +33,6 @@ dedup binds on the realised protocol. Env/call-site chain layers stay
 supported-but-unfed at v0.7. The full setup UX (llem init flow, .env
 rationalisation, routing every user-config field through the chain) stays with the
 setup-and-user-config workstream (#886).
-
-Prior art: the pragmata ``ResolveSettings.resolve`` chain (external); the ruled
-sentinel scheme is option C of the internal setup-and-user-config design.
 """
 
 from __future__ import annotations
@@ -174,7 +171,7 @@ def resolve_server_warmup(
     through :func:`apply_server_warmup_overlay` (study loading and orchestration).
     The built-in ``ServerWarmupConfig`` defaults are the lowest layer; the study
     YAML's ``server.warmup`` block, an optional tool-wide user default, an env
-    overlay, and an explicit call-site override stack above it in the ruled order
+    overlay, and an explicit call-site override stack above it in precedence order
     (the env and call-site layers stay supported-but-unfed at v0.7 - see the module
     docstring). Any layer may be :data:`UNSET` ('not supplied - defer'). The resolved
     dict is validated back into a

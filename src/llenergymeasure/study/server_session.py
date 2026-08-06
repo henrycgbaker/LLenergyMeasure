@@ -233,7 +233,7 @@ class ServerSessionResult:
 # client-side count of the streamed response deltas the transport captured on
 # each RequestRecord.result (a CompletionResult), one receipt timestamp per
 # streamed token. Token-granular, so the window manager counts tokens RECEIVED
-# within the measured span (the ratified energy-denominator rule) and the k=4
+# within the measured span (the energy-denominator rule) and the k=4
 # sub-window J/token diagnostic is formable. The engine's self-reported usage is
 # auxiliary provenance only (it rides in requests.parquet), never the denominator.
 # ---------------------------------------------------------------------------
@@ -697,7 +697,7 @@ class ServerSession:
         # so the drain raws patch + finalize sweep run once per bundle.
         self._pending_writers: list[BundleWriter] = []
         # The mapped per-window ExperimentResults + their on-disk paths, surfaced on
-        # the session result so orchestration enters them into StudyResult (point 6).
+        # the session result so orchestration enters them into StudyResult.
         self._experiment_results: list[ExperimentResult] = []
         self._result_files: list[str] = []
         # Each level's representative bundle rel-path for the manifest result_file.
@@ -912,7 +912,7 @@ class ServerSession:
             self._end_progress(result, ok=result.valid)
             return result
 
-        # Resolve each grid point (cell) on its own level's outcome (point 5). The
+        # Resolve each grid point (cell) on its own level's outcome. The
         # manifest result_file points at that level's validated window bundle (the
         # full sibling set is rediscovered via session_id + window_index fields; the
         # manifest is run state, not a results index).
@@ -1229,7 +1229,7 @@ class ServerSession:
         self._resolved_hash_cache[cell.config_hash] = resolved
         return resolved
 
-    # -- per-cell manifest lifecycle (point 5) -------------------------------
+    # -- per-cell manifest lifecycle -------------------------------
 
     def _mark_cell_running(self, level_index: int) -> None:
         """Mark this level's cell running as its level opens (the on_level_start hook).
@@ -1251,7 +1251,7 @@ class ServerSession:
         abort_reason: str | None,
         interrupted: bool = False,
     ) -> None:
-        """Resolve each grid point (cell) on its own level's outcome (point 5).
+        """Resolve each grid point (cell) on its own level's outcome.
 
         A cell whose level passed the stability gate completes (with its level
         aggregates as the resume-display metrics); a cleanly-closed gate-failed
@@ -1287,7 +1287,7 @@ class ServerSession:
 
     @staticmethod
     def _level_summary_metrics(level: ServerLevelResult) -> dict[str, float | None]:
-        """Level aggregates for a completed cell's resume-display metrics (point 7)."""
+        """Level aggregates for a completed cell's resume-display metrics."""
         energy = 0.0
         tokens = 0
         seen_energy = False

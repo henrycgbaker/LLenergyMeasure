@@ -1,7 +1,7 @@
 """Tests for the config-resolution core (config/precedence.py).
 
 The UNSET-sentinel precedence chain: a distinct 'use the layer below' sentinel,
-recursive pruning, ascending-precedence deep merge, and the ruled layer order
+recursive pruning, ascending-precedence deep merge, and the defined layer order
 (call-site > env > study YAML > user config > pydantic defaults), plus the v0.7
 warmup-protocol wiring.
 """

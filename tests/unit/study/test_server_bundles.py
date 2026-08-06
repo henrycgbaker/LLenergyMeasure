@@ -399,7 +399,7 @@ def _read(path: Path) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Offline degenerate session block (point 2)
+# Offline degenerate session block
 # ---------------------------------------------------------------------------
 
 
@@ -494,7 +494,7 @@ class TestCircuitBreakerGroupAware:
 
 
 # ---------------------------------------------------------------------------
-# First-class StudyResult mapping in orchestration (point 6)
+# First-class StudyResult mapping in orchestration
 # ---------------------------------------------------------------------------
 
 
@@ -867,7 +867,7 @@ class TestCleanSession:
         with session:
             result = session.run()
         assert isinstance(result, ServerSessionResult)
-        # The mapped ExperimentResults are surfaced for StudyResult.experiments (point 6).
+        # The mapped ExperimentResults are surfaced for StudyResult.experiments.
         assert len(result.experiment_results) == 3
         assert len(result.result_files) == 3
         assert all(r.serving_mode == "server" for r in result.experiment_results)

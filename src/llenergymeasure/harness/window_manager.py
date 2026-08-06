@@ -28,7 +28,7 @@ Design anchors:
   coefficient-of-variation, stable-through-end, clean, and clip machinery plus the
   trapezoidal integrator unchanged; only the multi-window / multi-level
   orchestration is new.
-- **Ratified numeric defaults + gate formulation.** Measured span 240s, ramp
+- **Numeric defaults + gate formulation.** Measured span 240s, ramp
   exclusion 30s absolute (both config-exposed under ``server.traffic``, carried here
   as :class:`WindowSpec` defaults). The stability gate is calibrated on J/TOKEN, not
   power (power is near-noise-free at these timescales and would always pass):
@@ -95,7 +95,7 @@ if TYPE_CHECKING:
 # Constants
 # ---------------------------------------------------------------------------
 
-#: The single attribution policy v0.7 ships (maintainer ratification 2026-07-29):
+#: The single attribution policy v0.7 ships:
 #: steady-state span amortization - the J/token denominator is client-counted
 #: tokens RECEIVED within the measured span. Disclosed as a result field, not a
 #: configurable knob; requests.parquet keeps per-request timestamps so
@@ -166,7 +166,7 @@ class WindowSpec:
 
         ``TrafficConfig`` has already resolved its window default (window_seconds
         defaults to the calibrated floor) and rejected count-bound windows at v0.7, so this
-        is a straight projection. The attribution policy is the single ratified value.
+        is a straight projection. The attribution policy is the single supported value.
         """
         return cls(
             rate=traffic.rate,
@@ -365,7 +365,7 @@ async def _noop_warmup(context: WarmupContext) -> None:
 #: granularities are legal:
 #:
 #: - token-granular (one timestamp per token) -> counting per interval is
-#:   span-received counting, the ratified energy-denominator rule;
+#:   span-received counting, the energy-denominator rule;
 #: - request-granular (all of a request's tokens stamped at its completion time,
 #:   i.e. ``[completed_at] * n_tokens``) -> a request's whole token count falls in
 #:   the interval containing its completion, which is EXACTLY the calibrated
