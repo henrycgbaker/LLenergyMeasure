@@ -247,7 +247,7 @@ def test_preflight_persistence_mode_warning_not_blocking(
 
 
 # ---------------------------------------------------------------------------
-# Test: error format matches CONTEXT.md spec
+# Test: formatted pre-flight error string
 # ---------------------------------------------------------------------------
 
 

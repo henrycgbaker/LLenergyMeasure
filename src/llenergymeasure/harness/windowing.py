@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: Median-filter kernel for transient-dropout removal (odd, small per the SOTA).
+#: Median-filter kernel for transient-dropout removal (odd, small).
 _MEDIAN_KERNEL = 3
 
 #: Minimum realised window duration (seconds) below which the measurement is flagged
@@ -184,16 +184,17 @@ def _with_power_at(
 def _detect_steady_state(powers: list[float], times: list[float]) -> float | None:
     """Find the steady-state onset (seconds from series start) via sliding-window CV.
 
-    Implements the lightweight windowed-stability test from the SOTA survey (a
-    coefficient-of-variation / variance-ratio test in the Cao-Rhinehart R-statistic
-    family): slide a window of ``_AUTO_WINDOW_FRACTION`` of the series and return the
+    Implements a lightweight windowed-stability test (a coefficient-of-variation /
+    variance-ratio test in the Cao-Rhinehart R-statistic family): slide a window of
+    ``_AUTO_WINDOW_FRACTION`` of the series and return the
     start time of the EARLIEST window whose coefficient of variation (std / mean) is at
     or below ``_AUTO_CV_THRESHOLD`` and which stays stable through the end of the
     series. Returns None when no such region exists (the caller then falls back to the
     fixed discard and flags ``steady_state_not_detected``).
 
-    No heavy change-point library is used: this is a direct ~40-line stability test, as
-    the survey found PELT / ruptures / BOCPD fragile on short noisy autocorrelated series.
+    No heavy change-point library is used: change-point detectors (PELT, ruptures,
+    BOCPD) are fragile on short, noisy, autocorrelated series, so this is a direct
+    ~40-line stability test.
     """
     n = len(powers)
     if n < _AUTO_MIN_WINDOW_SAMPLES * 2:

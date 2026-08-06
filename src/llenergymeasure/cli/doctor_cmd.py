@@ -7,7 +7,7 @@ anything that is not OK.
 
 Exit codes:
   * default: 0, unless a hard failure is present (e.g. an image schema MISMATCH),
-    which exits 1 - preserving the original doctor's CI-gating behaviour.
+    which exits 1 so CI can gate on it.
   * ``--check``: 0 = all ok, 1 = warnings present, 2 = errors present.
 
 ``--json`` emits the full report as machine-readable JSON.
@@ -52,7 +52,7 @@ def doctor_command(
         _render(report)
 
     # Default invocation stays green on warnings but fails hard on errors
-    # (e.g. an image schema mismatch), matching the original doctor. --check
+    # (e.g. an image schema mismatch). --check
     # grades every severity (0=ok, 1=warnings, 2=errors).
     default_code = 1 if report.worst == "fail" else 0
     exit_code = report.check_exit_code if check else default_code

@@ -1,7 +1,7 @@
 """Measurement quality warnings for energy experiments.
 
 Five warning flags, all purely informational (never block experiments).
-Each includes actionable remediation advice per CONTEXT.md.
+Each includes actionable remediation advice.
 
 This module owns warnings generation and its orchestration: the flag catalogue
 (:func:`collect_measurement_warnings`), the GPU-persistence probe
@@ -67,7 +67,7 @@ def collect_measurement_warnings(
     Returns:
         List of warning strings (empty list = clean measurement).
     """
-    # baseline_duration 30s - confidence MEDIUM (similar to VILE paper 22-33s windows)
+    # baseline_duration 30s - confidence MEDIUM
     warnings: list[str] = []
 
     # 1. Short measurement duration

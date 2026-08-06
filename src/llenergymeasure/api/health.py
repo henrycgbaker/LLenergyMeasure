@@ -65,7 +65,7 @@ Status = Literal["ok", "warn", "fail"]
 _SEVERITY: dict[Status, int] = {"ok": 0, "warn": 1, "fail": 2}
 
 # Map an image schema-handshake status to a health severity. A MISMATCH is the
-# one genuine failure (the CI-gating signal preserved from the original doctor);
+# one genuine failure (the CI-gating signal);
 # everything else that is merely absent or unverifiable is a warning.
 _SCHEMA_TO_STATUS: dict[SchemaStatus, Status] = {
     SchemaStatus.OK: "ok",
