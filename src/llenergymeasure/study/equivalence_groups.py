@@ -76,8 +76,8 @@ def find_observed_collisions(sidecars: list[dict[str, Any]]) -> list[ObservedCol
 
     Each sidecar dict must carry at minimum ``engine``, ``engine_version``,
     ``resolved_config_hash``, ``observed_config_hash``, and ``experiment_id`` keys. Sidecars missing any
-    of these are silently skipped (pre-50.3a data, or runs with dedup_mode=off
-    for which observed-config-hash may be partial).
+    of these are silently skipped (older sidecars predating these keys, or runs
+    with dedup_mode=off for which observed-config-hash may be partial).
     """
     buckets: dict[tuple[str, str, str], list[dict[str, Any]]] = defaultdict(list)
     for sc in sidecars:

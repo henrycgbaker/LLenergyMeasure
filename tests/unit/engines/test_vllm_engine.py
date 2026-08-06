@@ -835,7 +835,7 @@ class TestMultiOutputTokenCounting:
 
 
 # =============================================================================
-# Test Group 16: M15 - VRAM query uses current_device(), not hardcoded 0
+# Test Group 16: VRAM query uses current_device(), not hardcoded 0
 # =============================================================================
 
 

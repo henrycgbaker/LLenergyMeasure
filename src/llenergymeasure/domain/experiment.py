@@ -176,7 +176,7 @@ class ServerWindowProvenance(BaseModel):
     token_counting: str = Field(
         default=TOKEN_COUNTING_CLIENT_STREAMED,
         description="The client-side token-counting mechanism whose count is this window's "
-        "J/token denominator (O8). 'client_streamed_deltas' = llem counts the streamed "
+        "J/token denominator. 'client_streamed_deltas' = llem counts the streamed "
         "response deltas in its own SUT callback, identically across engines; the engine's "
         "self-reported usage is auxiliary only (server_reported_output_tokens).",
     )
@@ -348,7 +348,7 @@ class ServerWindowMetrics(BaseModel):
     itl: LatencyPercentiles = Field(
         default_factory=LatencyPercentiles,
         description="Pooled inter-token-latency percentiles (ms) over consecutive receipt "
-        "differences. Approximate at fine grain (client-loop receipt jitter, M2).",
+        "differences. Approximate at fine grain (client-loop receipt jitter).",
     )
     e2e: LatencyPercentiles = Field(
         default_factory=LatencyPercentiles,
@@ -435,7 +435,7 @@ class ExperimentResult(BaseModel):
         ...,
         description="Actual output (decode) tokens as observed by the engine. "
         "total_tokens = input_tokens + output_tokens. In server mode this is the client-side "
-        "canonical count (span-received streamed deltas, O8), and is always real.",
+        "canonical count (span-received streamed deltas), and is always real.",
     )
     total_tokens: int | None = Field(
         ...,

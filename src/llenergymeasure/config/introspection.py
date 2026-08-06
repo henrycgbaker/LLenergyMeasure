@@ -491,7 +491,7 @@ _MODEL_VALIDATOR_RULES: list[dict[str, str]] = [
         "server-mode measurement path (measured-span timing and the per-level "
         "stability gate) is duration-grounded (validate_server_window_supported).",
         "resolution": "Use server.traffic.window_seconds instead (it defaults to the "
-        "E2 minimum-window-duration floor when omitted).",
+        "minimum-window-duration floor when omitted).",
     },
     {
         "engine": "all",

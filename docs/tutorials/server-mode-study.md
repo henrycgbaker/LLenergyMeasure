@@ -138,7 +138,7 @@ and an offline cell never deduplicate together.
 `burstiness` value for bursty traffic). Leaving `window_seconds` unset
 takes the 240 s default measured-span duration, and leaving
 `ramp_exclusion_seconds` unset takes the 30 s default ramp that is
-excluded from the span. Both defaults are grounded in the E2
+excluded from the span. Both defaults are grounded in the
 minimum-window-duration study.
 
 `server.warmup.mode: composite` is the default: the harness warms the

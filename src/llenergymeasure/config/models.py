@@ -591,7 +591,7 @@ class TrafficConfig(BaseModel):
         gt=0.0,
         description=(
             "Measured-span duration in seconds. Defaults to "
-            f"{DEFAULT_WINDOW_SECONDS:g}s (the E2 minimum-window-duration floor) when "
+            f"{DEFAULT_WINDOW_SECONDS:g}s (the minimum-window-duration floor) when "
             "omitted; the sole supported window form at v0.7."
         ),
     )
@@ -601,7 +601,7 @@ class TrafficConfig(BaseModel):
         description=(
             "Measured span as a completed-request count. A server config using it is "
             "rejected at v0.7: the server-mode measurement path (timing + stability "
-            "gate) is duration-grounded (E2). Reserved for a future release; use "
+            "gate) is duration-grounded. Reserved for a future release; use "
             "window_seconds."
         ),
     )
@@ -610,7 +610,7 @@ class TrafficConfig(BaseModel):
         ge=0.0,
         description=(
             "Pre-stable ramp excluded from the measured span, in seconds (absolute, "
-            "E2 default). The measured span STARTS this many seconds after load begins "
+            "default). The measured span STARTS this many seconds after load begins "
             "and is excluded PROSPECTIVELY (never trimmed retroactively). 0 disables "
             "ramp exclusion. A measurement-methodology knob, so it joins the config "
             "identity like the other traffic fields (only slo is excluded)."
@@ -704,7 +704,7 @@ class ServerWarmupConfig(BaseModel):
         default=300.0,
         ge=0.0,
         description=(
-            "Fixed-mode warmup duration in seconds (the E3 floor rule default). 60s is "
+            "Fixed-mode warmup duration in seconds (the floor rule default). 60s is "
             "a citable convenience floor, not a thermal-equilibrium claim; 0 skips "
             "warmup traffic entirely. Ignored in composite mode."
         ),
@@ -1222,7 +1222,7 @@ class ExperimentConfig(BaseModel):
             raise ValueError(
                 "server.traffic.window_requests (count-bound windows) is not supported "
                 "at v0.7: the server-mode measurement path (measured-span timing and "
-                "the per-level stability gate) is duration-grounded (E2). Use "
+                "the per-level stability gate) is duration-grounded. Use "
                 "server.traffic.window_seconds instead (it defaults to "
                 f"{DEFAULT_WINDOW_SECONDS:g}s when omitted)."
             )

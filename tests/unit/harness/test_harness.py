@@ -513,7 +513,7 @@ def test_harness_start_tracking_called_after_thermal_floor_wait(minimal_config):
 
 
 # ---------------------------------------------------------------------------
-# M18: Per-device memory tracking - _capture_model_memory_mb(gpu_indices)
+# Per-device memory tracking - _capture_model_memory_mb(gpu_indices)
 # ---------------------------------------------------------------------------
 
 

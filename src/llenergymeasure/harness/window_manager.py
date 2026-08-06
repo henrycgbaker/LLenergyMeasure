@@ -746,7 +746,7 @@ class WindowManager:
             raise ValueError(
                 "count-based measured windows (request_count without duration_seconds) "
                 "are not supported at v0.7: the measured-span timing and the stability "
-                "gate are duration-grounded (E2). Set a duration."
+                "gate are duration-grounded. Set a duration."
             )
 
         await self._run_warmup_hook(WarmupContext(level_index=level_index, spec=spec))

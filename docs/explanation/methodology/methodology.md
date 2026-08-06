@@ -373,7 +373,7 @@ the receipt-unclipped per-request token series, an alternative attribution can
 be re-derived offline without re-running the study.
 
 The measured-span duration (default 240 s) and the excluded ramp (default 30 s)
-are config-exposed on `server.traffic` and grounded in the E2
+are config-exposed on `server.traffic` and grounded in the
 minimum-window-duration study.
 
 ### Server warmup
@@ -390,7 +390,7 @@ In the default composite mode, the window opens only once a convergence gate of
 three observables holds together - GPU power plateaued (stable through the end
 of a trailing sample window), temperature settled (the trailing-window
 temperature range within a small delta on every monitored GPU, i.e. dT/dt near
-zero), and no active thermal throttle bits. This gate is grounded in the E3
+zero), and no active thermal throttle bits. This gate is grounded in the
 warmup study. A hard `timeout_seconds` failsafe (default 900 s) prevents a
 hang: at the timeout the harness proceeds and stamps a timed-out flag rather
 than silently passing. `mode: fixed` is the explicit opt-out - the same

@@ -76,7 +76,7 @@ def test_get_engine_unknown_message_contains_engine_name():
 
 
 # =============================================================================
-# _model_load_kwargs - P0 fix verification (GPU-free)
+# _model_load_kwargs verification (GPU-free)
 # =============================================================================
 
 
@@ -162,7 +162,7 @@ def test_model_load_kwargs_trust_remote_code_env_var_opt_in(monkeypatch):
 
 
 def test_model_load_kwargs_passthrough_kwargs_merged():
-    """passthrough_kwargs are merged into model load kwargs (core P0 fix)."""
+    """passthrough_kwargs are merged into model load kwargs."""
     pytest.importorskip("torch")
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.engines.transformers import TransformersEngine

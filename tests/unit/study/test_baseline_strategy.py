@@ -1330,5 +1330,5 @@ class TestDockerPathOrdering:
         assert first_baseline_start is not None, "baseline on_step_start was not emitted"
         assert first_begin < first_baseline_start, (
             "begin_experiment must run before baseline step events "
-            "(see _run_one_docker ordering fix in runner.py §5.1.8)"
+            "(see the _run_one_docker ordering fix in runner.py)"
         )
