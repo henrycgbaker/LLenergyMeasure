@@ -268,7 +268,7 @@ class ServerSloEvaluation(BaseModel):
     )
     attainment_fraction: float | None = Field(
         default=None,
-        description="Share of COMPLETED requests meeting ALL configured bounds jointly (O5.2). "
+        description="Share of COMPLETED requests meeting ALL configured bounds jointly. "
         "None when the window had no completed request (0/0 is undefined, not 0.0).",
     )
     slo_pass: bool | None = Field(

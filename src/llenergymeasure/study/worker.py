@@ -6,7 +6,7 @@ the parent-side result collector (``_collect_result``), and the small helpers
 they share: process-group signalling, exit-reason derivation, and the failure
 classifier constants.
 
-Key design decisions (locked in .product/decisions/experiment-isolation.md):
+Key design decisions:
 - spawn context: CUDA-safe; fork causes silent CUDA corruption (CP-1)
 - daemon=False: clean CUDA teardown if parent exits unexpectedly (CP-4)
 - Pipe-only IPC: ExperimentResult fits in Pipe buffer for typical experiment sizes

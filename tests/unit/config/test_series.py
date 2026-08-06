@@ -153,7 +153,7 @@ def test_dormant_rule_does_not_drop() -> None:
 
 
 def test_multi_field_rule_is_ignored() -> None:
-    """Cross-field rules are C2's job; a bare candidate cannot satisfy them."""
+    """Cross-field rules are skipped here; a bare candidate cannot satisfy them."""
     rules = (_rule({"eng.engine_params.x": {">": 10}, "eng.engine_params.y": {"present": True}}),)
     assert drop_known_rejected([5, 20], "eng.engine_params.x", rules) == [5, 20]
 

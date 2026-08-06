@@ -12,9 +12,6 @@ selected by ``MeasurementConfig.measurement_methodology``:
 The energy integration math itself is NOT reimplemented here: the cleaned, windowed
 sample subset is fed to the existing trapezoidal integrator
 (:func:`llenergymeasure.energy.nvml.integrate_power_samples`).
-
-The methodology survey behind this design is recorded in
-``.product/research/steady-state-measurement-methodology.md``.
 """
 
 from __future__ import annotations
