@@ -1,9 +1,8 @@
 """Tests for :func:`extract_observed_params` and the per-engine capture path.
 
-PoC-C finding (sweep-dedup.md §3.2): the extractor must strip private
-(``_``-prefixed) fields by default - transformers and vLLM both leak
-state that would poison observed_config_hash otherwise. These tests verify the default
-behaviour and the allowlist escape hatch.
+The extractor must strip private (``_``-prefixed) fields by default -
+transformers and vLLM both leak state that would poison observed_config_hash
+otherwise. These tests verify the default behaviour and the allowlist escape hatch.
 """
 
 from __future__ import annotations
@@ -64,7 +63,7 @@ class TestDispatch:
 
 
 # ---------------------------------------------------------------------------
-# Private-field handling (PoC-C finding)
+# Private-field handling
 # ---------------------------------------------------------------------------
 
 

@@ -495,8 +495,8 @@ class VLLMEngine:
     ) -> dict[str, Any]:
         """Extract post-construction state from the vLLM native types.
 
-        Sampling params are captured via :func:`extract_observed_params` -
-        PoC-C allowlist is unset (the private fields ``_all_stop_token_ids``,
+        Sampling params are captured via :func:`extract_observed_params` with
+        no private-field allowlist (the private fields ``_all_stop_token_ids``,
         ``_bad_words_token_ids``, ``_eos_token_id`` default-exclude since they
         vary per-model without affecting measurement-equivalence). Engine
         params derive from ``llm.llm_engine.vllm_config`` when available;
