@@ -21,7 +21,6 @@ if [ -z "$PUID" ] || [ -z "$PGID" ]; then
     echo "  2. Or:  cp .env.example .env && edit .env"
     echo "  3. Or:  PUID=\$(id -u) PGID=\$(id -g) docker compose run ..."
     echo ""
-    echo "See docs/deployment.md for details."
     exit 1
 fi
 

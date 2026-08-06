@@ -8,9 +8,9 @@
 # extracted 1.0.0 release tarball). A glob (a path containing `*`) expands
 # against the source root; a plain path names one file.
 #
-# Cluster selection is a MINIMAL citation-grounded starter, NOT an
-# experiment-ratified cluster design like vllm's (no OSS analyst parity
-# experiment has been run for tensorrt). It is derived from where the shipped
+# Cluster selection is a MINIMAL citation-grounded starter, NOT a
+# measurement-tuned cluster design like vllm's (no analyst parity measurement
+# has been run for tensorrt). It is derived from where the shipped
 # rule corpus's verified constraints actually live: the single shipped tensorrt
 # citation names llmapi/llm_args.py (TorchLlmArgs, where the @model_validator
 # constraints live); sampling_params.py is the SamplingParams surface the

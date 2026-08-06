@@ -14,9 +14,8 @@ attributes are typed ``Any`` because per-engine shapes diverge:
 introspector's resolution contract: the producer unit tests resolve each
 path under the installed library so an upstream rename surfaces at test
 time. The other attributes are consumed by the per-engine miners
-themselves. PR-0 vendors LANDMARKS only; AST_TARGETS / WALKER_PATTERNS /
-INTROSPECTOR_TARGETS are deferred to a follow-up scaffold PR (or absorbed
-into the first chunk PR per engine).
+themselves. Currently only LANDMARKS is vendored; AST_TARGETS /
+WALKER_PATTERNS / INTROSPECTOR_TARGETS are deferred to a later scaffold.
 """
 
 from __future__ import annotations
@@ -28,7 +27,7 @@ from typing import Protocol, runtime_checkable
 class Machinery(Protocol):
     """Per-(engine, version, producer) machinery namespace.
 
-    PR-0 contract: the module MUST expose a ``LANDMARKS`` attribute that
+    Contract: the module MUST expose a ``LANDMARKS`` attribute that
     is a ``tuple[str, ...]`` of dotted attribute paths the probe will
     resolve under the installed library.
 

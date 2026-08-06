@@ -28,7 +28,7 @@ dependencies = [
 [project.optional-dependencies]
 # Engine extras intentionally absent: engines (transformers, vllm, tensorrt-llm)
 # run only inside their Docker images. The host does not import them. See
-# docs/development.md for the layer-split contract.
+# docs/contributing/development.md for the layer-split contract.
 zeus = ["zeus>=0.13.1"]
 codecarbon = ["codecarbon>=2.8"]
 # Server mode: online-serving traffic generation. httpx is pure-Python (zero

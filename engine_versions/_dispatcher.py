@@ -163,8 +163,7 @@ def load_producer(*, engine: str, version: str, producer: ProducerKind) -> Modul
             f"Create engine_versions/{engine}/{safe}/producers/{producer}.py "
             f"(with sibling __init__.py files as needed) by copying the prior "
             f"version's producers and rewriting LANDMARKS for the new library "
-            f"API. See the version-bump chunk pattern in the engine archive "
-            f"package docstring."
+            f"API."
         )
 
     fallback_qualified = f"engine_versions.{engine}.{fallback_safe}.producers.{producer}"

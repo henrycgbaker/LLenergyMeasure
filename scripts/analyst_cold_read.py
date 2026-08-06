@@ -5,13 +5,14 @@ An LLM analyst reads the pinned engine source cold - no prior corpus, no
 seeding - and proposes every config-validation constraint it can see, each a
 candidate carrying a mandatory source citation. This is the recall-maximising
 proposer; the deterministic ladder (citation check -> construction probe ->
-identity probe) earns a candidate its place in the shipped corpus. At this
-precision (~77-80% content-correct on the parity experiment) the analyst never
-self-certifies. A pure completion loop over line-numbered source chunks: one
+identity probe) earns a candidate its place in the shipped corpus. The analyst
+is not precise enough to self-certify, so nothing it proposes ships without
+passing the ladder. A pure completion loop over line-numbered source chunks: one
 exhaustive-extraction prompt, self-consistency union across samples, a salvage
 parser for truncated output. No agentic access, no repair loops, no retries.
-Design ratified by the 2026-07-02 OSS analyst parity experiment
-(qwen2.5-coder:32b measured against the frontier bump-analyst reference).
+The cluster selection and this loop shape were tuned by measuring a local 32B
+coder model (qwen2.5-coder:32b) against a frontier-model reference on a held-out
+sample.
 
 --source-root is the engine's top-level package directory at the pinned version
 (for vllm, the ``vllm/`` folder) - an explicit maintainer input, as it is for

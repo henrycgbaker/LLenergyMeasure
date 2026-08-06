@@ -8,9 +8,9 @@
 # (a path containing `*`) expands against the source root; a plain path names
 # one file.
 #
-# Cluster selection follows the production-harness deltas ratified by the
-# 2026-07-02 OSS analyst parity experiment (qwen2.5-coder:32b measured against
-# the frontier bump-analyst reference):
+# Cluster selection was tuned by measuring a local 32B coder model
+# (qwen2.5-coder:32b) against a frontier-model reference on a held-out sample.
+# The resulting deltas from a naive file list:
 #   - the engine/arg_utils.py cluster is DROPPED: it was a pure noise source
 #     (CLI add_argument blocks produced invented bounds and fabricated enum
 #     members) and contributed zero unique ground-truth matches.
