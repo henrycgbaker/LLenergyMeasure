@@ -1,7 +1,5 @@
 """Sweep library-resolution mechanism - apply validated dormant rules to fixpoint, dedup by resolved_config_hash.
 
-Design: ``.product/designs/config-deduplication-dormancy/sweep-dedup.md`` §2.
-
 The library-resolution mechanism is the host-side, pre-dispatch layer that normalises every
 field the engine-rules corpus marks as ``dormant``. Each rule's fired-state
 projection drives its subject field (the one marked ``!=`` / ``present``, or

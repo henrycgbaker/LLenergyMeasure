@@ -1,7 +1,5 @@
 """Equivalence-groups sidecar - pre-run resolved groups + post-run observed detection.
 
-Design: ``.product/designs/config-deduplication-dormancy/sweep-dedup.md`` §6.
-
 Written alongside the study's results bundle. ``pre_run_groups`` is populated
 at sweep-expansion time by :func:`resolve_library_effective` and serialised immediately;
 ``observed_collision_groups`` is populated after the study completes by scanning

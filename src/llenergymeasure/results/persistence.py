@@ -134,8 +134,7 @@ def save_config_sidecar(
 ) -> Path:
     """Write the per-experiment ``config.json`` sidecar with resolved/observed config-hash payload.
 
-    Schema lives in ``.product/designs/config-deduplication-dormancy/sweep-dedup.md``
-    §3.3. Fields:
+    Fields:
 
     - ``engine`` / ``engine_version`` - the inference engine and its library
       version. This sidecar is the authoritative home for engine identity;
