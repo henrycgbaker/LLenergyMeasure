@@ -305,7 +305,7 @@ The window `result.json` carries a `server` block that locates the window within
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `cap_bound_fraction` | float &#124; null | Fraction of the level's scheduled issuances the concurrency cap delayed beyond a small tolerance (or never dispatched); `0.0` when the level ran uncapped or the cap never materially bound, `null` when it was not captured (a degraded abort-core bundle). Level-wide, so every window of a level carries the same value. The cap stays legal (a hashed user choice); this stamps its effect |
+| `cap_bound_fraction` | float &#124; null | Fraction of the level's scheduled issuances the concurrency cap delayed beyond a small tolerance (or never dispatched); `0.0` when the level ran uncapped or the cap never materially bound, `null` when it was not captured (the level aborted before its issuer report was recorded). Level-wide, so every window of a level carries the same value. The cap stays legal (a hashed user choice); this stamps its effect |
 
 ### Session facts (`system.json`)
 

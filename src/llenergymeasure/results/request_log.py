@@ -2,13 +2,13 @@
 
 One row per issued request per window: the client-observed request lifecycle
 (issue / dispatch / first-token / completion timestamps and the per-token
-receipt times), the client-side canonical output-token count (O8: llem's own
+receipt times), the client-side canonical output-token count (llem's own
 count of the streamed deltas is the J/token denominator), the engine's
 self-reported usage as auxiliary provenance, the stream's finish reason (so a
-length-truncation is distinguishable from a natural stop), and the D7
-boundary-attribution flags (measurement-window vs ramp, drain-tail). SM12
-derives TTFT / ITL percentiles, goodput, and SLO attainment from these rows
-WITHOUT re-sampling.
+length-truncation is distinguishable from a natural stop), and the
+boundary-attribution flags (measurement-window vs ramp, drain-tail). The
+derived-metrics overlay derives TTFT / ITL percentiles, goodput, and SLO
+attainment from these rows WITHOUT re-sampling.
 
 Mirrors :mod:`llenergymeasure.harness.timeseries`: a locked columnar schema
 written with pyarrow (a core dependency), with file-level identity metadata so
@@ -20,8 +20,8 @@ the layer boundary stays clean (the study layer builds the rows from harness
 request records and passes them down).
 
 Timestamps are the traffic issuer's ``time.monotonic`` basis - relative, not
-wall-clock - so only their DIFFERENCES are meaningful; SM12 derives every latency
-as a difference. The schema is locked: do not rename or retype a column without
+wall-clock - so only their DIFFERENCES are meaningful; the derived-metrics overlay
+derives every latency as a difference. The schema is locked: do not rename or retype a column without
 folding the change into the bundle-format break (there is no per-artefact schema
 version; Parquet stays self-describing under the single bundle_version).
 
@@ -51,13 +51,13 @@ where no later span can claim a straddler's receipts.
 Rows carry PHYSICAL FACTS for every status (raw-record discipline): an error /
 timeout row still reports the real receipts, first-token latency, and to-failure
 e2e it actually observed. Latency-percentile derivation should therefore filter to
-``status == "ok"`` on the consumer side (SM12); the rows do not pre-filter.
+``status == "ok"`` on the consumer side; the rows do not pre-filter.
 
-RECEIPT JITTER (M2). Receipt timestamps are stamped in the client's async event
+RECEIPT JITTER. Receipt timestamps are stamped in the client's async event
 loop, not at the socket: under high concurrency the loop can defer resuming the
 reader after bytes arrive, adding scheduling jitter to each receipt time. TTFT and
 per-window aggregates absorb this, but sub-millisecond ITL claims from consecutive
-receipts are not reliable - SM12 should treat fine-grained ITL as approximate.
+receipts are not reliable - consumers should treat fine-grained ITL as approximate.
 """
 
 from __future__ import annotations
@@ -81,13 +81,14 @@ class RequestLogRow:
     Timestamps share the issuer's ``time.monotonic`` basis (relative seconds).
     ``output_token_times`` is the client-side canonical token receipt series (one
     entry per streamed content delta); ``client_output_tokens`` is its length -
-    the count that feeds the J/token denominator (O8). It is carried for ALL
-    statuses: a mid-stream failure still delivered those tokens (H1), so an
+    the count that feeds the J/token denominator. It is carried for ALL
+    statuses: a mid-stream failure still delivered those tokens, so an
     error / timeout row's token series is REAL, not zero. ``server_prompt_tokens`` /
     ``server_completion_tokens`` are the engine's self-reported usage, auxiliary
     only (None when the engine reported none). ``finish_reason`` is the stream's
-    terminal reason (e.g. ``"stop"`` vs ``"length"``); SM12 needs it to tell a
-    natural stop from a length-truncation for goodput / SLO attainment.
+    terminal reason (e.g. ``"stop"`` vs ``"length"``); the derived-metrics overlay
+    needs it to tell a natural stop from a length-truncation for goodput / SLO
+    attainment.
 
     Raw-record discipline: every column states its physical fact when it exists and
     is null only when it does not - the row never filters or judges by status.
@@ -99,9 +100,9 @@ class RequestLogRow:
     ``e2e_latency_ms`` are the time-to-terminal: an ``error`` row carries its
     to-failure latency (completion timestamp is the failure time), a ``timeout``
     row never completed so both are null. Filtering failed requests OUT of latency
-    percentiles is the consumer's job (SM12), keyed on ``status``.
+    percentiles is the consumer's job, keyed on ``status``.
 
-    ``in_measurement_window`` / ``is_ramp`` / ``completed_in_drain`` are the D7
+    ``in_measurement_window`` / ``is_ramp`` / ``completed_in_drain`` are the
     boundary attribution: a request issued in the level's prospective ramp
     (is_ramp) never counts toward the window's steady-state metrics; a request
     issued in-span but completing after span_end (completed_in_drain) keeps its
@@ -181,7 +182,7 @@ def write_requests_parquet(
     also stored as file-level metadata (the span is file-scoped, not row-scoped).
     They make the per-row (issue-partitioned, receipt-UNCLIPPED) token series
     re-clippable to the measured window offline, so an alternative attribution can
-    be re-derived without re-running (M1); the authoritative span-clipped
+    be re-derived without re-running; the authoritative span-clipped
     denominator remains ``result.json`` ``output_tokens``.
 
     Args:
@@ -261,7 +262,7 @@ def rows_from_parquet(path: Path) -> list[RequestLogRow]:
     """Read requests.parquet back into typed :class:`RequestLogRow` records.
 
     The typed counterpart of :func:`read_requests_parquet`, so a consumer can
-    re-derive a window's server metrics (SM12) or re-judge it against fresh SLO
+    re-derive a window's server metrics or re-judge it against fresh SLO
     bounds OFFLINE from the persisted rows alone (the re-judgeable promise). The
     Parquet schema is locked, so the column set maps 1:1 onto the dataclass fields;
     ``output_token_times`` comes back as a list.
@@ -299,7 +300,7 @@ def span_from_parquet(path: Path) -> tuple[float | None, float | None]:
     The span bounds ride as Parquet file-level key-value metadata (not columns; the
     span is file-scoped), written by :func:`write_requests_parquet`. An offline
     consumer pairs this with :func:`rows_from_parquet` to re-judge a window's SLO
-    overlay against its measured span (the O5.3 re-judgeable promise) without
+    overlay against its measured span (the re-judgeable promise) without
     re-running. Returns None for a bound that was not stored. The bounds share the
     issuer ``time.monotonic`` basis with each row's ``output_token_times``.
     """

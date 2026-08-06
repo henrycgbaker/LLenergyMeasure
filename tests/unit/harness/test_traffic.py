@@ -1,8 +1,7 @@
 """Conformance tests for the open-loop TrafficSource seam and Poisson issuer.
 
 Host-only, no GPU, no real server: the transport is always an injected fake.
-These tests pin the issuer to its ratified semantic contract (section 12 of the
-server-mode plan, as amended):
+These tests pin the issuer's semantic contract:
 
 - the arrival schedule is a genuine open-loop Poisson / gamma process (CV~1 for
   Poisson across the rate span; gamma CV tracks its burstiness),
@@ -300,7 +299,7 @@ def test_httpx_transport_construction_requires_server_extra(
 
 
 # ---------------------------------------------------------------------------
-# Client-side streaming token counting (SM11 / O8) - a fake httpx stream
+# Client-side streaming token counting - a fake httpx stream
 # ---------------------------------------------------------------------------
 
 
@@ -421,7 +420,7 @@ class _FailingAsyncClient:
 def test_httpx_transport_preserves_partial_on_mid_stream_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A stream that dies mid-response attaches the tokens delivered so far (H1)."""
+    """A stream that dies mid-response attaches the tokens delivered so far."""
     lines = [
         'data: {"choices":[{"text":"Hel","finish_reason":null}]}',
         'data: {"choices":[{"text":"lo","finish_reason":null}]}',

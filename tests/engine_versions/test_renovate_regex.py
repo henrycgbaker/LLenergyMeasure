@@ -6,8 +6,6 @@ The customManagers regex in ``renovate.json`` matches the ``pep503_name``
 or new field between those two lines silently breaks Renovate detection
 (``\\s*\\n\\s*`` allows whitespace only). This test catches that drift in
 PR review by asserting the regex matches every current.yaml.
-
-Per the second adversarial pass on PR-0 (FM 5 mitigation).
 """
 
 from __future__ import annotations

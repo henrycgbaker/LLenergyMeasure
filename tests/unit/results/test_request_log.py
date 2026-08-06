@@ -1,4 +1,4 @@
-"""Unit tests for the server-mode per-request log Parquet writer (SM11).
+"""Unit tests for the server-mode per-request log Parquet writer.
 
 Host-only, no GPU: exercises the locked requests.parquet schema and its
 write/read round-trip, the empty (schema-only) log, and the file-level identity
@@ -96,7 +96,7 @@ def test_round_trip_preserves_every_column(tmp_path: Path) -> None:
     assert read_back[1]["is_ramp"] is True
     assert read_back[1]["in_measurement_window"] is False
     assert read_back[0]["status"] == REQUEST_STATUS_OK
-    # finish_reason distinguishes a natural stop from a length-truncation (SM12).
+    # finish_reason distinguishes a natural stop from a length-truncation.
     assert read_back[0]["finish_reason"] == "stop"
     assert read_back[1]["finish_reason"] == "length"
 
@@ -123,7 +123,7 @@ def test_null_auxiliary_and_timing_fields_round_trip(tmp_path: Path) -> None:
 
 
 def test_identity_and_span_metadata_stored_as_file_kv(tmp_path: Path) -> None:
-    """Identity + the window span ride as Parquet file metadata, not columns (M1)."""
+    """Identity + the window span ride as Parquet file metadata, not columns."""
     write_requests_parquet(
         [_row()],
         tmp_path / "requests.parquet",
@@ -135,7 +135,7 @@ def test_identity_and_span_metadata_stored_as_file_kv(tmp_path: Path) -> None:
     meta = pq.read_table(tmp_path / "requests.parquet").schema.metadata or {}
     assert meta.get(b"experiment_id") == b"server-abc-c1-L0-W0"
     assert meta.get(b"declared_config_hash") == b"abc123"
-    # The span bounds make the receipt-unclipped rows re-clippable offline (M1).
+    # The span bounds make the receipt-unclipped rows re-clippable offline.
     assert float(meta[b"span_start"]) == 1030.0
     assert float(meta[b"span_end"]) == 1040.0
 

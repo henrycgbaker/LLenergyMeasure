@@ -1,8 +1,7 @@
 """Tests for canonical serialisation + resolved/observed config hashing.
 
-Normalisation invariants come from ``sweep-dedup.md`` §9.Q3. Each test pins one
-invariant from the table so a invariant change surfaces as a targeted failure rather
-than a diffuse hash-mismatch.
+Each test pins one normalisation invariant so an invariant change surfaces as a
+targeted failure rather than a diffuse hash-mismatch.
 """
 
 from __future__ import annotations

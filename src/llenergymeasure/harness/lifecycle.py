@@ -75,7 +75,7 @@ class _EngineLifetime:
 
     Everything here is fixed for a given model load and reused across every
     measured window taken against it. Splitting it from _MeasuredWindow is the
-    server-mode seam (a1 #13: one lifetime, N windows); offline takes exactly one
+    server-mode seam (one lifetime, N windows); offline takes exactly one
     window per lifetime, so no multi-window machinery exists yet.
     """
 

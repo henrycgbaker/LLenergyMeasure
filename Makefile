@@ -164,10 +164,11 @@ scaffold-snapshot: ## Scaffold the snapshot outputs dir from the pin (ENGINE=vll
 promote-schemas: ## Byte-copy versioned schema snapshots into the src copies (ENGINE=<e> optional)
 	python3 scripts/promote_schemas.py $(if $(ENGINE),--engine $(ENGINE),)
 
-# Proposer S2: LLM analyst cold read of the pinned engine source into candidate
-# rules for the verification ladder. Needs a local Ollama daemon (owns the GPU)
-# and SRC = the engine package directory at the pinned version. Writes to the
-# version-scoped candidate pool, never to the shipped corpora.
+# LLM analyst cold read of the pinned engine source into candidate rules for the
+# verification ladder (the other proposer is the deterministic cross-field
+# extractor, scripts/cross_field_extractor.py). Needs a local Ollama daemon (owns
+# the GPU) and SRC = the engine package directory at the pinned version. Writes to
+# the version-scoped candidate pool, never to the shipped corpora.
 analyst-cold-read: ## Cold-read one engine's source into candidates (ENGINE=vllm SRC=path/to/source [ARGS=...])
 	@test -n "$(ENGINE)" && test -n "$(SRC)" || (echo "Usage: make analyst-cold-read ENGINE=vllm SRC=engine-src/ [ARGS='--samples 1']" && exit 1)
 	uv run python scripts/analyst_cold_read.py --engine $(ENGINE) --source-root "$(SRC)" $(ARGS)

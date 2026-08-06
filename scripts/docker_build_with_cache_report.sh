@@ -55,7 +55,7 @@ elif [[ "${imported}" -gt 0 ]]; then
     echo "✓ ${engine} build: ${human} - GHCR cache reachable but no layers reused (source changed)"
 else
     echo "⚠ ${engine} build: ${human} - no GHCR cache imported (cold build)"
-    echo "  see docs/troubleshooting.md → 'Docker rebuild is slow' for diagnosis"
+    echo "  see docs/how-to/troubleshoot.md → 'Docker rebuild is slow' for diagnosis"
 fi
 
 exit "${rc}"

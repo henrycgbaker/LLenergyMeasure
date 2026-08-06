@@ -2,7 +2,7 @@
 
 Implements the offline EnginePlugin protocol (load_model, warmup, run_inference,
 cleanup, check_hardware) and, additively, the ServerCapable online-serving
-extension (launch, await_ready, shutdown) - a C1 sibling of the single-call
+extension (launch, await_ready, shutdown) - an additive sibling of the single-call
 offline contract, not a change to it. The serving methods delegate the generic
 launch/probe/shutdown mechanics to
 :mod:`llenergymeasure.infra.server_lifecycle` and hold only the TRT-LLM command
@@ -639,8 +639,8 @@ class TensorRTEngine:
         return errors
 
     # -------------------------------------------------------------------------
-    # ServerCapable: online-serving lifecycle (additive C1 sibling of the
-    # offline run_inference contract; readiness gated by a real probe, R8)
+    # ServerCapable: online-serving lifecycle (additive sibling of the
+    # offline run_inference contract; readiness gated by a real probe)
     # -------------------------------------------------------------------------
 
     def launch(self, config: ExperimentConfig, placement: ServerPlacement) -> ServerHandle:
@@ -690,7 +690,7 @@ class TensorRTEngine:
         *,
         timeout: float,
     ) -> None:
-        """Wait until TRT-LLM is ready: liveness poll THEN a real probe (R8)."""
+        """Wait until TRT-LLM is ready: liveness poll THEN a real probe."""
         from llenergymeasure.infra import server_lifecycle as sl
 
         sl.await_ready(handle, probe_request, timeout=timeout)
@@ -761,7 +761,8 @@ class TensorRTEngine:
         engine_params = config.active_engine_params()
 
         # engine_path early-return: pass engine dir as model, skip all compile-time kwargs.
-        # engine_path is not a curated field (D1 drop); accessed via extra="allow" passthrough.
+        # engine_path is not a curated field (dropped from the typed schema);
+        # accessed via extra="allow" passthrough.
         raw_engine_path = (
             getattr(engine_params, "engine_path", None) if engine_params is not None else None
         )

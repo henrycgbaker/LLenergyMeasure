@@ -389,7 +389,7 @@ def test_harness_build_result_stamps_config_serving_mode(serving_mode: str) -> N
     from llenergymeasure.engines.protocol import InferenceOutput
 
     server = {"traffic": {"rate": 10, "window_seconds": 60}} if serving_mode == "server" else None
-    # vllm is server-capable; transformers server mode is gated off (E5 fast-follow),
+    # vllm is server-capable; transformers server mode is gated off (a fast-follow),
     # so the server parametrisation uses an admissible server-mode engine.
     config = ExperimentConfig(
         task={"model": "test/model"}, engine="vllm", serving_mode=serving_mode, server=server
@@ -822,12 +822,12 @@ def test_harness_build_result_propagates_baseline_fields() -> None:
 
 
 # =============================================================================
-# D1: per-token energy headline divides by OUTPUT tokens only
+# per-token energy headline divides by OUTPUT tokens only
 # =============================================================================
 
 
 def test_energy_per_token_mj_uses_output_tokens_only() -> None:
-    """energy_per_token_mj_total divides energy by OUTPUT tokens, not input+output (D1)."""
+    """energy_per_token_mj_total divides energy by OUTPUT tokens, not input+output."""
     from llenergymeasure.engines.protocol import InferenceOutput
 
     kwargs = _make_build_result_args()
@@ -850,12 +850,12 @@ def test_energy_per_token_mj_uses_output_tokens_only() -> None:
 
 
 # =============================================================================
-# H1: FLOPs estimator tries the hf_model (actual params) path FIRST
+# FLOPs estimator tries the hf_model (actual params) path FIRST
 # =============================================================================
 
 
 def test_estimate_flops_prefers_hf_model_over_autoconfig() -> None:
-    """_estimate_flops uses the actual-param hf_model path before AutoConfig (H1)."""
+    """_estimate_flops uses the actual-param hf_model path before AutoConfig."""
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.engines.protocol import InferenceOutput
 
@@ -893,7 +893,7 @@ def test_estimate_flops_prefers_hf_model_over_autoconfig() -> None:
 
 
 def test_estimate_flops_falls_back_to_autoconfig_without_model() -> None:
-    """_estimate_flops falls back to AutoConfig when no hf_model is present (H1)."""
+    """_estimate_flops falls back to AutoConfig when no hf_model is present."""
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.engines.protocol import InferenceOutput
 
@@ -918,12 +918,12 @@ def test_estimate_flops_falls_back_to_autoconfig_without_model() -> None:
 
 
 # =============================================================================
-# H6: a bad latency-measurement-mode string must not crash result assembly
+# A bad latency-measurement-mode string must not crash result assembly
 # =============================================================================
 
 
 def test_resolve_measurement_mode_guards_bad_string() -> None:
-    """An unrecognised mode string falls back to TRUE_STREAMING with a warning (H6)."""
+    """An unrecognised mode string falls back to TRUE_STREAMING with a warning."""
     from llenergymeasure.domain.metrics import LatencyMeasurementMode
 
     warnings: list[str] = []
@@ -934,7 +934,7 @@ def test_resolve_measurement_mode_guards_bad_string() -> None:
 
 
 def test_resolve_measurement_mode_accepts_valid_string() -> None:
-    """A valid mode string maps to its enum member (H6 regression guard)."""
+    """A valid mode string maps to its enum member (regression guard)."""
     from llenergymeasure.domain.metrics import LatencyMeasurementMode
 
     warnings: list[str] = []
@@ -945,12 +945,12 @@ def test_resolve_measurement_mode_accepts_valid_string() -> None:
 
 
 # =============================================================================
-# H5: warmup_excluded_samples counts the discarded probe inference
+# warmup_excluded_samples counts the discarded probe inference
 # =============================================================================
 
 
 def test_warmup_excluded_samples_includes_probe() -> None:
-    """_run_warmup counts the discarded strategy-probe inference (H5).
+    """_run_warmup counts the discarded strategy-probe inference.
 
     Fixed mode runs n_prompts loop inferences; the harness also runs one probe
     inference up front to pick the warmup strategy. That probe is discarded but

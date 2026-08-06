@@ -62,6 +62,24 @@ as the `codecarbon` extra: `pip install llenergymeasure[codecarbon]`. Less
 reliable inside Docker containers than [NVML](#nvml). Falls back to zero without
 raising an error if hardware access fails.
 
+### Config hashes and hash families {#config-hashes}
+
+Each experiment carries three config hashes:
+
+- **declared** - a digest of the fields written in the YAML config (user
+  intent), taken before any engine defaulting.
+- **resolved** - a digest of the config after the engine applies its own
+  defaults and normalisation - what the run actually uses.
+- **observed** - a digest of the config as the live library reports it after
+  construction. The resolved and observed hashes project the same values at
+  present.
+
+The declared hash and the resolved/observed hashes form two separate hash
+*families* that never intersect (they normalise numbers oppositely, so a value
+cannot collide across the two). Deduplication keys on this identity: two runs
+that differ only in a hashed field stay distinct, while true duplicates
+collapse. See also [mode_section](#mode-section).
+
 ---
 
 ## D
@@ -203,6 +221,19 @@ the KV-cache.
 Energy relevance: a larger KV-cache increases VRAM traffic and therefore memory
 bandwidth energy. Prefix caching (reusing KV tensors across requests) reduces
 energy for repeated prompt prefixes.
+
+---
+
+## M
+
+### mode_section {#mode-section}
+
+The active serving mode's slice of the resolved/observed [config
+identity](#config-hashes). In server mode it projects the traffic spec (except
+the post-hoc SLO bounds), the warmup protocol, and the inter-level cooldown; in
+offline mode it projects the warmup block. SLO bounds are deliberately never
+projected, so a rate or warmup sweep produces distinct hashes while two runs
+differing only in SLO bounds deduplicate together.
 
 ---
 

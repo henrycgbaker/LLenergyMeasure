@@ -419,7 +419,7 @@ class TransformersEngine:
         engine_params: dict[str, Any] = {}
         pt = config.active_engine_params()
 
-        # Record the RESOLVED dtype the model actually ran in (D2). With dtype unset
+        # Record the RESOLVED dtype the model actually ran in. With dtype unset
         # we pass torch_dtype="auto" so transformers infers from the checkpoint; the
         # only authoritative source for what it settled on is the loaded model.
         try:
@@ -505,7 +505,7 @@ class TransformersEngine:
         dtype = pt.dtype if pt is not None else None
         # When dtype is unset, do NOT force a default - pass "auto" so transformers
         # infers from the checkpoint, matching vllm/tensorrt which forward nothing
-        # and let each engine use its own default (comparability fix D2).
+        # and let each engine use its own default (comparability fix).
         kwargs: dict[str, Any] = {
             "torch_dtype": self._resolve_torch_dtype(dtype or "auto"),
         }
@@ -556,7 +556,7 @@ class TransformersEngine:
                 kwargs["quantization_config"] = BitsAndBytesConfig(**bnb_kwargs)
 
             # Additional from_pretrained() fields
-            # revision dropped as typed field (D1); flows through model_extra if set
+            # revision dropped as typed field; flows through model_extra if set
             if pt.max_memory is not None:
                 kwargs["max_memory"] = pt.max_memory
             if pt.low_cpu_mem_usage is not None:
@@ -710,7 +710,7 @@ class TransformersEngine:
         # num_return_sequences=N (incl. beam search) HF returns N rows per input
         # prompt, so outputs.shape[0] == len(batch) * N; output row j maps to its
         # source input via j // N. Counting only the batch rows would N-fold
-        # undercount generated tokens (EN4).
+        # undercount generated tokens.
         input_lengths = [int(x) for x in inputs["attention_mask"].sum(dim=1).tolist()]
         n_inputs = len(batch)
         n_rows = int(outputs.shape[0])

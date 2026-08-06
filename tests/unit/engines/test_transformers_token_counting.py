@@ -1,4 +1,4 @@
-"""Tests for PyTorch engine token counting with padded batches (C1 fix)."""
+"""Tests for PyTorch engine token counting with padded batches."""
 
 import pytest
 
@@ -122,7 +122,7 @@ class TestPaddedBatch:
 
 
 class TestNumReturnSequences:
-    """EN4: outputs.shape[0] == batch * num_return_sequences; count ALL rows.
+    """outputs.shape[0] == batch * num_return_sequences; count ALL rows.
 
     HF returns N rows per input prompt when num_return_sequences=N (incl. beam
     search). The old loop counted only ``batch`` rows -> N-fold undercount.

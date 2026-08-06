@@ -2,7 +2,7 @@
 
 Implements the offline EnginePlugin protocol (load_model, warmup,
 run_inference, cleanup, ...) and, additively, the ServerCapable online-serving
-extension (launch, await_ready, shutdown) - a C1 sibling of the single-call
+extension (launch, await_ready, shutdown) - an additive sibling of the single-call
 offline contract, not a change to it. The serving methods delegate the generic
 launch/probe/shutdown mechanics to
 :mod:`llenergymeasure.infra.server_lifecycle` and hold only the vLLM command
@@ -495,8 +495,8 @@ class VLLMEngine:
     ) -> dict[str, Any]:
         """Extract post-construction state from the vLLM native types.
 
-        Sampling params are captured via :func:`extract_observed_params` -
-        PoC-C allowlist is unset (the private fields ``_all_stop_token_ids``,
+        Sampling params are captured via :func:`extract_observed_params` with
+        no private-field allowlist (the private fields ``_all_stop_token_ids``,
         ``_bad_words_token_ids``, ``_eos_token_id`` default-exclude since they
         vary per-model without affecting measurement-equivalence). Engine
         params derive from ``llm.llm_engine.vllm_config`` when available;
@@ -554,8 +554,8 @@ class VLLMEngine:
         return []
 
     # -------------------------------------------------------------------------
-    # ServerCapable: online-serving lifecycle (additive C1 sibling of the
-    # offline run_inference contract; readiness gated by a real probe, R8)
+    # ServerCapable: online-serving lifecycle (additive sibling of the
+    # offline run_inference contract; readiness gated by a real probe)
     # -------------------------------------------------------------------------
 
     def launch(self, config: ExperimentConfig, placement: ServerPlacement) -> ServerHandle:
@@ -600,7 +600,7 @@ class VLLMEngine:
         *,
         timeout: float,
     ) -> None:
-        """Wait until vLLM is ready: liveness poll THEN a real probe (R8)."""
+        """Wait until vLLM is ready: liveness poll THEN a real probe."""
         from llenergymeasure.infra import server_lifecycle as sl
 
         sl.await_ready(handle, probe_request, timeout=timeout)

@@ -43,7 +43,7 @@ OIDC trusted publishing (no manual upload). See
 ### Engine code runs in Docker
 
 Each engine (Transformers, vLLM, TensorRT-LLM) runs inside its own image,
-built from the SSOT in `engine_versions/{engine}/current.yaml`. There is no host
+built from the single source of truth (SSOT) in `engine_versions/{engine}/current.yaml`. There is no host
 extra for engines: `import transformers`, `import vllm`, and
 `import tensorrt_llm` will fail on host by design. See
 [the development guide](/contributing/development) for the build/run pattern.

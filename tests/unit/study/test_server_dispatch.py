@@ -1,4 +1,4 @@
-"""Tests for the server-mode call-site wiring in the study orchestrator (SM9 PR-B).
+"""Tests for the server-mode call-site wiring in the study orchestrator.
 
 Covers the server-capable-entry-path contract: the orchestration choke point
 overlays the user-config server warmup onto every server experiment (so the

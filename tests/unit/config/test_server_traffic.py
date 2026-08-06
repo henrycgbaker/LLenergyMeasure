@@ -1,6 +1,6 @@
 """Tests for the server: mode namespace, traffic config, and the slo hash exclusion.
 
-Covers the SM4 verify charter:
+Covers the traffic-config surface:
 - the generic mode-section match validator (server: legal iff serving_mode=server);
 - the dual-family slo exclusion (excluded from BOTH hash families, stamped in the dump);
 - rate as a hashed identity axis in both families;
@@ -23,7 +23,7 @@ from llenergymeasure.study.hashing import build_resolved_view
 
 # These mode/traffic/hash tests are engine-agnostic in intent; they use vllm (a
 # server-capable engine) so both the offline and server sides are admissible.
-# transformers server mode is gated off as a fast-follow (E5), so a transformers
+# transformers server mode is gated off as a fast-follow, so a transformers
 # server config would be rejected before these mechanics could be exercised.
 def _offline(**overrides) -> ExperimentConfig:
     base: dict = {"task": {"model": "gpt2"}, "engine": "vllm", "serving_mode": "offline"}
@@ -63,8 +63,8 @@ class TestTrafficShape:
             _server({"window_seconds": 60})
 
     def test_window_defaults_when_neither_set(self):
-        # SM7 CONFIGURABILITY AMENDMENT: window duration is a config-exposed DEFAULT
-        # (E2 floor 240s), not a required field - a server config may omit the window.
+        # Configurability: window duration is a config-exposed DEFAULT
+        # (the calibrated floor, 240s), not a required field - a server config may omit the window.
         cfg = _server({"rate": 10})
         assert cfg.server.traffic.window_seconds == 240.0
         assert cfg.server.traffic.window_requests is None
@@ -105,7 +105,7 @@ class TestTrafficShape:
         assert cfg.server.cooldown_seconds == 30.0
 
     def test_server_window_requests_rejected_at_v07(self):
-        # SM7: count-bound windows have no server-mode measurement path (the timing
+        # count-bound windows have no server-mode measurement path (the timing
         # and stability gate are duration-grounded), so a server config using
         # window_requests is rejected at the ExperimentConfig edge.
         with pytest.raises((ValidationError, ValueError), match="window_requests"):
@@ -152,7 +152,7 @@ class TestModeSectionMatch:
 
 
 # ---------------------------------------------------------------------------
-# Dual-family slo exclusion (O5.3) + rate identity (C4)
+# Dual-family slo exclusion + rate identity
 # ---------------------------------------------------------------------------
 
 
@@ -234,13 +234,13 @@ class TestSloHashExclusion:
 
 class TestRateIdentity:
     def test_rate_distinct_declared_hash(self):
-        # (b) differing only in rate -> distinct declared hash (C4).
+        # (b) differing only in rate -> distinct declared hash.
         assert compute_declared_config_hash(_server({"rate": 2, "window_seconds": 60})) != (
             compute_declared_config_hash(_server({"rate": 10, "window_seconds": 60}))
         )
 
     def test_rate_distinct_resolved_hash(self):
-        # (b) differing only in rate -> distinct resolved hash (C4).
+        # (b) differing only in rate -> distinct resolved hash.
         h2 = hash_config(build_resolved_view(_server({"rate": 2, "window_seconds": 60})))
         h10 = hash_config(build_resolved_view(_server({"rate": 10, "window_seconds": 60})))
         assert h2 != h10
@@ -255,7 +255,7 @@ class TestRateIdentity:
 
 
 class TestWindowKnobIdentity:
-    """SM7 window-duration / ramp / cooldown are identity in BOTH hash families.
+    """Window-duration / ramp / cooldown are identity in BOTH hash families.
 
     They follow the existing discipline with NO new exclusion (server.traffic.slo
     stays the sole declared-hash exclusion): user-set values enter the declared hash
@@ -332,7 +332,7 @@ class TestModeScopedSweep:
     def test_server_traffic_rate_sweep_expands_and_hashes_distinctly(self):
         # server.traffic.rate: [2, 10] must resolve through the existing dotted-path
         # sweep machinery (no new machinery) into two independent experiments whose
-        # resolved hashes differ - proving the axis is not a silent no-op (C4).
+        # resolved hashes differ - proving the axis is not a silent no-op.
         raw_study = {
             "serving_mode": "server",
             "engine": "vllm",

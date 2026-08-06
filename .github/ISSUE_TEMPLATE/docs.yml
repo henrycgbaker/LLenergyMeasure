@@ -32,7 +32,7 @@ body:
     id: doc_path
     attributes:
       label: Doc path or URL
-      placeholder: "docs/architecture/ci-architecture.md, README.md, contributing/citation.md, or web URL"
+      placeholder: "docs/explanation/architecture/ci-architecture.md, README.md, docs/contributing/citation.md, or web URL"
     validations:
       required: true
   - type: textarea

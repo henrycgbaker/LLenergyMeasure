@@ -1,1 +1,1 @@
-"""Integration tests for LLM Bench."""
+"""Integration tests for LLenergyMeasure."""

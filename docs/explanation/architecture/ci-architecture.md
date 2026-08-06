@@ -222,7 +222,7 @@ the seed locally, then re-run the promotion via `workflow_dispatch`.
 
 ## GPU CI
 
-`gpu-ci.yml` is the Tier 2 integration surface: it runs on the self-hosted GPU
+`gpu-ci.yml` is the GPU integration-test surface: it runs on the self-hosted GPU
 runner, the only place in CI with a real device. Unlike the rest
 of the CI surface (read-only checks on hosted CPU runners) it boots containers
 and runs inference. It is a reusable workflow (`workflow_call`) so the release

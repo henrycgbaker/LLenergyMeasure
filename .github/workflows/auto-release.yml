@@ -13,7 +13,7 @@ name: Auto Release
 #   4. If GPU CI fails → creates a GitHub Issue with failure details
 #
 # The 'release' label should only be added to version-bump PRs (chore: release 0.X.0).
-# See docs/deployment.md for the full release process.
+# See docs/contributing/release-process.md for the full release process.
 
 on:
   pull_request:

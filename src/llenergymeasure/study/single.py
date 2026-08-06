@@ -58,7 +58,7 @@ def run_single_experiment(
     config_hash = compute_declared_config_hash(config)
     cycle = 1
 
-    # Pre-dispatch GPU memory residual check (MEAS-01, MEAS-02)
+    # Pre-dispatch GPU memory residual check
     # Mirrors the pattern used in StudyRunner._run_one() and _run_one_docker().
     from llenergymeasure.study.gpu_memory import check_gpu_memory_residual
 

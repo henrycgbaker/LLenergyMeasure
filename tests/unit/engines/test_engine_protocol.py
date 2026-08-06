@@ -76,7 +76,7 @@ def test_get_engine_unknown_message_contains_engine_name():
 
 
 # =============================================================================
-# _model_load_kwargs - P0 fix verification (GPU-free)
+# _model_load_kwargs verification (GPU-free)
 # =============================================================================
 
 
@@ -98,7 +98,7 @@ def test_model_load_kwargs_contains_base_keys(monkeypatch):
 
     assert "torch_dtype" in kwargs
     # dtype unset -> "auto" (do not force bfloat16), so transformers infers from
-    # the checkpoint, matching vllm/tensorrt comparability (D2).
+    # the checkpoint, matching vllm/tensorrt comparability.
     assert kwargs["torch_dtype"] == "auto"
     assert kwargs["device_map"] == "auto"
     # HF default - env var LLEM_TRUST_REMOTE_CODE not set, no typed override
@@ -162,7 +162,7 @@ def test_model_load_kwargs_trust_remote_code_env_var_opt_in(monkeypatch):
 
 
 def test_model_load_kwargs_passthrough_kwargs_merged():
-    """passthrough_kwargs are merged into model load kwargs (core P0 fix)."""
+    """passthrough_kwargs are merged into model load kwargs."""
     pytest.importorskip("torch")
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.engines.transformers import TransformersEngine
@@ -502,7 +502,7 @@ def test_model_load_kwargs_explicit_dtype_maps_to_torch(monkeypatch):
 
 
 def test_model_load_kwargs_dtype_unset_is_auto():
-    """dtype unset -> torch_dtype='auto', NOT a forced bfloat16 default (D2)."""
+    """dtype unset -> torch_dtype='auto', NOT a forced bfloat16 default."""
     torch = pytest.importorskip("torch")
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.engines.transformers import TransformersEngine

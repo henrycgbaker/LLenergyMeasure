@@ -5,6 +5,8 @@
 Full reference for all `ExperimentConfig` fields.
 All fields except `model` are optional and have sensible defaults.
 
+**Config identity and hashing.** Each experiment carries three config hashes: the *declared* hash digests the fields you wrote in the YAML config (user intent); the *resolved* hash digests the config after the engine applies its own defaults and normalisation (what the run actually uses); and the *observed* hash digests the config as the live library reports it after construction (the resolved and observed hashes project the same values at present). The declared hash and the resolved/observed hashes form two separate hash *families* that never intersect. The *mode_section* is the active serving mode's slice of that identity - in server mode the traffic spec (minus the post-hoc SLO bounds), the warmup protocol, and the inter-level cooldown; in offline mode the warmup block - so a rate or warmup sweep produces distinct hashes while two runs differing only in SLO bounds deduplicate together.
+
 **Sections:**
 - [Top-Level Fields](#top-level-fields)
 - [Baseline (`baseline:`)](#baseline-baseline)
@@ -85,7 +87,7 @@ All fields except `model` are optional and have sensible defaults.
 |-------|------|---------|-------------|
 | `mode` | 'composite' | 'fixed' | `composite` | Warmup protocol: 'composite' (default) waits for the three-observable thermal-equilibrium gate (power plateau + temperature settled + no thermal throttle) with a timeout_seconds failsafe; 'fixed' warms for a fixed duration_seconds with no gate (the explicit opt-out). |
 | `timeout_seconds` | number | `900.0` | Composite-mode failsafe: hard upper bound on convergence gating. At the timeout the harness proceeds and stamps convergence: timed_out in the result (never hangs, never silently passes). Ignored in fixed mode. |
-| `duration_seconds` | number | `300.0` | Fixed-mode warmup duration in seconds (the E3 floor rule default). 60s is a citable convenience floor, not a thermal-equilibrium claim; 0 skips warmup traffic entirely. Ignored in composite mode. |
+| `duration_seconds` | number | `300.0` | Fixed-mode warmup duration in seconds (the floor rule default). 60s is a citable convenience floor, not a thermal-equilibrium claim; 0 skips warmup traffic entirely. Ignored in composite mode. |
 
 ### Server Traffic (`server.traffic:`)
 
@@ -94,9 +96,9 @@ All fields except `model` are optional and have sensible defaults.
 | `rate` | number | *(required)* | Request arrival rate in requests per second (scalar). A rate sweep is written as a study-level list axis (server.traffic.rate: [2, 10]) and expanded to independent per-window configs before hashing. |
 | `arrival` | 'poisson' | 'gamma' | `poisson` | Inter-arrival distribution. 'poisson' (default) is memoryless (CV=1); 'gamma' allows tunable burstiness via the burstiness field. |
 | `burstiness` | number | None | `null` | Coefficient of variation of inter-arrival times for arrival='gamma' (CV=1 reproduces Poisson, >1 is burstier, <1 smoother). Ignored for arrival='poisson'. |
-| `window_seconds` | number | None | `null` | Measured-span duration in seconds. Defaults to 240s (the E2 minimum-window-duration floor) when omitted; the sole supported window form at v0.7. |
-| `window_requests` | integer | None | `null` | Measured span as a completed-request count. A server config using it is rejected at v0.7: the server-mode measurement path (timing + stability gate) is duration-grounded (E2). Reserved for a future release; use window_seconds. |
-| `ramp_exclusion_seconds` | number | `30.0` | Pre-stable ramp excluded from the measured span, in seconds (absolute, E2 default). The measured span STARTS this many seconds after load begins and is excluded PROSPECTIVELY (never trimmed retroactively). 0 disables ramp exclusion. A measurement-methodology knob, so it joins the config identity like the other traffic fields (only slo is excluded). |
+| `window_seconds` | number | None | `null` | Measured-span duration in seconds. Defaults to 240s (the minimum-window-duration floor) when omitted; the sole supported window form at v0.7. |
+| `window_requests` | integer | None | `null` | Measured span as a completed-request count. A server config using it is rejected at v0.7: the server-mode measurement path (timing + stability gate) is duration-grounded. Reserved for a future release; use window_seconds. |
+| `ramp_exclusion_seconds` | number | `30.0` | Pre-stable ramp excluded from the measured span, in seconds (an absolute duration; the default is grounded in the minimum-window-duration study). The measured span STARTS this many seconds after load begins and is excluded PROSPECTIVELY (never trimmed retroactively). 0 disables ramp exclusion. A measurement-methodology knob, so it joins the config identity like the other traffic fields (only slo is excluded). |
 | `concurrency_cap` | integer | None | `null` | Maximum in-flight requests. None = uncapped (pure open-loop arrivals). |
 | `slo` | SloConfig | None | `null` | Optional SLO bounds (ttft_ms, tpot_ms at a shared percentile). Classifies results post-hoc; excluded from both config-hash families but stamped in the config sidecar and result provenance. |
 | `seed` | integer | None | `null` | Seed for the arrival-process RNG. None = unseeded (nondeterministic arrivals). |

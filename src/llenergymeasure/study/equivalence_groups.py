@@ -1,13 +1,11 @@
 """Equivalence-groups sidecar - pre-run resolved groups + post-run observed detection.
 
-Design: ``.product/designs/config-deduplication-dormancy/sweep-dedup.md`` §6.
-
 Written alongside the study's results bundle. ``pre_run_groups`` is populated
 at sweep-expansion time by :func:`resolve_library_effective` and serialised immediately;
 ``observed_collision_groups`` is populated after the study completes by scanning
 sidecars for shared observed-config-hash values.
 
-The observed-config-hash collision invariant (§4.1) guarantees that in a post-resolved-config-hash dedup run set,
+The observed-config-hash collision invariant guarantees that in a post-resolved-config-hash dedup run set,
 any group with ``len(member_resolved_config_hashes) >= 2`` is a **proven library-resolution mechanism gap**.
 The file is a post-hoc analysis artifact; nothing reads it back at runtime
 (``llem report-gaps`` consumes ``runtime_observations.jsonl``, not this file).
@@ -74,12 +72,12 @@ def find_observed_collisions(sidecars: list[dict[str, Any]]) -> list[ObservedCol
     """Group sidecars by ``(engine, engine_version, observed_config_hash)``.
 
     Any group with size >= 2 AND distinct ``resolved_config_hash`` across its members is
-    flagged as a proven library-resolution mechanism gap - per sweep-dedup.md §4.1.
+    flagged as a proven library-resolution mechanism gap.
 
     Each sidecar dict must carry at minimum ``engine``, ``engine_version``,
     ``resolved_config_hash``, ``observed_config_hash``, and ``experiment_id`` keys. Sidecars missing any
-    of these are silently skipped (pre-50.3a data, or runs with dedup_mode=off
-    for which observed-config-hash may be partial).
+    of these are silently skipped (older sidecars predating these keys, or runs
+    with dedup_mode=off for which observed-config-hash may be partial).
     """
     buckets: dict[tuple[str, str, str], list[dict[str, Any]]] = defaultdict(list)
     for sc in sidecars:

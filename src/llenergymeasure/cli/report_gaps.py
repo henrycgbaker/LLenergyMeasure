@@ -58,7 +58,8 @@ def report_gaps_cmd(
             "--include-exceptions",
             help=(
                 "Also propose rules from runtime exceptions. "
-                "Disabled by default; exceptions ship through a different review path."
+                "Disabled by default; when off, exception records are skipped and "
+                "only warning and log emissions are proposed."
             ),
         ),
     ] = False,

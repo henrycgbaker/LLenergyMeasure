@@ -118,7 +118,7 @@ def make_result(**overrides) -> ExperimentResult:
 def make_study_result(**overrides) -> StudyResult:
     """Return a valid StudyResult with sensible defaults.
 
-    Needed by CLI tests (Plan 03) and E2E tests (Plan 04).
+    Needed by CLI and E2E tests.
     Tests override only what they care about.
     """
     from llenergymeasure.domain.experiment import StudySummary

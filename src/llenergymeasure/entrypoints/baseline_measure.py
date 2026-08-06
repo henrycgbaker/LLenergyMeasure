@@ -3,9 +3,7 @@
 Invoked by the host study runner via a short-lived container whose CUDA state
 must match the experiment container's - a host-measured baseline understates
 container idle power by ~8.7 W/GPU on A100 because the host has no CUDA context
-and no torch memory pool seeded. See
-``.product/research/baseline-measurement-location.md`` for the controlled
-experiment and statistics.
+and no torch memory pool seeded.
 
 Volume layout (managed by the host helper ``study/baseline_container.py``):
     /run/llem/baseline_spec.json    - written by host before container start

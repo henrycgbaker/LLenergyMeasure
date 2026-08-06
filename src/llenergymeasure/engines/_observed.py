@@ -23,14 +23,13 @@ def extract_observed_params(
 ) -> dict[str, Any]:
     """Dump a constructed native type's post-``__post_init__`` state.
 
-    Used by the observed-config hashing pipeline (sweep-dedup.md §3.2) - after each
+    Used by the observed-config hashing pipeline: after each
     backend constructs its native type (``GenerationConfig``,
     ``SamplingParams``, ``LlmArgs``), the harness calls this to extract
     the authoritative effective parameters the library settled on.
 
-    PoC-C finding (sweep-dedup.md §3.2 and §10 decision log): live
-    libraries leak private state that poisons observed_config_hash if passed through
-    unfiltered. Specific leaks observed:
+    Live libraries leak private state that poisons observed_config_hash if passed
+    through unfiltered. Specific leaks observed:
 
     - ``transformers.GenerationConfig``: ``_commit_hash``,
       ``_from_model_config``

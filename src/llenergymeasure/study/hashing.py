@@ -87,7 +87,7 @@ def resolved_config_hash(config: ExperimentConfig) -> str:
     """Resolved-config hash of a (resolved) config: hash of its resolved-config view.
 
     The single home for ``hash_config(build_resolved_view(config))`` - the resolved
-    hash carries the realised warmup protocol (the R7W user-config overlay output),
+    hash carries the realised warmup protocol (the user-config overlay output),
     so it moves when the resolved protocol changes even though the declared hash
     does not.
     """

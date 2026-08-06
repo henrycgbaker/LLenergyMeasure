@@ -512,7 +512,7 @@ class TestIsContainerSocketAvailable:
 
 
 # ---------------------------------------------------------------------------
-# resolve_runner - container-self-aware auto-detection (the hardening slice)
+# resolve_runner - container-self-aware auto-detection
 # ---------------------------------------------------------------------------
 
 

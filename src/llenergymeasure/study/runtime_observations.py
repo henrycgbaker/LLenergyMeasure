@@ -1,4 +1,4 @@
-"""Runtime observation capture - feedback channel #1 for the rules corpus.
+"""Runtime observation capture - a feedback source for the rules corpus.
 
 Wraps an experiment's worker body in a context manager that captures:
 
@@ -135,8 +135,8 @@ def capture_runtime_observations(
 
     warn_ctx = warnings.catch_warnings(record=True)
     captured = warn_ctx.__enter__()
-    # Deliberately no ``warnings.simplefilter("always")`` - RT-0 PoC
-    # confirmed ``catch_warnings(record=True)`` alone captures one record
+    # Deliberately no ``warnings.simplefilter("always")``:
+    # ``catch_warnings(record=True)`` alone captures one record
     # per unique ``(filename, lineno, category, message)`` on Python 3.10+.
     # Calling simplefilter perturbs the measurement window.
 
@@ -318,9 +318,9 @@ def _installed_version(engine_value: str) -> str:
 def _append_observation(path: Path, record: dict[str, Any]) -> None:
     """Append one JSONL record to ``path`` using buffered IO + flush + fsync.
 
-    W1 pattern from RT-2 PoC: open in append mode, write, flush, fsync.
-    Torn-line-safe at 10 KiB records on Linux ext4. Best-effort - a
-    write failure is logged at WARNING but never raises.
+    Open in append mode, write, flush, fsync. Torn-line-safe at 10 KiB
+    records on Linux ext4. Best-effort - a write failure is logged at
+    WARNING but never raises.
     """
     try:
         path.parent.mkdir(parents=True, exist_ok=True)

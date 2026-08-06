@@ -183,7 +183,7 @@ def _save_and_record(
         from llenergymeasure.domain.session import SessionBlock
         from llenergymeasure.results.bundle import BundleWriter
 
-        # Offline degenerates to the one-window session (O7.1/O7.2): a fresh
+        # Offline degenerates to the one-window session: a fresh
         # session id, window_count=1, all phase raws null (offline pre-window
         # phases are not instrumented). Present in both modes so readers see one
         # shape.
@@ -339,7 +339,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
             ExperimentOrder(self.study.study_execution.experiment_order),
         )
 
-        # Session grouping (O7.3): fold consecutive rate-only-varying server cells
+        # Session grouping: fold consecutive rate-only-varying server cells
         # into one session (one launch, a rate level per cell). group_starts maps the
         # FIRST index of a multi-cell server group to its member indices; single
         # cells (offline, or a lone server cell) are dispatched one at a time as
@@ -350,7 +350,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
         group_starts = {unit[0]: unit for unit in units if len(unit) > 1}
         consumed_by_group: set[int] = set()
 
-        # spawn: CUDA-safe; fork causes silent CUDA corruption (CP-1)
+        # spawn: CUDA-safe; fork causes silent CUDA corruption
         mp_ctx = multiprocessing.get_context("spawn")
 
         # Reset interrupt state for this run
@@ -616,7 +616,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
         Records failure/success, applies cooldown + probe on a trip, and on a failed
         probe marks the remaining experiments skipped. Returns True when the study must
         abort (caller sets _aborted and breaks). ``consumed`` carries the server-group
-        indices the skip sweep must not re-process (H1).
+        indices the skip sweep must not re-process.
         """
         from llenergymeasure.domain.experiment import compute_declared_config_hash
 
@@ -758,7 +758,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
         without touching their cycle counters: their session already resolved them
         (completed / failed) and advanced their counters, so re-processing would
         double-advance and mark a non-existent (future-cycle) entry - a KeyError
-        that would abort the study uncleanly (H1).
+        that would abort the study uncleanly.
 
         Args:
             ordered: Full ordered experiment list (study.experiments).
@@ -819,7 +819,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
         cycle = self._cycle_counters.get(config_hash, 0) + 1
         self._cycle_counters[config_hash] = cycle
 
-        # Server dispatch path (C3): a server config drives a ServerSession - launch
+        # Server dispatch path: a server config drives a ServerSession - launch
         # the engine server, warm up, run the window manager to N results, shut down
         # - a sibling of the two offline dispatch paths. Routed FIRST so the offline
         # subprocess/docker paths below stay byte-identical for offline configs.
@@ -852,7 +852,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
         cycle: int,
         index: int,
     ) -> Any:
-        """Dispatch one server-mode experiment via a ServerSession (C1/C3 sibling).
+        """Dispatch one server-mode experiment via a ServerSession (sibling of the offline paths).
 
         The session launches the engine server, warms up, drives the window
         manager to N window results, and shuts the server down on every exit path.
@@ -882,13 +882,13 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
             return failure
 
     def _run_one_server_group(self, member_configs: list[ExperimentConfig], *, index: int) -> Any:
-        """Dispatch a rate-only-varying server group as one session (O7.3).
+        """Dispatch a rate-only-varying server group as one session.
 
         Assigns each member its (config_hash, cycle), skipping members already
         completed in a prior run (resume) while still advancing their cycle counters
         so subsequent cycles stay aligned. The surviving cells drive one server
-        lifetime with a rate level each (one launch, re-warm per level, SM8
-        unchanged); the per-cell manifest lifecycle is the session's own. Returns the
+        lifetime with a rate level each (one launch, re-warm per level, the warmup
+        protocol unchanged); the per-cell manifest lifecycle is the session's own. Returns the
         session result (a ServerSessionResult or a failure dict), or None when the
         whole group was already completed on resume. Host-side construction / launch
         failures translate to a non-fatal failure dict per member, mirroring the
@@ -917,7 +917,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
             error_type = type(exc).__name__
             message = str(exc)
             # "cells" carries the group size so the study summary counts a whole-group
-            # launch failure as N failed cells, not one (M4). The per-cell manifest
+            # launch failure as N failed cells, not one. The per-cell manifest
             # marks below remain the authoritative cell-level record.
             failure: dict[str, Any] = {"type": error_type, "message": message, "cells": len(cells)}
             # A late fault (e.g. a teardown fault escaping the session guard) must not

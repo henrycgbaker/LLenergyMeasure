@@ -1,8 +1,8 @@
-"""Tests for the server-mode warmup protocol (SM8): the three-observable composite
+"""Tests for the server-mode warmup protocol: the three-observable composite
 gate, the fixed opt-out, the timeout failsafe, per-level re-warm, the readiness
 probe request shape, and the divergence-labeling protocol descriptions.
 
-Covers the SM8 verify charter: warmup draws from the (injected) MEASURED traffic
+Covers: warmup draws from the (injected) MEASURED traffic
 shape; NO pre-window idle cooldown; re-warm fires at every level; timeout stamps
 timed_out; each composite observable gates independently.
 """
@@ -369,7 +369,7 @@ class TestServerWarmupComposite:
         assert source.issued >= 1  # warmup traffic actually ran
 
     def test_composite_captures_warmup_energy(self):
-        # The gate sampler's power series ALSO feeds the warmup energy (C2: same
+        # The gate sampler's power series ALSO feeds the warmup energy (same
         # sampler, not a parallel path). A settled series integrates to > 0 J.
         sampler = FakeSampler(_SETTLED, ready_after=1)
         source = FakeSource()

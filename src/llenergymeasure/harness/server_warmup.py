@@ -1,9 +1,9 @@
 """Server-mode warmup execution: the convergence-composite gate + fixed opt-out.
 
-This fills the warmup-hook seam SM7 reserved on the :class:`WindowManager`
+This fills the warmup-hook seam the :class:`WindowManager` reserves
 (``harness/window_manager.py``): the manager runs a :class:`ServerWarmup` ONCE
-before each rate level's measured windows open, re-warming per level (D6 fails
-safe; an already-equilibrated later level exits fast). Two modes (R5):
+before each rate level's measured windows open, re-warming per level (fails
+safe; an already-equilibrated later level exits fast). Two modes:
 
 - **composite** (default): warm the server with issuer-driven traffic at the
   target rate, drawn from the MEASURED traffic's shape distribution
@@ -16,27 +16,27 @@ safe; an already-equilibrated later level exits fast). Two modes (R5):
   * **power plateau** - the power series is stable-through-end at CoV <= 0.05,
     reusing ``windowing.py``'s ``_detect_steady_state`` (no math changes);
   * **temperature settled** - every monitored GPU's trailing-90s temperature
-    range (a 60s settle window held through a 30s confirmation) is below 2C (E3
+    range (a 60s settle window held through a 30s confirmation) is below 2C (the
     ``dT/dt`` anchor), which also imposes the ~90s loaded-observation floor;
   * **throttle clear** - no active thermal-throttle bit in the trailing window
     (the per-sample ``thermal_throttle`` flag = the "while active" reading of
-    ``ThrottleInfo.thermal.any``, section 16).
+    ``ThrottleInfo.thermal.any``).
 
   A hard ``timeout_seconds`` failsafe (default 900s) PROCEEDS with a loud
-  ``timed_out`` stamp rather than hanging or silently passing (E3 cap rule).
+  ``timed_out`` stamp rather than hanging or silently passing.
 
 - **fixed** (explicit opt-out): the same issuer-driven traffic path, no gate, for
   ``duration_seconds`` (default 300s; 0 skips warmup traffic entirely).
 
-There is NO idle cooldown anywhere in this path (D6: the server's loaded
+There is NO idle cooldown anywhere in this path (the server's loaded
 equilibrium IS the measured thermal posture; an idle settle would bias
 energy-per-token favourably). Detector MATH is shared with the offline warmup
-(R6) by reusing ``windowing.py`` - no controller framework.
+by reusing ``windowing.py`` - no controller framework.
 
 Result provenance: each invocation records a :class:`ServerWarmupResult` on the
-instance (``results``) so the session layer (SM9) can stamp the outcome and the
-per-mode pre-window protocol description into the bundle - the D6 divergence
-label SM14 renders offline-vs-server side by side.
+instance (``results``) so the session layer can stamp the outcome and the
+per-mode pre-window protocol description into the bundle - the cross-mode
+divergence label the server-mode docs render offline-vs-server side by side.
 """
 
 from __future__ import annotations
@@ -82,7 +82,8 @@ class WarmupTrafficError(LLEMError):
 
     Raised (rather than proceeding) when the warmup traffic task dies before the
     gate/duration finishes, or when warmup ends with zero successfully completed
-    requests. This is a DIFFERENT failure class from R5's proceed-on-timeout: a
+    requests. This is a DIFFERENT failure class from the composite gate's
+    proceed-on-timeout: a
     convergence timeout is disclosed uncertainty (the warmup happened, equilibrium
     is merely unconfirmed), whereas dead traffic means the warmup did not happen at
     all - and the measured window's traffic on the same transport would fail too.
@@ -146,15 +147,15 @@ __all__ = [
     "describe_server_warmup_protocol",
 ]
 
-# --- Composite-gate calibration (E3, section 16/17). Not user-configurable: the
+# --- Composite-gate calibration. Not user-configurable: the
 # thresholds are calibrated constants, like windowing.py's k=4 / 0.05. ----------
 
-#: Trailing window over which the temperature "delta" is measured (E3 dT/dt anchor).
+#: Trailing window over which the temperature "delta" is measured (the dT/dt anchor).
 _TEMP_SETTLE_WINDOW_S = 60.0
 #: Confirmation the settled state must hold before the gate accepts it.
 _TEMP_CONFIRM_WINDOW_S = 30.0
 #: Total trailing temperature window (settle + confirm); also the loaded-observation
-#: floor the gate structurally imposes (R5 FLOOR, ~90s).
+#: floor the gate structurally imposes (~90s).
 _TEMP_TOTAL_WINDOW_S = _TEMP_SETTLE_WINDOW_S + _TEMP_CONFIRM_WINDOW_S
 #: Temperature is "settled" when its trailing-window range stays below this (Celsius).
 _TEMP_SETTLED_DELTA_C = 2.0
@@ -194,7 +195,7 @@ def _power_plateau(samples: list[PowerThermalSample]) -> bool:
 def _temperature_settled(samples: list[PowerThermalSample]) -> bool:
     """True iff every monitored GPU's trailing-90s temperature range is below 2C.
 
-    The trailing-60s delta held through a +30s confirmation (E3) is operationalised
+    The trailing-60s delta held through a +30s confirmation is operationalised
     as the temperature RANGE over the trailing ``_TEMP_TOTAL_WINDOW_S`` staying below
     ``_TEMP_SETTLED_DELTA_C`` - a conservative single-pass reading that also requires
     at least that much loaded history (the ~90s floor). Per GPU (not pooled): a
@@ -255,7 +256,7 @@ def _evaluate_observables(samples: list[PowerThermalSample]) -> ObservableState:
 
 
 # ---------------------------------------------------------------------------
-# Result + protocol description (divergence labeling, D6)
+# Result + protocol description (divergence labeling)
 # ---------------------------------------------------------------------------
 
 
@@ -264,7 +265,7 @@ def _integrate_sampler_energy(samples: list[PowerThermalSample]) -> float | None
 
     Reuses the window manager's energy machinery (``windowing._clean_samples`` +
     ``energy.nvml.integrate_power_samples``, summed across GPUs) so the per-level
-    warmup energy is NOT a parallel integration path (C2): the same PowerThermal
+    warmup energy is NOT a parallel integration path: the same PowerThermal
     sampler the convergence gate already polls also feeds the energy denominator.
     Returns None when fewer than two usable samples were collected.
     """
@@ -280,14 +281,14 @@ def _integrate_sampler_energy(samples: list[PowerThermalSample]) -> float | None
 
 @dataclass(frozen=True)
 class ServerWarmupResult:
-    """One level's server-warmup outcome, recorded for result provenance (SM9).
+    """One level's server-warmup outcome, recorded for result provenance.
 
     ``converged`` is True when the composite gate was satisfied (composite) or the
     fixed duration completed (fixed). ``timed_out`` is True only when composite hit
     its failsafe and PROCEEDED anyway - a loud disclosure, never a silent pass.
-    ``pre_window_protocol`` is the per-mode description SM14 uses to label the
-    offline-vs-server divergence. ``energy_j`` is the GPU energy measured over the
-    warmup phase (from the SAME sampler the gate uses, C2), or None when unmeasured.
+    ``pre_window_protocol`` is the per-mode description the server-mode docs use to
+    label the offline-vs-server divergence. ``energy_j`` is the GPU energy measured
+    over the warmup phase (from the SAME sampler the gate uses), or None when unmeasured.
     """
 
     level_index: int
@@ -301,7 +302,7 @@ class ServerWarmupResult:
 
 
 def describe_server_warmup_protocol(config: ServerWarmupConfig) -> str:
-    """Human-readable description of the server pre-window warmup protocol (D6)."""
+    """Human-readable description of the server pre-window warmup protocol."""
     if config.mode == "fixed":
         return (
             "server fixed-duration warmup: issuer-driven traffic at the target rate for "
@@ -317,7 +318,7 @@ def describe_server_warmup_protocol(config: ServerWarmupConfig) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Readiness-probe request shape (SM8 owns the SHAPE; SM6 owns the mechanics)
+# Readiness-probe request shape (warmup owns the SHAPE; the server lifecycle owns the mechanics)
 # ---------------------------------------------------------------------------
 
 
@@ -326,10 +327,10 @@ def build_probe_request(
 ) -> ProbeRequest:
     """Draw the readiness probe's request SHAPE from the traffic shape distribution.
 
-    R8: warm (and probe) the path you measure. The probe body is a representative
+    Warm (and probe) the path you measure. The probe body is a representative
     request drawn from the SAME shape source the measured traffic uses; ``path`` /
-    ``method`` are the engine's serving endpoint (SM6's mechanics feed this to
-    ``await_ready``). A non-dict payload becomes a bodyless probe.
+    ``method`` are the engine's serving endpoint (the server-lifecycle mechanics
+    feed this to ``await_ready``). A non-dict payload becomes a bodyless probe.
     """
     from llenergymeasure.infra.server_lifecycle import ProbeRequest
 
@@ -343,8 +344,8 @@ def build_probe_request(
 # ---------------------------------------------------------------------------
 
 #: Builds the warmup TrafficSource for a level from its context (spec.rate /
-#: spec.arrival ride in the WarmupContext) and a horizon in seconds. SM9 supplies
-#: it, reusing the level's measured request-shape source so warmup draws from the
+#: spec.arrival ride in the WarmupContext) and a horizon in seconds. The session
+#: layer supplies it, reusing the level's measured request-shape source so warmup draws from the
 #: MEASURED traffic distribution.
 WarmupTrafficFactory = Callable[["WarmupContext", float], "TrafficSource"]
 
@@ -352,7 +353,7 @@ WarmupTrafficFactory = Callable[["WarmupContext", float], "TrafficSource"]
 class ServerWarmup:
     """The server-mode :data:`~llenergymeasure.harness.window_manager.WarmupHook`.
 
-    Constructed by the session layer (SM9) with the resolved warmup config, a
+    Constructed by the session layer with the resolved warmup config, a
     warmup-traffic factory, the server transport, and a sampler factory; passed to
     the :class:`WindowManager` as its ``warmup_hook``. The manager awaits it once
     per level; each call records a :class:`ServerWarmupResult` on :attr:`results`.
@@ -482,7 +483,7 @@ class ServerWarmup:
         energy_j: float | None = None
         # A sampler runs purely to measure the warmup phase's GPU energy (the fixed
         # mode has no convergence gate, so the sampler is energy-only here); it is
-        # the SAME PowerThermal sampler machinery, not a parallel energy path (C2).
+        # the SAME PowerThermal sampler machinery, not a parallel energy path.
         sampler = self._sampler_factory()
         traffic_task: asyncio.Task[Any] = asyncio.create_task(source.run(counting))
 

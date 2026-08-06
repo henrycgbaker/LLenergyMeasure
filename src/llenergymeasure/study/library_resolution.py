@@ -1,7 +1,5 @@
 """Sweep library-resolution mechanism - apply validated dormant rules to fixpoint, dedup by resolved_config_hash.
 
-Design: ``.product/designs/config-deduplication-dormancy/sweep-dedup.md`` §2.
-
 The library-resolution mechanism is the host-side, pre-dispatch layer that normalises every
 field the engine-rules corpus marks as ``dormant``. Each rule's fired-state
 projection drives its subject field (the one marked ``!=`` / ``present``, or
@@ -14,9 +12,8 @@ its idempotence and shuffle-stability are covered by the unit tests in
 Rules chain (vLLM epsilon-clamp → greedy-normalise); iteration is capped at
 :data:`_MAX_ITER` to surface cycles via :class:`LibraryResolutionCycleError`.
 
-Out-of-scope per PLAN §Scope OUT: vLLM/TRT-LLM corpora don't exist yet, so
-this PR mostly exercises the transformers rules. The library-resolution mechanism itself is
-engine-generic.
+vLLM/TRT-LLM corpora don't exist yet, so today this exercises mostly the
+transformers rules; the library-resolution mechanism itself is engine-generic.
 """
 
 from __future__ import annotations
@@ -40,8 +37,8 @@ logger = logging.getLogger(__name__)
 _MAX_ITER = 10
 """Maximum fixpoint passes before declaring non-convergence.
 
-PoC-F (sweep-dedup.md §10) converged every seeded-corpus case within 2
-passes; 10 is generous headroom that still surfaces a rule cycle quickly.
+Every seeded-corpus case converged within 2 passes; 10 is generous headroom
+that still surfaces a rule cycle quickly.
 """
 
 _STRIP = object()
@@ -191,7 +188,7 @@ def _resolve_normalised_field(name: str, match_fields: dict[str, Any]) -> str:
 def _rule_normalisations(rule: Rule) -> dict[str, Any]:
     """Return ``{field_path: canonical_value}`` the rule normalises to.
 
-    Strategy (per sweep-dedup.md §2.1 and the fixpoint test's projection):
+    Strategy (mirrors the fixpoint test's projection):
 
     1. If ``normalised_fields`` lists explicit paths, each resolves to a dotted
        config path (see :func:`_resolve_normalised_field`) and collapses to

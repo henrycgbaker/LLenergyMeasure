@@ -34,7 +34,8 @@ class ExperimentManifestEntry(BaseModel):
     cycle: int
     status: Literal["pending", "running", "completed", "failed", "skipped", "interrupted"]
     # Resolved-config hash (library-resolution + realised warmup protocol). Additive:
-    # None for a pre-SM10 manifest, which leaves the resume resolved-drift guard inert.
+    # None for an older manifest predating this field, which leaves the resume
+    # resolved-drift guard inert.
     # Populated at entry creation from StudyConfig.declared_resolved_config_hashes so a
     # resumed run can detect a resolved-protocol change (e.g. a user-config warmup
     # overlay) that the declared-hash skip-set is blind to.
@@ -403,7 +404,7 @@ class ManifestWriter:
         """Map each declared config_hash to its resolved-config hash (best-effort).
 
         The resolved hash carries the realised warmup protocol (the user-config
-        overlay output, R7W), so it moves when the resolved protocol changes even
+        overlay output), so it moves when the resolved protocol changes even
         though the declared hash does not - which is what the resume resolved-drift
         guard keys on. Computed through the SAME resolved-view pipeline that produced
         StudyConfig.declared_resolved_config_hashes. Returns an empty map on any

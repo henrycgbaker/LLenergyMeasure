@@ -5,8 +5,8 @@ Public API:
     ExperimentResult, StudyResult, __version__
 
 Stability contract: exports in __all__ follow SemVer. Names not in __all__
-are internal and may change without notice. One minor version deprecation
-window before removing any __all__ export (removed in v2.x+1 at earliest).
+are internal and may change without notice. A deprecated __all__ export is
+removed no earlier than one minor version after its deprecation.
 """
 
 import logging

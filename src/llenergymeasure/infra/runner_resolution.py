@@ -17,7 +17,7 @@ picked up automatically when available. Pass ``user_config=None`` to skip
 the user config step entirely.
 
 This module is intentionally free of Docker dispatch mechanics - it only decides
-*what* should run *where*. Dispatch is handled by DockerRunner (Plan 03).
+*what* should run *where*. Dispatch is handled by DockerRunner.
 """
 
 from __future__ import annotations

@@ -17,8 +17,8 @@ Offline sessions produce EXACTLY ONE result per session (one engine lifetime =
 one measured window). The point of the seam is that the session LIFETIME
 (acquire -> produce -> release) is separable from result production: that is what
 admits the server session (:class:`~llenergymeasure.study.server_session.ServerSession`),
-whose single lifetime produces N results, one per measurement window
-(constraint C3). This module defines only the offline sessions - the server
+whose single lifetime produces N results, one per measurement window.
+This module defines only the offline sessions - the server
 session lives in :mod:`llenergymeasure.study.server_session`; the offline call
 sites here still consume one result per session, by design.
 
@@ -181,7 +181,7 @@ class SubprocessSession(_OfflineSession):
     the worker (``daemon=False`` for clean CUDA teardown), starts the progress
     consumer, marks the experiment running, and starts the process after the
     pre-dispatch GPU-memory residual check. ``run()`` drains the pipe before
-    joining (H5 deadlock fix), honours the SIGINT grace -> SIGKILL escalation,
+    joining (prevents the pipe-buffer deadlock), honours the SIGINT grace -> SIGKILL escalation,
     collects the result, writes the parent-side sentinel for crash/timeout, and
     hands the result to the runner. ``__exit__`` stops the consumer, closes the
     read end, clears the active-process handle, and removes the staging dir.
@@ -280,7 +280,7 @@ class SubprocessSession(_OfflineSession):
             runner.manifest.mark_running(self.config_hash, self.cycle)
             runner._active_process = self._process
 
-            # Pre-dispatch GPU memory residual check (MEAS-01, MEAS-02)
+            # Pre-dispatch GPU memory residual check
             from llenergymeasure.study.gpu_memory import check_gpu_memory_residual
 
             check_gpu_memory_residual()
@@ -304,7 +304,7 @@ class SubprocessSession(_OfflineSession):
         parent_conn = self._parent_conn
         timeout = self.timeout
 
-        # Drain pipe BEFORE join to prevent buffer deadlock (H5).
+        # Drain pipe BEFORE join to prevent buffer deadlock.
         # If pickled ExperimentResult > 64 KB, child blocks on conn.send()
         # while parent blocks in p.join() - classic deadlock.
         pipe_payload = _UNSET
@@ -389,7 +389,7 @@ class SubprocessSession(_OfflineSession):
         # Stop the progress consumer (no-op if run() already did).
         with contextlib.suppress(Exception):
             self._stop_consumer()
-        # Close the read end of the Pipe (C4 FD-leak fix): exactly once, here.
+        # Close the read end of the Pipe (FD-leak fix): exactly once, here.
         if self._parent_conn is not None:
             with contextlib.suppress(Exception):
                 self._parent_conn.close()
@@ -418,8 +418,7 @@ class DockerSession(_OfflineSession):
     container's timeseries staging dir.
 
     The container lifecycle is DockerRunner's; this session does not change any
-    ``DockerRunner`` call signature (S13 reworks its internals behind a frozen
-    facade).
+    ``DockerRunner`` call signature.
     """
 
     def __init__(

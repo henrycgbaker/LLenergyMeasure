@@ -241,7 +241,7 @@ def probe_image_engine_version(
 # Three tiers, cheapest first:
 #   1. in-process memo (this process, keyed by the image reference);
 #   2. persistent on-disk cache keyed by the image DIGEST (survives across
-#      processes / studies - the win the F2 plan asked for);
+#      processes / studies - the cross-study caching win);
 #   3. the cold container probe (:func:`probe_image_engine_version`).
 #
 # Invalidation is automatic and total: the key is the content digest, so a

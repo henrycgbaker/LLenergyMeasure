@@ -44,10 +44,10 @@ def finalise_study(raw: LoadedStudyRaw, *, user_config: UserConfig | None = None
 
     Steps:
       0. Overlay the tool-wide user-config server warmup onto each declared server
-         config (R7W), BEFORE dedup, so the resolved-config hash binds on the
+         config, BEFORE dedup, so the resolved-config hash binds on the
          realised warmup protocol.
       1. Library-resolution mechanism + resolved-config-hash dedup of the
-         declared configs (see sweep-dedup.md §2).
+         declared configs.
       2. compute_study_design_hash() over the post-dedup configs - the hash
          identifies the *unique* measurement set, not duplicate declarations.
       3. apply_cycles() to produce the execution sequence.
@@ -65,11 +65,11 @@ def finalise_study(raw: LoadedStudyRaw, *, user_config: UserConfig | None = None
         Resolved StudyConfig with ordered experiments, study_design_hash, dedup
         mode, and pre-run equivalence groups.
     """
-    # R7W: overlay the tool-wide user-config server warmup onto each declared
+    # Overlay the tool-wide user-config server warmup onto each declared
     # server config BEFORE dedup, so the resolved-config hash - and hence dedup -
     # binds on the realised warmup protocol. Declared hashes are untouched (the
     # overlay is side-channel state, never a field), and the overlay rides the
-    # sweep-dedup deep copies through to the runner. No-op for offline configs and
+    # dedup deep copies through to the runner. No-op for offline configs and
     # when the user config carries no warmup layer. The DECLARED-family drift checks
     # (validate_config_drift on study_design_hash, the skip-set on config_hash) are
     # blind to a user-config warmup change between runs; the RESOLVED-family guard
@@ -85,7 +85,7 @@ def finalise_study(raw: LoadedStudyRaw, *, user_config: UserConfig | None = None
     execution = raw.execution
 
     # Apply library-resolution mechanism + resolved-config-hash dedup to the declared configs
-    # before running cycles. See sweep-dedup.md §2 - this collapses measurement-equivalent
+    # before running cycles. This collapses measurement-equivalent
     # configs so a 6-config sweep with dormant sampling fields becomes 4 unique runs.
     dedup = resolve_library_effective(
         raw.valid_experiments,
@@ -119,9 +119,7 @@ def finalise_study(raw: LoadedStudyRaw, *, user_config: UserConfig | None = None
     # Serialise pre-run equivalence groups for the sidecar writer. The runner's deserialiser
     # (StudyRunner._write_equivalence_groups_sidecar) reads member_experiment_ids /
     # representative_experiment_id, so map the dedup group's member indices back to their
-    # declared-config-hash experiment ids and emit those keys. (This previously hand-rolled
-    # member_indices / representative_index - the wrong keys and raw ints - so every loaded
-    # group came back with empty members.)
+    # declared-config-hash experiment ids and emit those keys.
     from llenergymeasure.domain.experiment import compute_declared_config_hash
 
     experiment_ids = [compute_declared_config_hash(exp) for exp in raw.valid_experiments]

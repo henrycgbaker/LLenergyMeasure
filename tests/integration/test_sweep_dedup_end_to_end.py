@@ -188,7 +188,7 @@ def test_llem_execution_batch_size_sweep_not_deduped(tmp_path: Path) -> None:
 def test_measurement_warmup_sweep_not_deduped(tmp_path: Path) -> None:
     """An offline.warmup.* sweep must expand to distinct experiments.
 
-    Ruled 2026-07-11 (option A): measurement/mode-protocol fields join the identity
+    Measurement/mode-protocol fields join the identity
     hash - sweeping methodology creates distinct runs; dedup collapses only true
     duplicates. Warmup migrated to the offline: mode namespace, so it now enters the
     identity via the mode_section projection rather than the measurement block; a

@@ -5,7 +5,7 @@ timeseries sidecar path, collects the mode-agnostic measurement warnings, calls
 the result-assembly seam, then writes the timeseries Parquet and config.json
 sidecars into the staging directory. It reads per-model-load state off the
 ``_EngineLifetime`` and the per-window products off the ``_MeasuredWindow``. The
-files land in a temp staging area; the S4 ``BundleWriter`` finalises them into
+files land in a temp staging area; the ``BundleWriter`` finalises them into
 the per-experiment bundle - this module stages, it does not own bundle layout.
 
 The lazy ``write_timeseries_parquet`` wrapper here is a monkeypatch surface:

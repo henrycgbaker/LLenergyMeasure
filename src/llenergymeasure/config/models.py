@@ -60,7 +60,7 @@ SERVING_MODE_REQUIRED_MSG = (
 #: version, ``transformers serve`` is upstream-scoped to "evaluation,
 #: experimentation, and moderate load deployments" (it redirects large-scale /
 #: sustained load to vLLM or SGLang) and exposes no first-class health/liveness
-#: endpoint, so it does not clear the E5 stability gate for a sustained-load
+#: endpoint, so it does not clear the stability bar for a sustained-load
 #: measurement harness. vLLM and TensorRT-LLM are the server-mode v1 engines.
 TRANSFORMERS_SERVER_UNSUPPORTED_MSG = (
     "serving_mode=server is not supported for engine=transformers (a fast-follow). "
@@ -497,13 +497,13 @@ class MeasurementConfig(BaseModel):
 # Server-mode Traffic Configuration (serving_mode=server namespace)
 # =============================================================================
 
-#: Default measured-span duration in seconds (E2 minimum-window-duration spike,
-#: 2026-07-23: the max-across-rates per-rate floor at CoV <= 0.05). Applied when a
+#: Default measured-span duration in seconds (the empirically calibrated
+#: minimum window duration: the max-across-rates per-rate floor at CoV <= 0.05). Applied when a
 #: server config sets neither window_seconds nor window_requests, so window
 #: duration is a config-exposed DEFAULT, not a required field.
 DEFAULT_WINDOW_SECONDS = 240.0
 
-#: Default ramp-exclusion in seconds (E2 spike, absolute form: batch-fill physics
+#: Default ramp-exclusion in seconds (absolute form: batch-fill physics
 #: is window-length-independent). The measured span STARTS this many seconds after
 #: load begins; the pre-stable ramp is excluded prospectively, never trimmed after
 #: the fact.
@@ -549,7 +549,7 @@ class TrafficConfig(BaseModel):
     request rate, arrival distribution, measurement window, and optional
     concurrency cap / SLO bounds. ``rate`` is a SCALAR here - the list sweep form
     (``server.traffic.rate: [2, 10]``) is study-level grid syntax expanded to
-    independent per-window configs before hashing, so rate-identity (C4) holds per
+    independent per-window configs before hashing, so rate-identity holds per
     window.
 
     Every field except ``slo`` is part of the config identity: a sweep over rate,
@@ -591,7 +591,7 @@ class TrafficConfig(BaseModel):
         gt=0.0,
         description=(
             "Measured-span duration in seconds. Defaults to "
-            f"{DEFAULT_WINDOW_SECONDS:g}s (the E2 minimum-window-duration floor) when "
+            f"{DEFAULT_WINDOW_SECONDS:g}s (the minimum-window-duration floor) when "
             "omitted; the sole supported window form at v0.7."
         ),
     )
@@ -601,7 +601,7 @@ class TrafficConfig(BaseModel):
         description=(
             "Measured span as a completed-request count. A server config using it is "
             "rejected at v0.7: the server-mode measurement path (timing + stability "
-            "gate) is duration-grounded (E2). Reserved for a future release; use "
+            "gate) is duration-grounded. Reserved for a future release; use "
             "window_seconds."
         ),
     )
@@ -609,8 +609,9 @@ class TrafficConfig(BaseModel):
         default=DEFAULT_RAMP_EXCLUSION_SECONDS,
         ge=0.0,
         description=(
-            "Pre-stable ramp excluded from the measured span, in seconds (absolute, "
-            "E2 default). The measured span STARTS this many seconds after load begins "
+            "Pre-stable ramp excluded from the measured span, in seconds (an absolute "
+            "duration; the default is grounded in the minimum-window-duration study). "
+            "The measured span STARTS this many seconds after load begins "
             "and is excluded PROSPECTIVELY (never trimmed retroactively). 0 disables "
             "ramp exclusion. A measurement-methodology knob, so it joins the config "
             "identity like the other traffic fields (only slo is excluded)."
@@ -638,7 +639,7 @@ class TrafficConfig(BaseModel):
     def _validate_window(self) -> TrafficConfig:
         """Resolve the measured span: at most one of window_seconds / window_requests.
 
-        Both set is an error. Neither set applies the E2-ratified default duration
+        Both set is an error. Neither set applies the calibrated default duration
         (:data:`DEFAULT_WINDOW_SECONDS`), so window duration is a config-exposed
         DEFAULT rather than a required field - a server config may omit the window
         entirely and measure over the default span.
@@ -662,20 +663,20 @@ class TrafficConfig(BaseModel):
 class ServerWarmupConfig(BaseModel):
     """Server-mode warmup protocol (mode-conditioned; lives under ``server:``).
 
-    The scientifically-correct default (R5) is the convergence-composite gate: warm
+    The scientifically-correct default is the convergence-composite gate: warm
     the server with issuer-driven traffic at the target rate and open the measured
     window only once all three thermal-equilibrium observables hold together - GPU
     power plateaued, temperature settled, and zero active thermal throttle bits. A
-    hard ``timeout_seconds`` failsafe (default 900s, the E3 cap rule) prevents a
+    hard ``timeout_seconds`` failsafe (default 900s) prevents a
     hang: at timeout the harness PROCEEDS and stamps ``convergence: timed_out`` in
     the result, never silently passing.
 
     ``mode="fixed"`` is the explicit opt-out: the same issuer-driven traffic path,
-    no gate, for ``duration_seconds`` (default 300s, the E3 floor rule). 60s is a
+    no gate, for ``duration_seconds`` (default 300s). 60s is a
     citable convenience floor, NOT a thermal-equilibrium claim.
 
     There is deliberately NO thermal-floor knob (contrast ``offline.warmup``): the
-    server's loaded equilibrium IS the measured thermal posture (D6), so an idle
+    server's loaded equilibrium IS the measured thermal posture, so an idle
     settling wait would bias energy-per-token favourably. Illegal states are made
     unrepresentable by structural absence rather than a forbidding validator.
     """
@@ -704,7 +705,7 @@ class ServerWarmupConfig(BaseModel):
         default=300.0,
         ge=0.0,
         description=(
-            "Fixed-mode warmup duration in seconds (the E3 floor rule default). 60s is "
+            "Fixed-mode warmup duration in seconds (the floor rule default). 60s is "
             "a citable convenience floor, not a thermal-equilibrium claim; 0 skips "
             "warmup traffic entirely. Ignored in composite mode."
         ),
@@ -789,19 +790,18 @@ class ExperimentConfig(BaseModel):
 
     model_config = {"extra": "forbid"}
 
-    # R7W overlay side-channel: the user-config-resolved server warmup protocol,
+    # User-config warmup overlay side-channel: the user-config-resolved server warmup protocol,
     # attached at load time by apply_server_warmup_overlay when a tool-wide user
     # config supplies warmup defaults. Deliberately NOT a pydantic field, so it
     # never enters compute_declared_config_hash's wholesale dump - the declared
     # hash keeps naming user intent (the shareable study config). The
     # resolved/observed views read it via mode_section_identity, so dedup binds on
     # the realised protocol. Survives model_copy(deep=True), so it rides through
-    # the sweep-dedup canonicalisation and reaches an in-process runner unchanged.
+    # the dedup canonicalisation and reaches an in-process runner unchanged.
     # SERIALIZATION BOUNDARY: a PrivateAttr is dropped by model_dump/JSON, so it
     # does NOT cross a process/container boundary. A server-capable path that ships
     # the config into a container must carry the resolved warmup explicitly, or the
-    # in-container observed view will project the DECLARED warmup (the SM9/SM12
-    # contract note).
+    # in-container observed view will project the DECLARED warmup.
     _resolved_server_warmup: ServerWarmupConfig | None = PrivateAttr(default=None)
 
     @model_validator(mode="before")
@@ -823,7 +823,7 @@ class ExperimentConfig(BaseModel):
     def _require_serving_mode(cls, data: Any) -> Any:
         """Fail with a friendly message when ``serving_mode`` is omitted.
 
-        The field is required with no default (R4: the serving regime is a primary
+        The field is required with no default (the serving regime is a primary
         experimental condition). Pydantic's bare "Field required" message does not
         say what to write, so this before-validator raises the migration message
         naming both modes on every dict-construction path (direct, grid, loader).
@@ -1016,7 +1016,7 @@ class ExperimentConfig(BaseModel):
         Returns the mode-conditioned namespace's hashed subset:
 
         - server mode: all of ``traffic`` EXCEPT ``slo`` (slo is a post-hoc overlay,
-          excluded from identity per O5.3), keyed under ``traffic`` so the projection
+          excluded from identity), keyed under ``traffic`` so the projection
           mirrors the namespace shape; the inter-level ``cooldown_seconds``; and the
           ``warmup`` protocol block (a declared measurement-protocol knob). No new
           exclusion - slo stays the sole one.
@@ -1024,8 +1024,8 @@ class ExperimentConfig(BaseModel):
           ``{}`` (empty) for default-offline (no section), so a v0.6-style offline
           config that never set warmup knobs projects an empty mode_section slot.
 
-        The server ``warmup`` block is projected from :meth:`resolved_server_warmup`
-        (R7W): the user-config overlay OUTPUT when a tool-wide warmup default was
+        The server ``warmup`` block is projected from :meth:`resolved_server_warmup`:
+        the user-config overlay OUTPUT when a tool-wide warmup default was
         applied, else the declared ``server.warmup``. This is why the resolved and
         observed hashes carry the REALISED protocol while the declared hash (a
         wholesale dump that reads the declared field) stays user intent - two runs
@@ -1047,7 +1047,7 @@ class ExperimentConfig(BaseModel):
         return {}
 
     def attach_resolved_server_warmup(self, warmup: ServerWarmupConfig) -> None:
-        """Attach the R7-resolved server warmup protocol (load-time overlay output).
+        """Attach the resolved server warmup protocol (load-time overlay output).
 
         Stores the user-config-overlaid warmup as private side-channel state, read
         by :meth:`resolved_server_warmup` and :meth:`mode_section_identity`.
@@ -1187,11 +1187,11 @@ class ExperimentConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_transformers_server_unsupported(self) -> ExperimentConfig:
-        """Reject transformers + server mode (E5 gate failed; fast-follow).
+        """Reject transformers + server mode (deferred to a fast-follow).
 
         Server-mode support ships for vLLM and TensorRT-LLM in v1; the
         transformers server adapter is deferred because ``transformers serve`` at
-        the pinned version does not clear the E5 stability gate for a
+        the pinned version does not clear the stability bar for a
         sustained-load measurement harness (see
         :data:`TRANSFORMERS_SERVER_UNSUPPORTED_MSG`). Enforced at config
         validation (the loader/preflight edge) so the CLI and the YAML-driven API
@@ -1206,7 +1206,7 @@ class ExperimentConfig(BaseModel):
         """Reject count-bound measured windows in a server config at v0.7.
 
         The server-mode measurement path is duration-grounded: the measured-span
-        timing and the per-level stability gate were calibrated by E2 on wall-clock
+        timing and the per-level stability gate were calibrated on wall-clock
         windows, so ``server.traffic.window_requests`` has no measurement path yet.
         Reject it at this config edge (rather than at the window manager at runtime)
         so the CLI and YAML-driven API paths fail identically and early. The traffic
@@ -1222,7 +1222,7 @@ class ExperimentConfig(BaseModel):
             raise ValueError(
                 "server.traffic.window_requests (count-bound windows) is not supported "
                 "at v0.7: the server-mode measurement path (measured-span timing and "
-                "the per-level stability gate) is duration-grounded (E2). Use "
+                "the per-level stability gate) is duration-grounded. Use "
                 "server.traffic.window_seconds instead (it defaults to "
                 f"{DEFAULT_WINDOW_SECONDS:g}s when omitted)."
             )

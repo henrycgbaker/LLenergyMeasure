@@ -835,7 +835,7 @@ class TestMultiOutputTokenCounting:
 
 
 # =============================================================================
-# Test Group 16: M15 - VRAM query uses current_device(), not hardcoded 0
+# Test Group 16: VRAM query uses current_device(), not hardcoded 0
 # =============================================================================
 
 
@@ -862,7 +862,7 @@ class TestVramCurrentDevice:
 
 
 # =============================================================================
-# Test Group 17: M1 - flash_attn fields wired in _build_llm_kwargs
+# Test Group 17: flash_attn fields wired in _build_llm_kwargs
 # =============================================================================
 
 

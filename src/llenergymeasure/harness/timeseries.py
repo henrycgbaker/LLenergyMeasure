@@ -20,8 +20,8 @@ if TYPE_CHECKING:
 def _timeseries_schema() -> Any:
     """Return the locked Parquet schema for timeseries data.
 
-    Schema is locked per CONTEXT.md - do not change column names or types
-    without a schema version bump.
+    The column schema is locked - do not rename or retype columns without a
+    bundle version bump.
     """
     import pyarrow as pa
 
@@ -51,7 +51,7 @@ def write_timeseries_parquet(
 
     Groups 100ms NVML power/thermal samples into 1-second buckets per GPU and
     writes the mean of each metric per (bucket, gpu_index) pair. The schema is
-    locked (see CONTEXT.md).
+    locked (see :func:`_timeseries_schema`).
 
     For multi-GPU experiments, samples carry a gpu_index field; each GPU produces
     its own row per second. The ``gpu_index`` parameter is kept for backward

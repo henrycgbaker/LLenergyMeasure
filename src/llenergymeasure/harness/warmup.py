@@ -17,7 +17,7 @@ from collections.abc import Callable
 from llenergymeasure.config.models import ExperimentConfig, WarmupConfig
 from llenergymeasure.domain.metrics import WarmupResult
 
-# REUSE (R6): the convergence check shares windowing.py's coefficient-of-variation
+# REUSE: the convergence check shares windowing.py's coefficient-of-variation
 # math with the server-warmup power-plateau observable; only the stable-through-end
 # semantics are lifted here, the threshold stays warmup's configurable cv_threshold.
 from llenergymeasure.harness.windowing import _coefficient_of_variation
@@ -31,7 +31,7 @@ def _stable_through_end(values: list[float], window: int, threshold: float) -> b
     "Stable" is coefficient of variation at or below ``threshold``. Requiring every
     trailing window (not merely the last one) to be stable is the stable-through-end
     convergence semantics shared with the windowing detector and the server-warmup
-    gate (R6): a sustained plateau, not a single quiet window. Reuses windowing.py's
+    gate: a sustained plateau, not a single quiet window. Reuses windowing.py's
     CoV math; the threshold stays warmup's configurable ``cv_threshold``.
     """
     n = len(values)
@@ -126,7 +126,7 @@ def warmup_until_converged(
             recent = latencies[-config.window_size :]
             final_cv = compute_cv(recent)
 
-            # Stable-through-end convergence (R6 upgrade, was a single trailing
+            # Stable-through-end convergence (upgraded from a single trailing
             # window): once past the warm-start floor, converge iff the trailing
             # eligible region is a sustained plateau - every window-sized slice
             # stable, not just the last one.

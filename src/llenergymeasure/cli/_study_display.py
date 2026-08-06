@@ -151,7 +151,7 @@ class StudyStepDisplay:
         """
         self._total_start = time.monotonic()
         if print_header:
-            # Print study header per CONTEXT.md format
+            # Print study header
             header = f"Study: {self._study_name}" if self._study_name else "Study"
             header += f" | {self._total} experiments | {self._n_cycles} cycles"
             self._console.print(header, highlight=False)

@@ -118,7 +118,7 @@ def test_session_block_dual_serialised_and_patchable(tmp_path: Path) -> None:
     sys_path = writer.bundle_dir / "system.json"
     assert json.loads(sys_path.read_text())["session"]["drain_energy_j"] is None
 
-    # The in-write-path patch (O7.5) restamps both files before finalize.
+    # The in-write-path patch restamps both files before finalize.
     final = SessionBlock(session_id="sess-1", window_count=2, drain_energy_j=12.5)
     writer.patch_session_block(final)
     assert json.loads(result_path.read_text())["session"]["drain_energy_j"] == 12.5
@@ -126,7 +126,7 @@ def test_session_block_dual_serialised_and_patchable(tmp_path: Path) -> None:
 
 
 def test_pre_session_facts_bundle_still_loads(tmp_path: Path) -> None:
-    """A bundle written without a session block (pre-SM10) reads back with session=None (D22)."""
+    """A bundle written without a session block (older format) reads back with session=None."""
     study_dir = tmp_path / "study"
     study_dir.mkdir()
     writer = _writer(study_dir)

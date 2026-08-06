@@ -1,12 +1,12 @@
 """Unit tests for the llenergymeasure public API surface.
 
-Tests cover Phase 3 and Phase 4 (Plan 03) success criteria:
+Tests cover the public-API success criteria:
 1. Public imports resolve
 2. run_experiment returns ExperimentResult (no union, no None)
 3. No disk writes when output_dir not set
 4. Internal names raise AttributeError
 5. __version__ matches pyproject.toml
-6. run_study raises NotImplementedError with M2 message
+6. run_study raises NotImplementedError with a clear message
 7. _run() calls run_preflight once per experiment config
 8. _run() calls get_engine with correct engine name
 9. _run() returns StudyResult with experiment results
@@ -174,7 +174,7 @@ def test_run_experiment_no_disk_writes(tmp_path, monkeypatch):
 
 
 # =============================================================================
-# Test 8: run_study is implemented (M2)
+# Test 8: run_study is implemented
 # =============================================================================
 
 
@@ -249,7 +249,7 @@ def test_run_experiment_kwargs_engine(monkeypatch):
 
 
 # =============================================================================
-# Phase 4 Plan 03: _run() wiring tests
+# _run() wiring tests
 # =============================================================================
 
 
@@ -869,7 +869,7 @@ def test_run_study_returns_study_result_type():
 
 
 # =============================================================================
-# Plan 04: runner resolution wiring in _run()
+# Runner resolution wiring in _run()
 # =============================================================================
 
 
@@ -1221,7 +1221,7 @@ class TestResolveGpuIndices:
 
 
 # ---------------------------------------------------------------------------
-# MEAS-02: Energy scope is self-documenting through data
+# Energy scope is self-documenting through data
 # ---------------------------------------------------------------------------
 # The per_gpu_j data flow is already wired:
 #   NVMLSampler.stop_tracking() -> EnergyMeasurement.per_gpu_j

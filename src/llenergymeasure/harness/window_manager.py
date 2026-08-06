@@ -6,9 +6,9 @@ window's energy, the dual boundary policies that keep energy and latency
 accounting distinct, per-level steady-state validation, and the multi-level
 orchestration that drives a rate sweep.
 
-Design anchors (server-mode plan, section 14 as ratified):
+Design anchors:
 
-- **D7 - first-class window object + two coexisting boundary policies.** A window
+- **First-class window object + two coexisting boundary policies.** A window
   is ``{rate, duration_or_count, attribution_policy, ramp_exclusion}``. The ENERGY
   policy amortizes steady-state energy over the measured span ``[span_start,
   span_end]`` (denominator = client-counted tokens RECEIVED in that span). The
@@ -16,24 +16,24 @@ Design anchors (server-mode plan, section 14 as ratified):
   gets a full latency record, followed to completion PAST ``span_end`` - but energy
   accounting never extends into the drain. The two policies are never conflated
   into one number.
-- **D19 - event-driven delineation.** The manager emits explicit
+- **Event-driven delineation.** The manager emits explicit
   start-window / stop-window events to a :class:`WindowEnergySink`; the sink (by
   default a :class:`MeasurementBracket`-backed one) opens and closes the energy
   measurement in response. No component infers window membership from timestamps
   alone - the events are the protocol, a drop-in for a future remote sampling
   agent.
-- **C2 / C5 - reuse.** The default sink reuses
+- **Reuse.** The default sink reuses
   :class:`~llenergymeasure.harness.bracket.MeasurementBracket` (a bracket brackets a
   WINDOW, not a Python call). The stability gate reuses windowing.py's
   coefficient-of-variation, stable-through-end, clean, and clip machinery plus the
   trapezoidal integrator unchanged; only the multi-window / multi-level
   orchestration is new.
-- **E2 - ratified numeric defaults + gate formulation.** Measured span 240s, ramp
+- **Numeric defaults + gate formulation.** Measured span 240s, ramp
   exclusion 30s absolute (both config-exposed under ``server.traffic``, carried here
   as :class:`WindowSpec` defaults). The stability gate is calibrated on J/TOKEN, not
   power (power is near-noise-free at these timescales and would always pass):
 
-  * Per window (DIAGNOSTIC, disclosed, feeds SM12): the coefficient of variation
+  * Per window (DIAGNOSTIC, disclosed, feeds the derived-metrics overlay): the coefficient of variation
     over ``k = 4`` contiguous sub-windows' J/token. Each sub-window's J/token is the
     trapezoidal integral of the power series over the sub-window divided by the
     client-counted tokens attributed to it. ``k`` is fixed at 4: the 0.05 threshold
@@ -42,12 +42,12 @@ Design anchors (server-mode plan, section 14 as ratified):
     measured windows at the configured duration, contiguous at the same rate with NO
     re-warmup between them; the level passes iff the window-level J/token values
     agree within 0.05 (CoV over every 3 consecutive windows, stable through the end
-    of the level - the perf_analyzer convention E2 confirmed). A failing level is
+    of the level - the perf_analyzer convention). A failing level is
     stamped invalid-with-reason, never dropped.
 
-Out of scope (later slices): warmup EXECUTION behind the warmup-hook seam (SM8),
-server session lifecycle / persistence (SM9 / SM10), and metrics derivation
-(percentiles, goodput) beyond this module's own bookkeeping (SM12).
+Out of scope (built elsewhere): warmup EXECUTION behind the warmup-hook seam,
+server session lifecycle / persistence, and metrics derivation
+(percentiles, goodput) beyond this module's own bookkeeping.
 """
 
 from __future__ import annotations
@@ -95,15 +95,15 @@ if TYPE_CHECKING:
 # Constants
 # ---------------------------------------------------------------------------
 
-#: The single attribution policy v0.7 ships (maintainer ratification 2026-07-29):
+#: The single attribution policy v0.7 ships:
 #: steady-state span amortization - the J/token denominator is client-counted
 #: tokens RECEIVED within the measured span. Disclosed as a result field, not a
-#: configurable knob; requests.parquet (SM11) keeps per-request timestamps so
+#: configurable knob; requests.parquet keeps per-request timestamps so
 #: alternative attributions stay re-derivable offline.
 ATTRIBUTION_STEADY_STATE_SPAN = "steady_state_span"
 
-#: Consecutive-window agreement count for the LEVEL gate (E2 ratified;
-#: perf_analyzer's "3 consecutive windows within tolerance").
+#: Consecutive-window agreement count for the LEVEL gate
+#: (perf_analyzer's "3 consecutive windows within tolerance").
 STABILITY_CONSECUTIVE_WINDOWS = 3
 
 #: Consecutive measured windows run per rate level by default (adjustable on the
@@ -112,13 +112,13 @@ STABILITY_CONSECUTIVE_WINDOWS = 3
 DEFAULT_WINDOWS_PER_LEVEL = 3
 
 #: Sub-windows per window for the intra-window diagnostic CoV. FIXED at 4: this is
-#: the E2 calibration constant - the 0.05 threshold is calibrated at k = 4, so
+#: the calibration constant - the 0.05 threshold is calibrated at k = 4, so
 #: changing k silently invalidates the threshold. Not configurable by design.
 _STABILITY_SUBWINDOWS = 4
 
 
 # ---------------------------------------------------------------------------
-# WindowSpec - the first-class window object (D7)
+# WindowSpec - the first-class window object
 # ---------------------------------------------------------------------------
 
 
@@ -128,7 +128,7 @@ class WindowSpec:
 
     ``duration_seconds`` and ``request_count`` are the two forms of
     ``duration_or_count``; exactly one is resolved (``duration_seconds`` defaults to
-    the E2 floor when neither is given). ``request_count`` is represented for a
+    the calibrated floor when neither is given). ``request_count`` is represented for a
     future release but rejected at config validation at v0.7 (the manager also
     guards it as an internal belt). ``ramp_exclusion_seconds`` is excluded
     PROSPECTIVELY - the measured span starts after the ramp, it is never trimmed
@@ -151,7 +151,7 @@ class WindowSpec:
                 "duration-bounded XOR count-bounded."
             )
         if self.duration_seconds is None and self.request_count is None:
-            # Neither given: apply the E2 measured-span default (mirrors the config).
+            # Neither given: apply the calibrated measured-span default (mirrors the config).
             object.__setattr__(self, "duration_seconds", DEFAULT_WINDOW_SECONDS)
         if self.duration_seconds is not None and self.duration_seconds <= 0.0:
             raise ValueError("WindowSpec.duration_seconds must be > 0.")
@@ -162,11 +162,11 @@ class WindowSpec:
 
     @classmethod
     def from_traffic_config(cls, traffic: TrafficConfig) -> WindowSpec:
-        """Build a :class:`WindowSpec` from an SM4 :class:`TrafficConfig`.
+        """Build a :class:`WindowSpec` from a :class:`TrafficConfig`.
 
         ``TrafficConfig`` has already resolved its window default (window_seconds
-        defaults to the E2 floor) and rejected count-bound windows at v0.7, so this
-        is a straight projection. The attribution policy is the single ratified value.
+        defaults to the calibrated floor) and rejected count-bound windows at v0.7, so this
+        is a straight projection. The attribution policy is the single supported value.
         """
         return cls(
             rate=traffic.rate,
@@ -178,7 +178,7 @@ class WindowSpec:
 
 
 # ---------------------------------------------------------------------------
-# Event-driven delineation (D19)
+# Event-driven delineation
 # ---------------------------------------------------------------------------
 
 
@@ -207,7 +207,7 @@ class WindowAbortEvent:
     """Emitted when an OPEN window is torn down early (cancellation / exception).
 
     The manager owns the sink lifecycle, so when an exception or cancellation fires
-    while a window is open, it delivers this explicit event (D19: an abort is an
+    while a window is open, it delivers this explicit event (an abort is an
     event, never inferred) so the sink RELEASES its live sampler/tracker. A window
     is either closed or aborted, never both. ``cause`` describes the triggering
     exception for the invalid-with-reason stamp.
@@ -222,7 +222,7 @@ class WindowAbortEvent:
 
 @runtime_checkable
 class WindowEnergySink(Protocol):
-    """Consumes window events and controls the energy measurement (D19).
+    """Consumes window events and controls the energy measurement.
 
     The single seam between the window manager and the energy sampler: the manager
     EMITS events, the sink translates them into energy start/stop/abort. The default
@@ -261,12 +261,12 @@ BracketFactory = Callable[[], _BracketLike]
 
 
 class BracketEnergySink:
-    """Default energy sink: brackets each window with a fresh MeasurementBracket (C2).
+    """Default energy sink: brackets each window with a fresh MeasurementBracket.
 
     ``open_window`` enters a new bracket (energy tracker + thermal sampler start);
     ``close_window`` exits it (thermal sampler stop) and calls ``finish()`` (energy
     tracker stop), returning the :class:`MeasuredWindowCore`. A bracket is
-    single-use, so one is minted per window (one bundle per window, SM10). The manual
+    single-use, so one is minted per window (one bundle per window). The manual
     enter/exit (rather than a ``with`` block) is required because the window body is
     the concurrently-running traffic, not a synchronous call - the bracket brackets
     the WINDOW, not a call.
@@ -329,47 +329,49 @@ class BracketEnergySink:
 
 
 # ---------------------------------------------------------------------------
-# Warmup-hook seam (SM8 fills; no-op default here)
+# Warmup-hook seam (the warmup protocol fills; no-op default here)
 # ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
 class WarmupContext:
-    """Everything the per-level warmup needs (opaque to SM7)."""
+    """Everything the per-level warmup needs (opaque to the window manager)."""
 
     level_index: int
     spec: WindowSpec
 
 
 #: The warmup-hook seam: an opaque per-level callable run ONCE before a level's
-#: windows open. SM7 defines the signature and a no-op default; SM8 fills it with
-#: the convergence-composite warmup. The hook may be sync or async - the manager
+#: windows open. The window manager defines the signature and a no-op default; the
+#: warmup protocol fills it with the convergence-composite warmup. The hook may be
+#: sync or async - the manager
 #: awaits it when awaitable.
 WarmupHook = Callable[[WarmupContext], Awaitable[None] | None]
 
 
 async def _noop_warmup(context: WarmupContext) -> None:
-    """Default warmup hook: does nothing (SM8 replaces it)."""
+    """Default warmup hook: does nothing (the warmup protocol replaces it)."""
     return None
 
 
 # ---------------------------------------------------------------------------
-# Per-request token receipt seam (client-side counting is SM11 / O8)
+# Per-request token receipt seam (client-side counting)
 # ---------------------------------------------------------------------------
 
 #: Returns the monotonic receipt timestamps of a request's output tokens (one per
 #: token), the ONE mechanism that feeds BOTH the energy denominator and the
-#: stability gate's per-sub-window J/token. Client-side token counting is SM11's job
-#: (O8: client counts are the canonical denominator). Two granularities are legal:
+#: stability gate's per-sub-window J/token. Client-side token counting is the
+#: request-logging layer's job (client counts are the canonical denominator). Two
+#: granularities are legal:
 #:
 #: - token-granular (one timestamp per token) -> counting per interval is
-#:   span-received counting, the ratified energy-denominator rule;
+#:   span-received counting, the energy-denominator rule;
 #: - request-granular (all of a request's tokens stamped at its completion time,
 #:   i.e. ``[completed_at] * n_tokens``) -> a request's whole token count falls in
-#:   the interval containing its completion, which is EXACTLY E2's
+#:   the interval containing its completion, which is EXACTLY the calibrated
 #:   completion-timestamp attribution rule for sub-window J/token.
 #:
-#: Until SM11 lands the default returns no receipts, so denominators are 0 (the gate
+#: Until client-side counting lands the default returns no receipts, so denominators are 0 (the gate
 #: reports invalid-with-reason and the energy denominator is 0). Tests inject fakes.
 TokenReceiptFn = Callable[["RequestRecord"], Sequence[float]]
 
@@ -379,13 +381,13 @@ def _no_token_receipts(record: RequestRecord) -> Sequence[float]:
 
 
 # ---------------------------------------------------------------------------
-# Dual boundary-policy bookkeeping (D7)
+# Dual boundary-policy bookkeeping
 # ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
 class WindowBoundaries:
-    """The window's monotonic-clock boundaries (shared clock with SM5's issuer).
+    """The window's monotonic-clock boundaries (shared clock with the traffic issuer).
 
     ``window_start`` is when the level's load began; ``span_start`` is when this
     window's measured (energy) span opened; ``span_end`` is when it closed. Requests
@@ -407,10 +409,10 @@ class WindowBookkeeping:
     requests, regardless of when issued. ``attribution_policy`` names the energy
     attribution rule in force for the window.
 
-    SM12 derives percentiles and goodput from the per-request RequestLogRow rows
-    (build_request_rows_by_window), not from this bookkeeping, which carries only
-    the span-clipped energy denominator and the attribution policy; SM7 only
-    classifies.
+    The derived-metrics overlay derives percentiles and goodput from the per-request
+    RequestLogRow rows (build_request_rows_by_window), not from this bookkeeping,
+    which carries only the span-clipped energy denominator and the attribution
+    policy; the window manager only classifies.
     """
 
     boundaries: WindowBoundaries
@@ -548,7 +550,7 @@ def _window_measurements(
 
 
 # ---------------------------------------------------------------------------
-# Per-level stability validation (E2 window-to-window J/token gate)
+# Per-level stability validation (window-to-window J/token gate)
 # ---------------------------------------------------------------------------
 
 
@@ -567,7 +569,7 @@ def validate_level_stability(
     *,
     consecutive: int = STABILITY_CONSECUTIVE_WINDOWS,
 ) -> LevelValidation:
-    """Validate a level's window-to-window J/token stability (the E2 gate).
+    """Validate a level's window-to-window J/token stability (the stability gate).
 
     The level passes iff the window-level J/token values agree within
     ``windowing.py``'s ``_AUTO_CV_THRESHOLD`` (0.05) over every ``consecutive``
@@ -623,7 +625,7 @@ def validate_level_stability(
 class LevelPlan:
     """One rate level's inputs for the window manager.
 
-    ``traffic_source`` and ``transport`` are pre-built by the caller (SM9) from the
+    ``traffic_source`` and ``transport`` are pre-built by the caller (the server session) from the
     level's config. CONTRACT: the source must keep issuing throughout the whole
     level - the ramp plus ``windows_per_level`` measured spans - because the manager
     controls the energy-window timing and does not resize the schedule.
@@ -637,7 +639,7 @@ class LevelPlan:
 
 @dataclass
 class WindowRecord:
-    """One measured window's product within a level (one bundle per window, SM10)."""
+    """One measured window's product within a level (one bundle per window)."""
 
     window_index: int
     boundaries: WindowBoundaries
@@ -679,13 +681,13 @@ class AbortedLevel:
       bracket state is untrustworthy (no abort event - close was already attempted).
     - ``"drain failed: <cause>"`` - every window closed cleanly but the
       post-measurement drain failed. The energy cores STAND; only straddler latency
-      records are lost or truncated - D7's two-policy separation working as designed
+      records are lost or truncated - the two-policy separation working as designed
       (energy is intact, latency is best-effort past close).
 
     ``aborted_window_index`` is the open-or-failed-close window's index, or None for a
     drain failure (all windows closed cleanly; the level failed post-measurement).
     ``completed_cores`` holds the measured cores of the CLEANLY-CLOSED windows (in
-    order) so the caller (SM9) can still persist them (drain fields null, O7.4). Full
+    order) so the caller (the server session) can still persist them (drain fields null). Full
     bookkeeping is not reconstructed here because the level's traffic report is
     unavailable once the issuer task is cancelled - that is the session layer's job.
     """
@@ -699,7 +701,7 @@ class AbortedLevel:
 class WindowManager:
     """Drives a rate sweep as a list of levels, each a run of measured windows.
 
-    Per level: run the warmup hook ONCE (SM8), start the open-loop traffic, exclude
+    Per level: run the warmup hook ONCE, start the open-loop traffic, exclude
     the ramp PROSPECTIVELY once, then run ``windows_per_level`` contiguous measured
     windows (no re-warm between them) - each emitting start-window (energy opens) and
     stop-window (energy closes) events - and finally drain the traffic to completion
@@ -744,7 +746,7 @@ class WindowManager:
             raise ValueError(
                 "count-based measured windows (request_count without duration_seconds) "
                 "are not supported at v0.7: the measured-span timing and the stability "
-                "gate are duration-grounded (E2). Set a duration."
+                "gate are duration-grounded. Set a duration."
             )
 
         await self._run_warmup_hook(WarmupContext(level_index=level_index, spec=spec))
@@ -893,7 +895,7 @@ class WindowManager:
             aborted_index = closing_index
         elif emitted:
             # Drain failed after every window closed cleanly: the cores stand; only
-            # straddler latency records are lost (D7's two-policy separation).
+            # straddler latency records are lost (the two-policy separation).
             reason = f"drain failed: {cause}"
             aborted_index = None
         else:

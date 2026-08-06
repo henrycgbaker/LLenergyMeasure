@@ -280,7 +280,7 @@ def test_docker_session_cleanup_removes_staging_dir_once(tmp_path: Path) -> None
 
 
 # =============================================================================
-# Progress-consumer timeout loop (decision 4)
+# Progress-consumer timeout loop
 # =============================================================================
 
 

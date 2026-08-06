@@ -1,8 +1,8 @@
-"""Unit tests for the pure server-metric derivation and the SLO overlay (SM12).
+"""Unit tests for the pure server-metric derivation and the SLO overlay.
 
 Host-only and backend-free: every test builds :class:`RequestLogRow` fixtures by
 hand and asserts hand-computed percentiles, attainment, and goodput. The re-judge
-tests pin O5.3 (same rows, different bounds -> different verdict, identical
+tests pin the re-judgeable promise (same rows, different bounds -> different verdict, identical
 measurement fields); the edge cases pin empty / all-failed / boundary windows.
 """
 
@@ -36,7 +36,7 @@ def _row(
     server_completion_tokens: int | None = None,
     e2e_latency_ms: float | None = 100.0,
 ) -> RequestLogRow:
-    """Build one request-log row with only the SM12-relevant fields set.
+    """Build one request-log row with only the metric-relevant fields set.
 
     ``token_times`` defaults to a single receipt (so client_output_tokens == 1);
     pass a multi-element list to form a per-request TPOT / ITL.
@@ -157,7 +157,7 @@ class TestPercentilesAndCounts:
 
 
 # ---------------------------------------------------------------------------
-# SLO overlay (O5.2 attainment, O5.3 pure re-judgement)
+# SLO overlay (attainment, pure re-judgement)
 # ---------------------------------------------------------------------------
 
 
@@ -271,7 +271,7 @@ class TestSloOverlay:
 
 class TestRejudgeability:
     def test_same_rows_different_bounds_move_only_the_overlay(self) -> None:
-        """O5.3: re-judging changes attainment but not any measurement field."""
+        """Re-judging changes attainment but not any measurement field."""
         rows = [_row(i, ttft_ms=t, token_times=[0.0, 0.1]) for i, t in enumerate((10, 20, 30, 40))]
         lenient = _derive(rows, slo=SloBounds(ttft_ms=100.0, tpot_ms=None, percentile=0.99))
         strict = _derive(rows, slo=SloBounds(ttft_ms=15.0, tpot_ms=None, percentile=0.99))
@@ -298,7 +298,7 @@ class TestRejudgeability:
 
 
 class TestGoodputDirectJoin:
-    """Ground-truth for the literature-exact direct-join goodput (O5.2, section 26).
+    """Ground-truth for the literature-exact direct-join goodput.
 
     Each expectation is chosen so the two superseded formulas FAIL it: the old product
     (attainment x all-in-span-token throughput) and the halfway candidate (attainment x
@@ -328,7 +328,7 @@ class TestGoodputDirectJoin:
 
     def test_drain_straddler_in_span_tokens_only(self) -> None:
         # A drain straddler contributes ONLY its in-span tokens to goodput while its
-        # FULL latency judges its SLO compliance (D7 two-policy separation).
+        # FULL latency judges its SLO compliance (the two-policy separation).
         plain = _row(0, ttft_ms=10.0, token_times=[0.0, 0.1])  # 2 in-span tokens, tpot 100 ms
         straddler = _row(
             1,
@@ -363,7 +363,7 @@ class TestGoodputDirectJoin:
 
 
 class TestModeInapplicableStableSchema:
-    """D8: the server-distinct fields stay None for offline (mode-inapplicable both ways)."""
+    """The server-distinct fields stay None for offline (mode-inapplicable both ways)."""
 
     def test_offline_result_has_no_server_fields_and_real_tokens(self) -> None:
         from tests.conftest import make_result

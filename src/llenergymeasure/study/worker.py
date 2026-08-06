@@ -6,9 +6,9 @@ the parent-side result collector (``_collect_result``), and the small helpers
 they share: process-group signalling, exit-reason derivation, and the failure
 classifier constants.
 
-Key design decisions (locked in .product/decisions/experiment-isolation.md):
-- spawn context: CUDA-safe; fork causes silent CUDA corruption (CP-1)
-- daemon=False: clean CUDA teardown if parent exits unexpectedly (CP-4)
+Key design decisions:
+- spawn context: CUDA-safe; fork causes silent CUDA corruption
+- daemon=False: clean CUDA teardown if parent exits unexpectedly
 - Pipe-only IPC: ExperimentResult fits in Pipe buffer for typical experiment sizes
 - SIGKILL on timeout: SIGTERM may be ignored by hung CUDA operations
 - Process group kill: worker calls os.setpgrp() to become group leader so all
@@ -207,7 +207,7 @@ def _collect_result(
         config: Experiment configuration.
         timeout: Timeout used for the experiment (for error messages).
         pipe_payload: Pre-drained pipe value from the recv-before-join pattern
-            (H5 deadlock fix). When provided, skips calling recv() again.
+            (prevents the pipe-buffer deadlock). When provided, skips calling recv() again.
             Pass _UNSET (default) to fall back to reading from the pipe directly.
 
     Returns:

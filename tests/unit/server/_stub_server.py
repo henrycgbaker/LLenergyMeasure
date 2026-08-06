@@ -7,7 +7,7 @@ serving-path probe). Deliberately covers the awkward cases:
 
 - ``--completions-ready-after S``: ``/health`` returns 200 immediately but
   ``/v1/completions`` returns 503 for the first ``S`` seconds, so a test can
-  prove readiness is NOT satisfied by ``/health`` alone (R8) - either it waits
+  prove readiness is NOT satisfied by ``/health`` alone - either it waits
   for the real probe, or (with a large S and a short timeout) it times out.
 - ``--listen-after S``: the process does NOT bind its port for the first ``S``
   seconds, so every probe during that window is refused at the transport level

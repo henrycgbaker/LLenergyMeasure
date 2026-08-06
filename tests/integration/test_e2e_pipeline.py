@@ -3,7 +3,7 @@
 These tests exercise real YAML parsing, real config validation, and the real
 orchestrator -- only the inference engine and GPU-specific calls are faked.
 
-CLI E2E tests use CliRunner (thin wrapper verification per CONTEXT.md).
+CLI E2E tests use CliRunner (thin wrapper verification).
 
 No GPU required. All tests run under the default 'not gpu and not docker' marker.
 """

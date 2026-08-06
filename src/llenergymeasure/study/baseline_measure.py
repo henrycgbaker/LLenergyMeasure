@@ -6,8 +6,7 @@
 persisted to disk so mid-study restarts reuse a still-valid measurement.
 
 For Docker targets the measurement runs inside a short-lived container of the
-same engine image, so the CUDA init footprint matches the experiment container
-(see ``.product/research/baseline-measurement-location.md``).
+same engine image, so the CUDA init footprint matches the experiment container.
 
 These methods read and write ``self._baselines``, ``self._progress``,
 ``self._runner_specs``, and ``self._experiments_since_validation``, which are
@@ -61,7 +60,6 @@ class _BaselineMixin:
 
         Baselines are keyed per runner target because the CUDA init footprint
         (~8.7 W/GPU on A100) is process-local and may differ between engines.
-        See ``.product/research/baseline-measurement-location.md``.
 
         Local targets are engine-qualified (``local_<engine>``): a multi-engine
         study may legitimately pin more than one engine to a local runner, and
@@ -103,7 +101,7 @@ class _BaselineMixin:
 
         For Docker targets the measurement runs inside a short-lived container
         of the same engine image, so the CUDA init state matches the experiment
-        container (see ``.product/research/baseline-measurement-location.md``).
+        container.
         """
         strategy = config.measurement.baseline.strategy
 
@@ -382,9 +380,9 @@ class _BaselineMixin:
 
         Local runner targets measure on host (no process boundary, no bias).
         Docker targets dispatch a short-lived baseline container of the engine
-        image so the CUDA init state matches the experiment container. See
-        ``.product/research/baseline-measurement-location.md`` for the
-        empirical rationale (~8.7 W/GPU bias on A100).
+        image so the CUDA init state matches the experiment container. The
+        empirical rationale is a ~8.7 W/GPU bias on A100 when the baseline is
+        measured without a seeded CUDA memory pool.
 
         Args:
             config: Experiment config with baseline settings.

@@ -1,4 +1,4 @@
-"""GPU integration tests -- M1 exit criteria validation.
+"""GPU integration tests -- exit-criteria validation.
 
 These tests run on real GPU hardware (A100) inside Docker containers.
 They validate the complete pipeline: config -> preflight -> inference -> energy -> result.
@@ -24,10 +24,10 @@ def _save_replay(result, model: str, engine: str) -> None:
 
 @pytest.mark.gpu
 class TestM1ExitCriteria:
-    """Validates M1 success criteria with a real GPU experiment."""
+    """Validates the core success criteria with a real GPU experiment."""
 
     def test_run_experiment_gpt2_transformers(self, tmp_path):
-        """M1 primary exit criterion: llem run --model gpt2 --engine transformers
+        """Primary exit criterion: llem run --model gpt2 --engine transformers
         produces a valid ExperimentResult.
 
         Validates STU-05: single experiment runs in-process (no subprocess).

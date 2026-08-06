@@ -325,7 +325,7 @@ TensorRT engine on first use and reuses the cached engine afterwards.
 `trt` -> `tensorrt_llm._tensorrt_engine.LLM`), never forwarded as a kwarg. A
 handful of fields (`quant_config`, `fast_build`) exist only on the `trt`
 backend; declaring them under `pytorch` is a config-load error. On the `trt`
-backend, compile-time fields are baked into the engine and changing one keys to
+backend, compile-time fields are baked into the engine and changing one triggers
 a fresh build. The nested TRT-LLM sub-configs (`quant_config`,
 `kv_cache_config`, `scheduler_config`) are freeform (`Any`-typed) dict fields
 under `engine_params:` on the current pin, so they are written as whole dicts

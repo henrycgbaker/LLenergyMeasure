@@ -4,13 +4,13 @@ A :class:`SessionBlock` is the per-window record of the measurement SESSION a
 window belongs to. In server mode one session is one server lifetime (launch ->
 warm up -> N windows -> drain); every window bundle of that session carries the
 SAME block (identity by a stamped ``session_id`` field, never a directory or a
-separate index artefact - O7.2). Offline degenerates to the one-window case: a
+separate index artefact). Offline degenerates to the one-window case: a
 fresh session id, ``window_count=1``, and all raw phase quantities null (the
-offline pre-window phases are not instrumented at this slice).
+offline pre-window phases are not instrumented yet).
 
 The block holds RAW quantities only. Amortised / derived values (energy per
-window after spreading the launch cost, etc.) are a later slice and deliberately
-absent here so the schema stays stable. Any phase whose energy could not be
+window after spreading the launch cost, etc.) are deferred to a later release and
+deliberately absent here so the schema stays stable. Any phase whose energy could not be
 measured stamps ``None`` (never ``0.0``), so a null reads as "unmeasured", not
 "zero joules".
 """

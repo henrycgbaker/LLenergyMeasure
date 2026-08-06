@@ -9,8 +9,8 @@ stays in :mod:`llenergymeasure.study.hashing` where it belongs (Layer 4).
 
 Normalisation is strict (over-normalising would hide library-enforced semantics,
 e.g. ``None`` vs missing in vLLM) with one deliberate unification: integral
-numerics fold onto their ``int`` form, superseding the int-vs-float split
-sweep-dedup.md §9.Q3 previously locked (the design doc records the reversal).
+numerics fold onto their ``int`` form (PR #833), so the same value hashes
+identically whether a code path carries it as ``int`` or ``float``.
 The declared-config hash family folds the opposite way - int -> float via pydantic
 ``mode="json"`` (PR #822) - which is harmless because the declared and
 resolved/observed hash namespaces never intersect.
@@ -42,8 +42,7 @@ values a researcher would write differently.
 def _normalise(value: Any) -> Any:
     """Normalise a value for deterministic JSON serialisation.
 
-    Canonicalisation rules; the integral-fold below supersedes the int-vs-float
-    split sweep-dedup.md §9.Q3 previously locked:
+    Canonicalisation rules:
 
     - ``NaN`` -> string ``"NaN"`` (NaN != NaN breaks dict hashing otherwise)
     - ``+/-Infinity`` -> string literal (stable across platforms)

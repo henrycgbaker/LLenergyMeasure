@@ -289,7 +289,7 @@ def test_warmup_until_converged_result_thermal_default() -> None:
 
 
 # =============================================================================
-# Stable-through-end convergence upgrade (SM8 point 6, R6)
+# Stable-through-end convergence upgrade
 # =============================================================================
 
 
