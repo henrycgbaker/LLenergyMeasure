@@ -268,6 +268,24 @@ def test_citation_is_optional(tmp_path: Path) -> None:
     assert loader.load_rules("transformers").rules[0].provenance.citation is None
 
 
+def test_note_round_trips(tmp_path: Path) -> None:
+    # An optional free-text reviewer note round-trips into Provenance.note.
+    data = yaml.safe_load(_CORPUS_MINIMAL)
+    data["rules"][0]["provenance"]["note"] = "manual overlay after a recall audit; see #921"
+    _write_corpus(tmp_path, "transformers", yaml.safe_dump(data))
+    loader = EngineRulesLoader(corpus_root=tmp_path)
+    rule = loader.load_rules("transformers").rules[0]
+    assert rule.provenance.note == "manual overlay after a recall audit; see #921"
+
+
+def test_note_is_optional(tmp_path: Path) -> None:
+    # The field is additive and nullable: a corpus with no note loads unchanged
+    # and Provenance.note defaults to None.
+    _write_corpus(tmp_path, "transformers", _CORPUS_MINIMAL)
+    loader = EngineRulesLoader(corpus_root=tmp_path)
+    assert loader.load_rules("transformers").rules[0].provenance.note is None
+
+
 def test_enum_value_errors_share_common_base_class() -> None:
     # Callers that don't care which enum is wrong can catch UnknownEnumValueError,
     # and everything corpus-shaped is a RuleCorpusError (a ValueError).

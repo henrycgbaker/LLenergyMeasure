@@ -131,6 +131,13 @@ class Provenance:
     engine_version: str
     citation: str | None = None
     date: str = ""
+    note: str | None = None
+    """Optional one-line reviewer note (e.g. "manual overlay after a recall audit;
+
+    see #921"). Free text for reviewer legibility only - like the rest of this
+    block it never influences runtime matching. Absent on rules that carry no
+    note; the loader accepts a corpus with or without it.
+    """
 
 
 @dataclass(frozen=True)
@@ -664,12 +671,14 @@ def _parse_provenance(rule_id: str, raw: Any) -> Provenance:
             f"must be one of: {sorted(VALID_VERIFIED)}"
         )
     citation = raw.get("citation")
+    note = raw.get("note")
     return Provenance(
         source=source,
         verified=verified,
         engine_version=str(raw.get("engine_version", "")),
         citation=str(citation) if citation is not None else None,
         date=str(raw.get("date", "")),
+        note=str(note) if note is not None else None,
     )
 
 
