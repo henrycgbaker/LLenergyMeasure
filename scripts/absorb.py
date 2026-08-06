@@ -587,15 +587,35 @@ def _citation_str(citation: Any) -> str | None:
     return None
 
 
-def _mark_human(rule: dict[str, Any], version: str, run_date: str) -> dict[str, Any]:
-    """A signed-off residue rule ships with human provenance."""
+def _mark_human(
+    rule: dict[str, Any],
+    version: str,
+    run_date: str,
+    *,
+    citation: str | None = None,
+    note: str | None = None,
+) -> dict[str, Any]:
+    """A signed-off residue rule ships with human provenance.
+
+    The rebuilt provenance drops any citation the rule carried at its old pin: a
+    file:line verified only at that pin cannot honestly ride the new
+    engine_version stamp. A maintainer who signed off WITH fresh evidence at the
+    new pin passes it via the sign-off entry's optional ``citation:`` (and an
+    optional free-text ``note:``); when supplied, each is written into the shipped
+    provenance. Key order matches candidate_to_rule so a re-mine stays byte-stable.
+    """
     promoted = {k: v for k, v in rule.items() if k != "provenance"}
-    promoted["provenance"] = {
+    provenance: dict[str, Any] = {
         "source": _SOURCE_MAP.get(str((rule.get("provenance") or {}).get("source")), "migrated"),
         "verified": "human",
         "engine_version": version,
-        "date": run_date,
     }
+    if citation:
+        provenance["citation"] = str(citation)
+    provenance["date"] = run_date
+    if note:
+        provenance["note"] = str(note)
+    promoted["provenance"] = provenance
     return promoted
 
 
@@ -662,7 +682,10 @@ def promote(
     delta.proposed_retirements = list(interrogation_absent)
     confirmed_leaf_keys = {_leaf_key(c) for c in union if _status(c) == CONFIRMED}
     old_leaf_keys = {_leaf_key(r) for r in old_rules}
-    signed_off = {str(e.get("id")) for e in signoff if e.get("human_confirmed") is True}
+    # id -> sign-off entry for every marked residue rule. Kept as the entry (not
+    # just the id) so the maintainer's optional fresh-evidence citation/note ride
+    # into the rebuilt human provenance via _mark_human.
+    signed_off = {str(e.get("id")): e for e in signoff if e.get("human_confirmed") is True}
     new_rules: list[dict[str, Any]] = []
 
     for rule in old_rules:
@@ -678,7 +701,16 @@ def promote(
             delta.survived.append(rid)
         elif status in ("unconfirmed", "unprobeable"):
             if rid in signed_off:
-                new_rules.append(_mark_human(rule, version, run_date))
+                entry = signed_off[rid]
+                new_rules.append(
+                    _mark_human(
+                        rule,
+                        version,
+                        run_date,
+                        citation=entry.get("citation"),
+                        note=entry.get("note"),
+                    )
+                )
                 delta.survived.append(rid)
                 delta.signed.append(rid)  # consumed a sign-off mark; persist it
             else:
@@ -710,7 +742,15 @@ def promote(
                 "last pin that shipped it), add it to the entry as 'rule:', and re-run "
                 "absorb."
             )
-        new_rules.append(_mark_human(body, version, run_date))
+        new_rules.append(
+            _mark_human(
+                body,
+                version,
+                run_date,
+                citation=record.get("citation"),
+                note=record.get("note"),
+            )
+        )
         delta.survived.append(rid)
         delta.signed.append(rid)
 
@@ -781,6 +821,17 @@ def write_signoff(
         if rid in absent:
             row["interrogation"] = "absent"  # retirement proposal; maintainer decides
         row["human_confirmed"] = confirmed
+        # Carry the maintainer's optional fresh-evidence fields forward verbatim.
+        # _mark_human consumes citation/note at promotion; re-emitting them here
+        # keeps a signed rule's evidence alive across re-runs - a signed rule
+        # ships every run via the sign-off path, so a dropped citation would
+        # silently vanish from rules.yaml on the next absorb and break byte-stable
+        # regeneration. Absent fields add nothing (entries without them are
+        # byte-identical to before).
+        prior = prior_rows.get(rid) or {}
+        for key in ("citation", "note"):
+            if prior.get(key) is not None:
+                row[key] = prior[key]
         if body:
             row["rule"] = body  # the full withheld rule: rules.yaml no longer carries it
         return row
@@ -808,9 +859,13 @@ def write_signoff(
         "# until you mark it (withheld pending sign-off, not retired). Each entry\n"
         "# records the complete withheld rule under its rule: key - the shipped\n"
         "# rules.yaml no longer carries it - so marking an entry re-ships the rule\n"
-        "# from this record on the next absorb run. An entry with\n"
-        "# interrogation: absent is a retirement proposal: decline the mark to let the\n"
-        "# rule lapse, or mark it to keep shipping it.\n"
+        "# from this record on the next absorb run. Alongside human_confirmed you\n"
+        "# may add an optional citation: (a file:line you verified at THIS engine\n"
+        "# version, e.g. generation/configuration_utils.py:702) and an optional\n"
+        "# note: (a one-line reviewer remark); both are carried into the shipped\n"
+        "# rule's provenance. With no citation the rule's stale one is dropped. An\n"
+        "# entry with interrogation: absent is a retirement proposal: decline the\n"
+        "# mark to let the rule lapse, or mark it to keep shipping it.\n"
     )
     signoff_dir.mkdir(parents=True, exist_ok=True)
     (signoff_dir / _SIGNOFF_FILE).write_text(

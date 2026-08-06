@@ -473,6 +473,154 @@ def test_promoted_corpus_parses_through_real_shipped_loader(tmp_path: Path) -> N
     assert by_id["old_signed"].provenance.verified == "human"  # signed residue
 
 
+# --- Sign-off fresh-evidence citation / note propagation ---
+
+
+def test_mark_human_carries_signoff_citation() -> None:
+    """A residue rule signed off WITH a fresh file:line at the new pin ships that
+    citation in its rebuilt human provenance (it is evidence at the new pin)."""
+    rule = _rule("r", "error", {"vllm.engine_params.x": {"<": 1}})
+    promoted = ab._mark_human(
+        rule, "0.19.1", "2026-07-07", citation="generation/configuration_utils.py:702"
+    )
+    assert promoted["provenance"] == {
+        "source": "manual",
+        "verified": "human",
+        "engine_version": "0.19.1",
+        "citation": "generation/configuration_utils.py:702",
+        "date": "2026-07-07",
+    }
+
+
+def test_mark_human_drops_stale_citation_when_none_supplied() -> None:
+    """No fresh citation on the sign-off entry -> the rule's old-pin citation is
+    dropped (prior behaviour): a file:line verified only at the old pin cannot
+    honestly ride the new engine_version stamp."""
+    rule = _rule(
+        "r",
+        "error",
+        {"vllm.engine_params.x": {"<": 1}},
+        provenance={"source": "manual", "citation": "old/pinned/path.py:12"},
+    )
+    promoted = ab._mark_human(rule, "0.19.1", "2026-07-07")
+    assert promoted["provenance"] == {
+        "source": "manual",
+        "verified": "human",
+        "engine_version": "0.19.1",
+        "date": "2026-07-07",
+    }
+
+
+def test_mark_human_carries_signoff_note() -> None:
+    """An optional reviewer note on the sign-off entry rides into provenance."""
+    rule = _rule("r", "error", {"vllm.engine_params.x": {"<": 1}})
+    promoted = ab._mark_human(
+        rule, "0.19.1", "2026-07-07", note="manual overlay after a recall audit; see #921"
+    )
+    assert promoted["provenance"]["note"] == "manual overlay after a recall audit; see #921"
+    assert promoted["provenance"]["verified"] == "human"
+
+
+def test_promote_threads_signoff_citation_and_note_into_shipped_rule() -> None:
+    """A human_confirmed sign-off entry carrying citation + note ships a rule
+    whose provenance carries both (the 18-rule fresh-audit case end to end)."""
+    old_rules = [_rule("old_signed", "error", {"vllm.engine_params.baz": {"<": 1}})]
+    verdicts = {"old_signed": _verdict("unconfirmed")}  # -> sign-off path
+    signoff = [
+        {
+            "id": "old_signed",
+            "human_confirmed": True,
+            "citation": "vllm/config.py:88",
+            "note": "verified by hand at the new pin",
+        }
+    ]
+    new_rules, _ = ab.promote("vllm", "0.19.1", "2026-07-07", old_rules, verdicts, [], signoff, [])
+    shipped = {r["id"]: r for r in new_rules}["old_signed"]
+    assert shipped["provenance"]["citation"] == "vllm/config.py:88"
+    assert shipped["provenance"]["note"] == "verified by hand at the new pin"
+    assert shipped["provenance"]["verified"] == "human"
+
+
+def test_restamp_confirmed_preserves_note() -> None:
+    """A re-confirmed survivor keeps a note already on its provenance: restamp
+    updates only verified/engine_version/date and preserves unknown keys."""
+    rule = _rule(
+        "r",
+        "error",
+        {"vllm.engine_params.x": {"<": 1}},
+        provenance={
+            "source": "manual",
+            "verified": "human",
+            "engine_version": "0.18.0",
+            "note": "manual overlay; see #921",
+        },
+    )
+    promoted = ab._restamp_confirmed(rule, "0.19.1", "2026-07-07")
+    assert promoted["provenance"]["note"] == "manual overlay; see #921"
+    assert promoted["provenance"]["verified"] == "construction"
+    assert promoted["provenance"]["engine_version"] == "0.19.1"
+
+
+def test_promote_with_signoff_citation_is_byte_stable() -> None:
+    """Promoting the same inputs (including a citation+note sign-off entry) twice
+    yields byte-identical serialized corpora."""
+    old_rules = [_rule("old_signed", "error", {"vllm.engine_params.baz": {"<": 1}})]
+    verdicts = {"old_signed": _verdict("unconfirmed")}
+    signoff = [
+        {
+            "id": "old_signed",
+            "human_confirmed": True,
+            "citation": "vllm/config.py:88",
+            "note": "verified by hand at the new pin",
+        }
+    ]
+
+    def _run() -> str:
+        rules, _ = ab.promote(
+            "vllm", "0.19.1", "2026-07-07", list(old_rules), dict(verdicts), [], list(signoff), []
+        )
+        return ab.serialize_corpus("vllm", "0.19.1", rules)
+
+    assert _run() == _run()
+
+
+def test_write_signoff_preserves_maintainer_citation_and_note(tmp_path: Path) -> None:
+    """A signed entry's optional citation/note survive sign-off regeneration, so a
+    signed rule's fresh evidence rides through every re-run rather than being
+    dropped on the second absorb (which would unship the citation from rules.yaml).
+    """
+    body = _rule("r_signed", "error", {"vllm.engine_params.x": {"<": 1}})
+    (tmp_path / ab._SIGNOFF_FILE).write_text(
+        yaml.safe_dump(
+            {
+                "residue": [
+                    {
+                        "id": "r_signed",
+                        "severity": "error",
+                        "fields": ["vllm.engine_params.x"],
+                        "human_confirmed": True,
+                        "citation": "vllm/config.py:88",
+                        "note": "verified by hand at the new pin",
+                        "rule": body,
+                    }
+                ]
+            }
+        )
+    )
+    delta = ab.Delta()
+    delta.signed = ["r_signed"]
+    ab.write_signoff(tmp_path, delta, {"r_signed": body}, set())
+    rows = {
+        r["id"]: r for r in yaml.safe_load((tmp_path / ab._SIGNOFF_FILE).read_text())["residue"]
+    }
+    assert rows["r_signed"]["citation"] == "vllm/config.py:88"
+    assert rows["r_signed"]["note"] == "verified by hand at the new pin"
+    # And the regeneration is idempotent (byte-stable) on the next run.
+    first = (tmp_path / ab._SIGNOFF_FILE).read_text()
+    ab.write_signoff(tmp_path, delta, {"r_signed": body}, set())
+    assert (tmp_path / ab._SIGNOFF_FILE).read_text() == first
+
+
 # --- Byte-stable corpus regeneration ---
 
 
