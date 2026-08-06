@@ -249,7 +249,7 @@ def test_run_experiment_kwargs_engine(monkeypatch):
 
 
 # =============================================================================
-# Phase 4 Plan 03: _run() wiring tests
+# _run() wiring tests
 # =============================================================================
 
 
@@ -869,7 +869,7 @@ def test_run_study_returns_study_result_type():
 
 
 # =============================================================================
-# Plan 04: runner resolution wiring in _run()
+# Runner resolution wiring in _run()
 # =============================================================================
 
 
@@ -1221,7 +1221,7 @@ class TestResolveGpuIndices:
 
 
 # ---------------------------------------------------------------------------
-# MEAS-02: Energy scope is self-documenting through data
+# Energy scope is self-documenting through data
 # ---------------------------------------------------------------------------
 # The per_gpu_j data flow is already wired:
 #   NVMLSampler.stop_tracking() -> EnergyMeasurement.per_gpu_j

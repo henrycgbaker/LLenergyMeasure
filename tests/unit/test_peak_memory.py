@@ -1,4 +1,4 @@
-"""Behavioural tests for peak_memory_mb measurement semantics (MEAS-04).
+"""Behavioural tests for peak_memory_mb measurement semantics.
 
 Verifies:
 - inference_memory_mb = max(0.0, peak_memory_mb - model_memory_mb) formula

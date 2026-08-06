@@ -148,7 +148,7 @@ class ServerWindowProvenance(BaseModel):
         description="Within-window J/token coefficient of variation (the k=4 sub-window "
         "diagnostic): a WITHIN-window stability figure, distinct from the window-to-window gate "
         "that sets level_valid. None when unformable (e.g. a window with no attributed tokens) or "
-        "for a degraded abort-core bundle.",
+        "when the level aborted before it was computed.",
     )
     invalid_reason: str | None = Field(
         default=None,
@@ -187,7 +187,7 @@ class ServerWindowProvenance(BaseModel):
         "usage.completion_tokens over all rows attributed to the window (any status - ramp, "
         "error, and timeout rows included), for cross-checking the client-side canonical "
         "count. None when no engine reported usage (e.g. a stream without include_usage) or "
-        "for a degraded abort-core bundle.",
+        "when the level aborted before per-request bookkeeping was recorded.",
     )
 
 

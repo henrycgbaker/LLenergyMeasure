@@ -135,7 +135,7 @@ def resolve_layers(*layers: Mapping[str, Any]) -> dict[str, Any]:
 class PrecedenceChain:
     """The precedence chain, named by layer (call-site highest, defaults lowest).
 
-    Ruled order (high -> low): call-site override > env > study YAML > user config >
+    Precedence order (high -> low): call-site override > env > study YAML > user config >
     pydantic defaults. Each layer is a mapping that may carry :data:`UNSET` values
     ('defer to the layer below'); :meth:`resolve` prunes them and deep-merges low ->
     high. Secrets are env-only by policy and never travel a study/user layer.

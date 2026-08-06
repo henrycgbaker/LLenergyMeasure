@@ -8,9 +8,9 @@
 # an extracted 5.7.0 sdist). A glob (a path containing `*`) expands against the
 # source root; a plain path names one file.
 #
-# Cluster selection is a MINIMAL citation-grounded starter, NOT an
-# experiment-ratified cluster design like vllm's (no OSS analyst parity
-# experiment has been run for transformers). It is derived from where the
+# Cluster selection is a MINIMAL citation-grounded starter, NOT a
+# measurement-tuned cluster design like vllm's (no analyst parity
+# measurement has been run for transformers). It is derived from where the
 # shipped rule corpus's verified constraints actually live: all 38 shipped
 # transformers rules cite exactly two files - generation/configuration_utils.py
 # (33 rules, GenerationConfig.validate) and utils/quantization_config.py

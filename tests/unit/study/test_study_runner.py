@@ -972,7 +972,7 @@ def test_progress_events_forwarded():
 
 
 # =============================================================================
-# GPU memory residual check wiring (MEAS-01, MEAS-02)
+# GPU memory residual check wiring
 # =============================================================================
 
 
@@ -2229,7 +2229,7 @@ class TestSchemaFingerprintHandshake:
 
 
 # =============================================================================
-# Circuit breaker, wall-clock timeout, mark_study_completed (Plan 03)
+# Circuit breaker, wall-clock timeout, mark_study_completed
 # =============================================================================
 
 
