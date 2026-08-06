@@ -181,7 +181,7 @@ class SubprocessSession(_OfflineSession):
     the worker (``daemon=False`` for clean CUDA teardown), starts the progress
     consumer, marks the experiment running, and starts the process after the
     pre-dispatch GPU-memory residual check. ``run()`` drains the pipe before
-    joining (H5 deadlock fix), honours the SIGINT grace -> SIGKILL escalation,
+    joining (prevents the pipe-buffer deadlock), honours the SIGINT grace -> SIGKILL escalation,
     collects the result, writes the parent-side sentinel for crash/timeout, and
     hands the result to the runner. ``__exit__`` stops the consumer, closes the
     read end, clears the active-process handle, and removes the staging dir.
@@ -304,7 +304,7 @@ class SubprocessSession(_OfflineSession):
         parent_conn = self._parent_conn
         timeout = self.timeout
 
-        # Drain pipe BEFORE join to prevent buffer deadlock (H5).
+        # Drain pipe BEFORE join to prevent buffer deadlock.
         # If pickled ExperimentResult > 64 KB, child blocks on conn.send()
         # while parent blocks in p.join() - classic deadlock.
         pipe_payload = _UNSET

@@ -1216,7 +1216,7 @@ def test_docker_timeout_normalised_to_timeout_error(
 
 
 # =============================================================================
-# H5: recv-before-join ordering (pipe deadlock prevention)
+# recv-before-join ordering (pipe deadlock prevention)
 # =============================================================================
 
 

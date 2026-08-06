@@ -350,7 +350,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
         group_starts = {unit[0]: unit for unit in units if len(unit) > 1}
         consumed_by_group: set[int] = set()
 
-        # spawn: CUDA-safe; fork causes silent CUDA corruption (CP-1)
+        # spawn: CUDA-safe; fork causes silent CUDA corruption
         mp_ctx = multiprocessing.get_context("spawn")
 
         # Reset interrupt state for this run

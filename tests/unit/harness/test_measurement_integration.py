@@ -918,12 +918,12 @@ def test_estimate_flops_falls_back_to_autoconfig_without_model() -> None:
 
 
 # =============================================================================
-# H6: a bad latency-measurement-mode string must not crash result assembly
+# A bad latency-measurement-mode string must not crash result assembly
 # =============================================================================
 
 
 def test_resolve_measurement_mode_guards_bad_string() -> None:
-    """An unrecognised mode string falls back to TRUE_STREAMING with a warning (H6)."""
+    """An unrecognised mode string falls back to TRUE_STREAMING with a warning."""
     from llenergymeasure.domain.metrics import LatencyMeasurementMode
 
     warnings: list[str] = []
@@ -934,7 +934,7 @@ def test_resolve_measurement_mode_guards_bad_string() -> None:
 
 
 def test_resolve_measurement_mode_accepts_valid_string() -> None:
-    """A valid mode string maps to its enum member (H6 regression guard)."""
+    """A valid mode string maps to its enum member (regression guard)."""
     from llenergymeasure.domain.metrics import LatencyMeasurementMode
 
     warnings: list[str] = []
@@ -945,12 +945,12 @@ def test_resolve_measurement_mode_accepts_valid_string() -> None:
 
 
 # =============================================================================
-# H5: warmup_excluded_samples counts the discarded probe inference
+# warmup_excluded_samples counts the discarded probe inference
 # =============================================================================
 
 
 def test_warmup_excluded_samples_includes_probe() -> None:
-    """_run_warmup counts the discarded strategy-probe inference (H5).
+    """_run_warmup counts the discarded strategy-probe inference.
 
     Fixed mode runs n_prompts loop inferences; the harness also runs one probe
     inference up front to pick the warmup strategy. That probe is discarded but
