@@ -70,7 +70,7 @@ class ArtefactSpec:
     Attributes:
         filename: On-disk name inside the experiment directory.
         required: The bundle is incomplete without it (result.json). Documents
-            the contract for the reader (S5); the writer guarantees required
+            the contract for the reader; the writer guarantees required
             artefacts by raising if it cannot write them.
         warn_if_missing: Whether the writer's ``finalize()`` sweep emits a loud
             warning when the artefact is absent. Used for the loudness backstops

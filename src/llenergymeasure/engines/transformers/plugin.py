@@ -710,7 +710,7 @@ class TransformersEngine:
         # num_return_sequences=N (incl. beam search) HF returns N rows per input
         # prompt, so outputs.shape[0] == len(batch) * N; output row j maps to its
         # source input via j // N. Counting only the batch rows would N-fold
-        # undercount generated tokens (EN4).
+        # undercount generated tokens.
         input_lengths = [int(x) for x in inputs["attention_mask"].sum(dim=1).tolist()]
         n_inputs = len(batch)
         n_rows = int(outputs.shape[0])

@@ -280,7 +280,7 @@ class SubprocessSession(_OfflineSession):
             runner.manifest.mark_running(self.config_hash, self.cycle)
             runner._active_process = self._process
 
-            # Pre-dispatch GPU memory residual check (MEAS-01, MEAS-02)
+            # Pre-dispatch GPU memory residual check
             from llenergymeasure.study.gpu_memory import check_gpu_memory_residual
 
             check_gpu_memory_residual()
@@ -418,8 +418,7 @@ class DockerSession(_OfflineSession):
     container's timeseries staging dir.
 
     The container lifecycle is DockerRunner's; this session does not change any
-    ``DockerRunner`` call signature (S13 reworks its internals behind a frozen
-    facade).
+    ``DockerRunner`` call signature.
     """
 
     def __init__(

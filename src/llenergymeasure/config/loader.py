@@ -171,8 +171,8 @@ def load_study_config(
       4. expand_grid() - Cartesian product + Pydantic validation of each ExperimentConfig
       5. Guard: empty or all-invalid -> ConfigError
 
-    This is the CFG-12 contract: sweep resolution at YAML parse time, before
-    Pydantic sees the individual ExperimentConfig objects.
+    The contract: sweep resolution at YAML parse time, before Pydantic sees the
+    individual ExperimentConfig objects.
 
     Dedup, study_design_hash, cycle ordering, and equivalence-group serialisation
     are deliberately NOT done here - they require the study-layer
@@ -224,7 +224,7 @@ def load_study_config(
     execution = ExecutionConfig(**(raw.get("study_execution") or {}))
 
     # Expand sweep → list[ExperimentConfig], collect skipped
-    # This is CFG-12: sweep resolution at YAML parse time, before Pydantic
+    # Sweep resolution at YAML parse time, before Pydantic
     valid_experiments, skipped = expand_grid(raw, study_yaml_path=path)
 
     # Guard: empty study - expand_grid already raises if all_raw_configs is empty,
