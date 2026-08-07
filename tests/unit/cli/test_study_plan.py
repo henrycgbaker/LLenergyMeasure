@@ -193,9 +193,10 @@ def test_dormant_observations_rendered_in_plan(tmp_path: Path) -> None:
     """A dormant-triggering field surfaces its rule id and field in the plan.
 
     ``epsilon_cutoff`` is a transformers pydantic-extra the engine silently
-    strips; the dormant rule ``transformers_dormant_epsilon_cutoff_ne_0_0``
-    fires and drives it to absent. That normalisation must be visible in
-    ``llem study plan`` rather than mutating the executed config silently.
+    strips under greedy decoding; the dormant rule
+    ``transformers_greedy_strips_epsilon_cutoff`` fires and drives it to absent.
+    That normalisation must be visible in ``llem study plan`` rather than
+    mutating the executed config silently.
     """
     text = f"""
 serving_mode: offline
@@ -204,13 +205,13 @@ task:
 engine: transformers
 transformers:
   sampling_params:
-    do_sample: true
+    do_sample: false
     epsilon_cutoff: 0.5
 """
     study = _load(tmp_path, text)
     lines = dormant_observation_lines(study)  # type: ignore[arg-type]
     joined = "\n".join(lines)
-    assert "transformers_dormant_epsilon_cutoff_ne_0_0" in joined
+    assert "transformers_greedy_strips_epsilon_cutoff" in joined
     assert "epsilon_cutoff" in joined
     assert "transformers:" in joined
 

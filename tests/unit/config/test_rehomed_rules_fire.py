@@ -42,13 +42,13 @@ _CASES = [
     ("tensorrt", "sampling_params", "top_p", 1.5, "top_p"),
     ("tensorrt", "sampling_params", "n", 0, "n"),
     # transformers - engine floors
-    ("transformers", "engine_params", "num_beams", 0, "num_beams"),
-    ("transformers", "engine_params", "no_repeat_ngram_size", -1, "no_repeat_ngram_size"),
     ("transformers", "engine_params", "prompt_lookup_num_tokens", 0, "prompt_lookup_num_tokens"),
     # transformers - sampling floors/ranges
-    ("transformers", "sampling_params", "min_new_tokens", 0, "min_new_tokens"),
     ("transformers", "sampling_params", "top_p", 2.0, "top_p"),
     ("transformers", "sampling_params", "temperature", -0.5, "temperature"),
+    ("transformers", "sampling_params", "top_h", 1.5, "top_h"),
+    ("transformers", "sampling_params", "typical_p", 1.5, "typical_p"),
+    ("transformers", "sampling_params", "min_length", -1, "min_length"),
 ]
 
 
@@ -163,17 +163,15 @@ def test_cross_section_non_divisor_return_count_accepted():
 # ---------------------------------------------------------------------------
 # Type-incomparable predicate values are no-match, not an uncaught crash
 #
-# The shipped transformers corpus carries a mined numeric bound on
-# ``compile_config`` (rule ``..._compile_config_exceeds_zero`` with predicate
-# ``{">": 0}``). That bound is a corpus artifact: the field naturally holds a
-# dict / CompileConfig shape, not a number. Before the fix, a non-numeric
-# compile_config let a raw TypeError
+# ``compile_config`` naturally holds a dict / CompileConfig shape, not a number,
+# so any ordering predicate (e.g. ``{">": 0}``) mined against it compares
+# incomparable types. The loader must treat such a pair as no-match so the
+# ordering rule silently declines, rather than letting a raw TypeError
 # (``'>' not supported between instances of 'dict' and 'int'``) escape config
-# construction. The ordering comparison must instead treat the incomparable
-# pair as no-match, so the ordering rule silently declines. A *separate*,
-# legitimate ``type_is_not: [CompileConfig]`` rule then cleanly rejects the
-# non-CompileConfig value with a ValueError - a clean rule rejection, never a
-# TypeError. The generated pydantic model stays the authority on type validity.
+# construction. A separate, legitimate ``type_is_not: [CompileConfig]`` rule
+# then cleanly rejects a non-CompileConfig value with a ValueError - a clean
+# rule rejection, never a TypeError. The generated pydantic model stays the
+# authority on type validity.
 # ---------------------------------------------------------------------------
 
 
@@ -197,12 +195,12 @@ def test_non_numeric_compile_config_no_uncaught_typeerror(compile_config):
 
 def test_numeric_bound_still_fires_after_incomparable_guard():
     """Control: guarding incomparable types must not suppress real numeric matches."""
-    with pytest.raises(ValueError, match="min_new_tokens"):
+    with pytest.raises(ValueError, match="min_length"):
         ExperimentConfig(
             task={"model": "gpt2"},
             engine="transformers",
             serving_mode="offline",
-            transformers={"sampling_params": {"min_new_tokens": 0}},
+            transformers={"sampling_params": {"min_length": -1}},
         )
 
 
@@ -327,7 +325,6 @@ def test_nested_compilation_config_bound_silent_when_not_violated(compilation_co
 _NEVER_RULE_IDS = {
     "transformers_early_stopping_type_early_stopping_not_in_allowlist",
     "transformers_raises_early_stopping_not_in_set",
-    "transformers_early_stopping_type_early_stopping_type_not_in_bool_or_int_or_str",
 }
 
 
@@ -376,11 +373,13 @@ def test_early_stopping_generated_annotation_golden():
     assert annotation == (bool | Literal["never"] | None)
 
 
-def test_three_never_rules_fire_at_try_match_grain():
-    """The three corpus rules fire on out-of-allowlist / wrong-type values.
+def test_early_stopping_allowlist_rules_fire_at_try_match_grain():
+    """The early_stopping allowlist rules fire on out-of-allowlist / wrong-type values.
 
-    Dict-grain firing does not depend on the regenerated config: it exercises the
-    shipped rules corpus directly.
+    Both surviving rules encode the allowlist as ``not_in`` a fixed set, so any
+    non-member - a nonsense string or a wrong-type float - is rejected. Dict-grain
+    firing does not depend on the regenerated config: it exercises the shipped
+    rules corpus directly.
     """
     rules = EngineRulesLoader().load_rules("transformers").rules
 
@@ -393,13 +392,11 @@ def test_three_never_rules_fire_at_try_match_grain():
     assert "transformers_raises_early_stopping_not_in_set" in fired_on_string
 
     fired_on_float = fired(1.5)
-    assert (
-        "transformers_early_stopping_type_early_stopping_type_not_in_bool_or_int_or_str"
-        in fired_on_float
-    )
+    assert "transformers_early_stopping_type_early_stopping_not_in_allowlist" in fired_on_float
+    assert "transformers_raises_early_stopping_not_in_set" in fired_on_float
 
 
-def test_three_never_rules_silent_on_constructed_never_config():
+def test_early_stopping_rules_silent_on_constructed_never_config():
     """The allowlist member "never" is now reachable and clean: no rule fires on it."""
     cfg = ExperimentConfig(
         task={"model": "gpt2"},

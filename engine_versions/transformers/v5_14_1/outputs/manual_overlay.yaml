@@ -1,0 +1,37 @@
+# Maintainer overlay for transformers 5.14.1: rules the automated mining
+# sweep MISSED and a maintainer added by hand after an independent recall
+# audit (issue #921). Each id names a shipped rules.yaml rule whose
+# constraint the machinery failed to propose.
+#
+# This file is the durable marker that these rules were manually overlaid:
+# provenance inside rules.yaml is machine-restamped whenever absorb
+# re-verifies a rule, so it cannot carry this history. The absorb machinery
+# never reads or rewrites this file.
+#
+# It is also a blind-spot ledger for the engine-knowledge workflow rework
+# (issue #921): an improved pipeline should rediscover these constraints
+# mechanically, and this ledger shrinking to empty is the success criterion.
+engine: transformers
+engine_version: 5.14.1
+tracked_in: "#921"
+reason: >
+  The analyst cluster manifest scopes only the files the then-shipped rules
+  happened to cite (generation/configuration_utils.py,
+  utils/quantization_config.py, configuration_utils.py). The numeric range
+  bounds for sampling parameters live in generation/logits_process.py and
+  generation/candidate_generator.py, which the manifest never scopes, so
+  both automated proposers were blind to them by construction. These bounds
+  also raise at generate() time (inside warper constructors), which the
+  construction-probe ladder cannot reach - so they ship human-verified
+  against the pinned source, cited per rule.
+overlaid_rule_ids:
+- transformers_samplingparams_raises_top_h_le_0p0
+- transformers_samplingparams_raises_top_h_gt_1p0
+- transformers_samplingparams_raises_typical_p_le_0p0
+- transformers_samplingparams_raises_typical_p_ge_1p0
+- transformers_samplingparams_raises_epsilon_cutoff_le_0p0
+- transformers_samplingparams_raises_epsilon_cutoff_ge_1p0
+- transformers_samplingparams_raises_eta_cutoff_le_0p0
+- transformers_samplingparams_raises_eta_cutoff_ge_1p0
+- transformers_samplingparams_raises_max_matching_ngram_size_lt_1
+- transformers_samplingparams_raises_min_length_lt_0
