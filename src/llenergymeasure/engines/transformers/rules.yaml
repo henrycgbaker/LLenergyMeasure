@@ -152,6 +152,8 @@ rules:
         '>': 1
       transformers.sampling_params.do_sample:
         absent: true
+      transformers.engine_params.num_beams:
+        absent: true
   message_template: Greedy methods (do_sample != True) without beam search do not support `num_return_sequences`
     different than 1 (got {num_return_sequences}).
   provenance:
@@ -160,6 +162,8 @@ rules:
     engine_version: 5.14.1
     citation: generation/configuration_utils.py:778
     date: '2026-08-07'
+    note: 'num_beams gate added after review: the engine raise applies only when num_beams is unset or
+      1; the sibling num_return_vs_beams rules cover the explicit-beam cases'
 - id: transformers_greedy_strips_epsilon_cutoff
   engine: transformers
   severity: dormant
