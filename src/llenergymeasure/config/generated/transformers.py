@@ -1,5 +1,5 @@
-# DO NOT EDIT - regenerated from engine_versions/transformers/v5_7_0/outputs/{curated.yaml,schema.discovered.json}
-# Edit those upstream and run `uv run python scripts/engine_producers/regen_engine_configs.py --engine transformers --version 5.7.0 --write`.
+# DO NOT EDIT - regenerated from engine_versions/transformers/v5_14_1/outputs/{curated.yaml,schema.discovered.json}
+# Edit those upstream and run `uv run python scripts/engine_producers/regen_engine_configs.py --engine transformers --version 5.14.1 --write`.
 
 from __future__ import annotations
 
