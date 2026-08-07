@@ -84,14 +84,14 @@ class TestBuildPreflightPanel:
         sc.dormant_observations = [
             {
                 "engine": "transformers",
-                "rule_id": "transformers_dormant_epsilon_cutoff_ne_0_0",
+                "rule_id": "transformers_greedy_strips_epsilon_cutoff",
                 "field_path": "transformers.sampling_params.epsilon_cutoff",
                 "normalisation": "stripped",
             }
         ]
         output = _render_panel(sc)
         assert "Auto-normalised settings" in output
-        assert "transformers_dormant_epsilon_cutoff_ne_0_0" in output
+        assert "transformers_greedy_strips_epsilon_cutoff" in output
         assert "epsilon_cutoff" in output
 
     def test_panel_omits_dormant_section_when_empty(self):

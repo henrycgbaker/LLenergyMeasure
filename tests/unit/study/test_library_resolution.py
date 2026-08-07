@@ -317,14 +317,16 @@ class TestDedupSweep:
     def test_dormant_extra_collapses_to_one_group(self):
         # Regression (PR-D change 1): two configs differing only in a dormant
         # pydantic EXTRA (epsilon_cutoff) must land in ONE equivalence group.
-        # The fallback projection previously emitted None for the present-only
-        # subject, so the extra key survived with value None and the
-        # resolved-config hash distinguished None from missing -> 2 groups.
+        # Under greedy decoding (do_sample=False) epsilon_cutoff is dormant - the
+        # engine strips it - so the corpus normalises it to absent. The fallback
+        # projection previously emitted None for the present-only subject, so the
+        # extra key survived with value None and the resolved-config hash
+        # distinguished None from missing -> 2 groups.
         cfg_a = _mk_config(
-            transformers={"sampling_params": {"do_sample": True, "epsilon_cutoff": 0.5}}
+            transformers={"sampling_params": {"do_sample": False, "epsilon_cutoff": 0.5}}
         )
         cfg_b = _mk_config(
-            transformers={"sampling_params": {"do_sample": True, "epsilon_cutoff": 0.9}}
+            transformers={"sampling_params": {"do_sample": False, "epsilon_cutoff": 0.9}}
         )
         result = resolve_library_effective([cfg_a, cfg_b], deduplicate=True)
         assert len(result.groups) == 1
@@ -367,14 +369,15 @@ class TestDedupSweep:
 
     def test_dormant_observations_captured(self):
         # PR-D change 6 substrate: dedup records the distinct normalisations it
-        # applied so plan / preflight can surface them.
+        # applied so plan / preflight can surface them. Under greedy decoding the
+        # cross-field rule strips epsilon_cutoff to absent.
         cfg = _mk_config(
-            transformers={"sampling_params": {"do_sample": True, "epsilon_cutoff": 0.5}}
+            transformers={"sampling_params": {"do_sample": False, "epsilon_cutoff": 0.5}}
         )
         result = resolve_library_effective([cfg], deduplicate=True)
         obs = result.dormant_observations
         assert any(
-            o.rule_id == "transformers_dormant_epsilon_cutoff_ne_0_0"
+            o.rule_id == "transformers_greedy_strips_epsilon_cutoff"
             and o.field_path == "transformers.sampling_params.epsilon_cutoff"
             and o.normalisation == "stripped"
             for o in obs
