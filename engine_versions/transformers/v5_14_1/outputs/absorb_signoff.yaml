@@ -4,9 +4,13 @@
 # until you mark it (withheld pending sign-off, not retired). Each entry
 # records the complete withheld rule under its rule: key - the shipped
 # rules.yaml no longer carries it - so marking an entry re-ships the rule
-# from this record on the next absorb run. An entry with
-# interrogation: absent is a retirement proposal: decline the mark to let the
-# rule lapse, or mark it to keep shipping it.
+# from this record on the next absorb run. Alongside human_confirmed you
+# may add an optional citation: (a file:line you verified at THIS engine
+# version, e.g. generation/configuration_utils.py:702) and an optional
+# note: (a one-line reviewer remark); both are carried into the shipped
+# rule's provenance. With no citation the rule's stale one is dropped. An
+# entry with interrogation: absent is a retirement proposal: decline the
+# mark to let the rule lapse, or mark it to keep shipping it.
 residue:
 - id: transformers_cache_choice_use_cache_eq_false
   severity: dormant
@@ -14,7 +18,8 @@ residue:
   - transformers.engine_params.use_cache
   human_confirmed: true
   citation: generation/configuration_utils.py:796
-  note: spec is broader than the engine trigger (warning also requires cache_implementation or cache_config set); kept as warning-severity, tighten at the next re-mine
+  note: spec is broader than the engine trigger (warning also requires cache_implementation
+    or cache_config set); kept as warning-severity, tighten at the next re-mine
   rule:
     id: transformers_cache_choice_use_cache_eq_false
     engine: transformers
