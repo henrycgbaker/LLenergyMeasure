@@ -1,1 +1,0 @@
-A composite server warmup that reaches its timeout now proceeds with the documented `timed_out` disclosure instead of failing the experiment when the warmup traffic schedule ends exactly at the timeout boundary.
