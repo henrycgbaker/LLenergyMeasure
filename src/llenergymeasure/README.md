@@ -197,4 +197,4 @@ from llenergymeasure.domain import ExperimentResult
 
 - See `cli/README.md` for CLI architecture
 - See `config/README.md` for configuration system
-- See `CLAUDE.md` (git-excluded) for layered architecture and import rules
+- See `[tool.importlinter]` in `pyproject.toml` for the enforced layer and boundary rules
