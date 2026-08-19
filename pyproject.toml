@@ -227,8 +227,7 @@ show_missing = true
 name = "llenergymeasure"
 directory = "changelog.d"
 filename = "CHANGELOG.md"
-# Insert new release sections at this marker, keeping the [Unreleased] format-
-# break callout above it untouched.
+# Insert new release sections at this marker.
 start_string = "<!-- towncrier release notes start -->\n"
 # Keep a Changelog version header: `## [X.Y.Z] - YYYY-MM-DD`. The maintainer
 # passes the tag (e.g. v0.7.0) as `towncrier build --version`.
