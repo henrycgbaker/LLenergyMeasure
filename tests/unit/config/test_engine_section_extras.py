@@ -12,6 +12,11 @@ Covers the migration safety net for the generated nested engine shape
 - a genuinely-new engine field inside a sub-section passes (no close match, no
   error) - passthrough of new engine kwargs is intended;
 - the nested happy path is unaffected.
+
+The sub-section cases here use the transformers engine, whose corpus records an
+open ``**kwargs`` surface, so an unrecognised ``engine_params`` key stays a
+warning. Corpus rejection of unrecognised keys on the engines with a closed
+surface is covered in ``test_engine_params_key_validation.py``.
 """
 
 from __future__ import annotations

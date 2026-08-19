@@ -313,6 +313,15 @@ class EngineDescriptor:
     ``package`` version (first-party GHCR image) or the pinned ``engine`` version
     (upstream image)."""
 
+    engine_params_extras: tuple[str, ...] = ()
+    """llem-owned keys that are legal inside ``<engine>.engine_params`` but are
+    absent from the engine's own argument surface, so the engine-knowledge corpus
+    does not carry them. They ride as ``extra="allow"`` passthrough and are read by
+    llenergymeasure rather than forwarded verbatim (tensorrt ``engine_path``: the
+    plugin loads a prebuilt engine directory from it instead of building from the
+    checkpoint). Admissible keys for the ``engine_params`` key check in
+    :mod:`llenergymeasure.config.engine_params_keys`."""
+
 
 ENGINES: dict[Engine, EngineDescriptor] = {
     Engine.TRANSFORMERS: EngineDescriptor(
@@ -352,6 +361,7 @@ ENGINES: dict[Engine, EngineDescriptor] = {
         # Static max_batch_size serves both semantics for TRT-LLM.
         batch=BatchSizeModel(capacity_field="max_batch_size", static_field="max_batch_size"),
         image_version_source="engine",
+        engine_params_extras=("engine_path",),
     ),
 }
 

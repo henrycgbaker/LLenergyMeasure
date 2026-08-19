@@ -451,7 +451,7 @@ class TestEngineConfigFields:
             vllm={
                 "engine_params": {
                     "gpu_memory_utilization": 0.9,
-                    "swap_space": 4.0,
+                    "kv_cache_memory_bytes": 4096,
                     "cpu_offload_gb": 2.0,
                     "block_size": 32,
                     "kv_cache_dtype": "auto",
@@ -469,7 +469,7 @@ class TestEngineConfigFields:
         )
         kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["gpu_memory_utilization"] == 0.9
-        assert kwargs["swap_space"] == 4.0
+        assert kwargs["kv_cache_memory_bytes"] == 4096
         assert kwargs["cpu_offload_gb"] == 2.0
         assert kwargs["block_size"] == 32
         assert kwargs["kv_cache_dtype"] == "auto"
@@ -585,13 +585,13 @@ class TestNewEngineFields:
         """compilation_config dict passes through as-is to kwargs.
 
         ``mode`` is an int Literal (0..3) since the nested submodel projection;
-        ``engine`` is a non-schema key kept by the submodel's extra="allow". Both
-        are user-set, so model_dump forwards them verbatim.
+        ``backend`` is a free-form string on the same submodel. Both are user-set,
+        so model_dump forwards them verbatim and the unset siblings drop out.
         """
-        comp = {"mode": 3, "engine": "inductor"}
+        comp = {"mode": 3, "backend": "inductor"}
         config = make_config(**_VLLM_DEFAULTS, vllm={"engine_params": {"compilation_config": comp}})
         kwargs = VLLMEngine()._build_llm_kwargs(config)
-        assert kwargs["compilation_config"] == {"mode": 3, "engine": "inductor"}
+        assert kwargs["compilation_config"] == {"mode": 3, "backend": "inductor"}
 
     def test_none_engine_field_omitted_value_forwarded(self):
         """exclude_none mechanism: an engine field left None is dropped from
@@ -667,18 +667,22 @@ class TestAttentionConfigWiring:
 
 class TestPassthroughKwargs:
     def test_engine_model_extra_forwarded_to_llm_kwargs(self):
-        """Unknown engine fields pass through to LLM() kwargs via extra='allow'."""
+        """Un-curated engine fields pass through to LLM() kwargs via extra='allow'.
+
+        ``long_prefill_token_threshold`` is on the discovered vLLM surface but not
+        curated onto the generated model, so it rides as a model_extra passthrough.
+        """
         config = make_config(
             **_VLLM_DEFAULTS,
             vllm={
                 "engine_params": {
                     "gpu_memory_utilization": 0.9,
-                    "some_future_param": "value",
+                    "long_prefill_token_threshold": 2048,
                 }
             },
         )
         kwargs = VLLMEngine()._build_llm_kwargs(config)
-        assert kwargs["some_future_param"] == "value"
+        assert kwargs["long_prefill_token_threshold"] == 2048
         assert kwargs["gpu_memory_utilization"] == 0.9  # explicit still works
 
     def test_sampling_model_extra_forwarded(self):
@@ -696,20 +700,20 @@ class TestPassthroughKwargs:
         params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
         assert params._kwargs["n"] == 4
 
-    def test_engine_extra_overrides_explicit_when_colliding(self):
+    def test_engine_extra_forwarded_alongside_curated_field(self):
         """Extra keys are forwarded alongside known fields via extra='allow'."""
         config = make_config(
             **_VLLM_DEFAULTS,
             vllm={
                 "engine_params": {
                     "enforce_eager": True,
-                    "enforce_eager_override": "test",
+                    "disable_sliding_window": True,
                 }
             },
         )
         kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["enforce_eager"] is True  # from explicit field
-        assert kwargs["enforce_eager_override"] == "test"  # from extra='allow' passthrough
+        assert kwargs["disable_sliding_window"] is True  # from extra='allow' passthrough
 
 
 # =============================================================================

@@ -12,6 +12,9 @@ version mismatches (envelope schema breaking changes) raise
 
 Downstream consumers (doc generators, field-name alignment, CI drift guards)
 should load through this module rather than reading the JSON files directly.
+:func:`load_schema_cached` is the process-cached, absence-tolerant form the
+config validators use; anything that needs an isolated cache or wants the
+load failure raised builds its own :class:`SchemaLoader`.
 """
 
 from __future__ import annotations
@@ -19,6 +22,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from datetime import datetime
+from functools import lru_cache
 from importlib import resources
 from typing import Any
 
@@ -74,6 +78,12 @@ class DiscoveredSchema:
     discovery_limitations: list[DiscoveryLimitation] = field(default_factory=list)
     engine_params: dict[str, dict[str, Any]] = field(default_factory=dict)
     sampling_params: dict[str, dict[str, Any]] = field(default_factory=dict)
+    definitions: dict[str, dict[str, Any]] = field(default_factory=dict)
+    """The envelope's ``$defs``: definitions of the nested blocks that
+    ``engine_params`` / ``sampling_params`` field specs point at by ``$ref``
+    (e.g. vLLM's ``speculative_config`` -> ``#/$defs/SpeculativeConfig``). This is
+    how the discovered surface represents structure below the top level. Empty for
+    an engine whose discovered surface is flat."""
 
 
 class SchemaLoader:
@@ -135,6 +145,36 @@ class SchemaLoader:
             self._cache.pop(engine, None)
 
 
+@lru_cache(maxsize=8)
+def load_schema_cached(engine: str) -> DiscoveredSchema | None:
+    """The discovered schema for ``engine``, or None when none is usable.
+
+    The convenience form the config validators want: they consult the same
+    committed schemas while vetting every config, and they treat "no usable
+    schema" as a soft fallback rather than an error, so both a missing file
+    (``FileNotFoundError``) and an unreadable or unsupported envelope
+    (``ValueError``, which covers :class:`UnsupportedSchemaVersionError`)
+    collapse to None here.
+
+    Process-cached, unlike :class:`SchemaLoader`'s per-instance cache. That
+    per-instance cache exists so two loaders can hold independent views of the
+    same engine - which is how a caller reloads one schema after a refresh
+    without disturbing anyone else's copy. This function makes the opposite
+    trade deliberately: one cache for the whole process, so a sweep validating
+    thousands of configs parses each engine's JSON once. Callers that mutate the
+    shipped schemas in-process must therefore call :func:`reset_schema_cache`.
+    """
+    try:
+        return SchemaLoader().load_schema(engine)
+    except (FileNotFoundError, ValueError):
+        return None
+
+
+def reset_schema_cache() -> None:
+    """Clear :func:`load_schema_cached`; for callers that mutate the shipped schemas."""
+    load_schema_cached.cache_clear()
+
+
 def _parse_envelope(*, engine: str, raw_text: str) -> DiscoveredSchema:
     data = json.loads(raw_text)
 
@@ -178,6 +218,7 @@ def _parse_envelope(*, engine: str, raw_text: str) -> DiscoveredSchema:
         discovery_limitations=limitations,
         engine_params=data.get("engine_params", {}),
         sampling_params=data.get("sampling_params", {}),
+        definitions=data.get("$defs", {}),
     )
 
 
