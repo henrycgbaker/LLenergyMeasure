@@ -33,7 +33,11 @@ from llenergymeasure.config.ssot import (
     TEMP_PREFIX_EXCHANGE,
 )
 from llenergymeasure.harness.baseline import BaselineCache
-from llenergymeasure.infra.docker.command import append_nccl_env, append_package_dispatch
+from llenergymeasure.infra.docker.command import (
+    append_nccl_env,
+    append_package_dispatch,
+    docker_label_args,
+)
 from llenergymeasure.utils.env_config import docker_gpus_arg
 from llenergymeasure.utils.io import load_json
 
@@ -68,6 +72,7 @@ def build_baseline_docker_cmd(
     gpu_indices: list[int],
     engine: str,
     config_gpu_indices: list[int] | None = None,
+    labels: dict[str, str] | None = None,
 ) -> list[str]:
     """Build the ``docker run`` command list for a baseline-only container.
 
@@ -84,6 +89,13 @@ def build_baseline_docker_cmd(
     via ``docker_gpus_arg``; see ``utils.env_config.ENV_DOCKER_GPUS``). Threading
     the latter scopes the baseline container to the same physical devices as the
     experiment container, so a config-pinned study does not baseline the wrong GPU.
+
+    ``labels`` are the study's container ownership labels
+    (``container_lifecycle.generate_container_labels``), emitted as ``--label``
+    flags before the image exactly as the experiment path does. A baseline
+    container is short-lived but holds the GPU while it samples, so it must be
+    attributable to its study and reachable by the study-scoped cleanup and the
+    orphan reaper if the launching process dies mid-measurement.
 
     Kept separate from ``run_baseline_container`` so tests can assert on the
     command shape without mocking subprocess internals.
@@ -110,6 +122,8 @@ def build_baseline_docker_cmd(
     # Mount the package + bootstrap and point --entrypoint at /llem-entry.sh,
     # which makes the package importable and exec's the baseline entry module.
     append_package_dispatch(cmd, engine=engine, entry_module=_BASELINE_ENTRY_MODULE)
+    # Ownership labels for lifecycle management (cleanup, reaper).
+    cmd += docker_label_args(labels)
     cmd.append(image)
     return cmd
 
@@ -146,6 +160,7 @@ def run_baseline_container(
     timeout_sec: float | None = None,
     on_stage: StageCallback | None = None,
     config_gpu_indices: list[int] | None = None,
+    labels: dict[str, str] | None = None,
 ) -> BaselineCache | None:
     """Spawn a short-lived baseline container and return the measurement.
 
@@ -181,6 +196,9 @@ def run_baseline_container(
             baseline container is scoped to the same physical devices as the
             experiment container. ``None`` preserves ``--gpus all`` /
             ``LLEM_DOCKER_GPUS`` behaviour.
+        labels: Study container ownership labels, so the study-scoped cleanup
+            and the orphan reaper see this container too (see
+            :func:`build_baseline_docker_cmd`).
 
     Returns:
         A ``BaselineCache`` with ``method=None`` on success (the caller sets
@@ -207,6 +225,7 @@ def run_baseline_container(
         gpu_indices=list(gpu_indices),
         engine=engine,
         config_gpu_indices=config_gpu_indices,
+        labels=labels,
     )
 
     logger.debug(

@@ -109,14 +109,31 @@ def build_config_summary(experiment: ExperimentConfig) -> str:
 
 
 def study_dir_name(name: str | None) -> str:
-    """Return the study directory basename: ``{name}_{timestamp}``."""
+    """Return the study directory basename: ``{name}_{timestamp}``.
+
+    The timestamp has one-second resolution, so this name is not unique on its
+    own - :func:`create_study_dir` owns the uniqueness guarantee.
+    """
     prefix = name if name else "study"
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S")
     return f"{prefix}_{timestamp}"
 
 
+# Same-second sibling suffixes to try before giving up. A study directory is
+# created once per run, so the ceiling only exists to bound the loop.
+_MAX_STUDY_DIR_SIBLINGS = 1000
+
+
 def create_study_dir(name: str | None, output_dir: Path) -> Path:
     """Create study output directory with {name}_{timestamp}/ layout.
+
+    The directory is always freshly created, never adopted: two studies started
+    within the same second (or two racing processes) get distinct directories
+    rather than silently sharing one and interleaving their manifests, cell
+    directories, and artefacts. The first study takes ``{name}_{timestamp}``;
+    each same-second sibling takes the next free ``{name}_{timestamp}-{n}``.
+    The claim is atomic (``mkdir`` without ``exist_ok``), so concurrent
+    processes cannot both win the same name.
 
     Args:
         name: Study name prefix. Uses "study" if None.
@@ -128,13 +145,32 @@ def create_study_dir(name: str | None, output_dir: Path) -> Path:
     Raises:
         StudyError: If directory creation fails.
     """
-    study_dir = output_dir / study_dir_name(name)
     try:
         output_dir.mkdir(parents=True, exist_ok=True)
-        study_dir.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
         raise StudyError(f"Failed to create study directory: {exc}") from exc
-    return study_dir
+
+    base_name = study_dir_name(name)
+    for sibling in range(1, _MAX_STUDY_DIR_SIBLINGS + 1):
+        candidate = output_dir / (base_name if sibling == 1 else f"{base_name}-{sibling}")
+        try:
+            candidate.mkdir()
+        except FileExistsError:
+            continue
+        except OSError as exc:
+            raise StudyError(f"Failed to create study directory: {exc}") from exc
+        if sibling > 1:
+            logger.info(
+                "Study directory %s already exists; using %s instead",
+                base_name,
+                candidate.name,
+            )
+        return candidate
+
+    raise StudyError(
+        f"Failed to create study directory: {_MAX_STUDY_DIR_SIBLINGS} directories "
+        f"named {base_name!r} (or a numbered sibling) already exist in {output_dir}"
+    )
 
 
 # ---------------------------------------------------------------------------

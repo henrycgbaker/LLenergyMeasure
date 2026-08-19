@@ -10,7 +10,9 @@ process-cached and idempotent.
 Consumed by ``DockerRunner._build_docker_cmd`` (the experiment dispatch) and by
 ``study.baseline_container`` (the baseline dispatch), which share
 :func:`append_package_dispatch` and :func:`append_nccl_env` so the two setups
-cannot drift.
+cannot drift. :func:`docker_label_args` is shared more widely still: those two
+plus ``infra.server_lifecycle`` (the engine-server dispatch) all render the
+study's container ownership labels through it.
 """
 
 from __future__ import annotations
@@ -50,7 +52,12 @@ from llenergymeasure.utils.env_config import (
 )
 from llenergymeasure.utils.exceptions import DockerPreFlightError
 
-__all__ = ["append_nccl_env", "append_package_dispatch", "build_docker_cmd"]
+__all__ = [
+    "append_nccl_env",
+    "append_package_dispatch",
+    "build_docker_cmd",
+    "docker_label_args",
+]
 
 # Reserved exchange env keys the docker command builders set deliberately
 # (via -e or --env-file). The blanket "forward every host LLEM_* var" loop
@@ -366,6 +373,31 @@ def append_nccl_env(cmd: list[str]) -> None:
             cmd.extend(["-e", f"{env_key}={env_val}"])
 
 
+def docker_label_args(labels: dict[str, str] | None) -> list[str]:
+    """Return the ``--label KEY=VALUE`` argv fragment for container ownership labels.
+
+    Every container a study launches (experiment, engine server, baseline) wears
+    the same ownership labels, so the study-scoped cleanup and the orphan reaper
+    can see all of them. This is the one place that renders them as argv, shared
+    by all three dispatch paths so their label emission cannot drift.
+
+    ``docker run`` only accepts flags BEFORE the image reference - anything after
+    it is passed to the container - so callers must splice this fragment in while
+    still building the flag section, ahead of appending the image.
+
+    Args:
+        labels: Label key/values, or None/empty when the container is unlabelled.
+
+    Returns:
+        A flat argv fragment, empty when there are no labels. Insertion order is
+        preserved so the built command is deterministic (tests assert on argv).
+    """
+    argv: list[str] = []
+    for key, value in (labels or {}).items():
+        argv += ["--label", f"{key}={value}"]
+    return argv
+
+
 def _mount_if_absent(
     cmd: list[str],
     host: str | Path,
@@ -520,11 +552,9 @@ def build_docker_cmd(
     append_package_dispatch(cmd, engine=f"{config.engine}")
 
     # Container name and labels for lifecycle management (cleanup, reaper).
-    # These must appear before the image name in the docker run command.
     if container_name:
         cmd.extend(["--name", container_name])
-    for key, value in labels.items():
-        cmd.extend(["--label", f"{key}={value}"])
+    cmd += docker_label_args(labels)
 
     cmd.append(image)
 

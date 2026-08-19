@@ -92,6 +92,18 @@ class _BaselineMixin:
         """True if the key targets a host/local measurement (vs a Docker baseline container)."""
         return cache_key.startswith(_LOCAL_KEY_PREFIX)
 
+    def _container_labels(self) -> dict[str, str]:
+        """Return this study's container ownership labels for a baseline container.
+
+        A baseline container holds the GPU while it samples, so it wears the same
+        ``llem.study_id`` / ``llem.parent_pid`` labels as the study's experiment
+        containers: the study-scoped cleanup and the orphan reaper can then see
+        and correctly scope it.
+        """
+        from llenergymeasure.study.container_lifecycle import generate_container_labels
+
+        return generate_container_labels(self.study.study_design_hash)
+
     def _get_baseline(self, config: ExperimentConfig) -> Any:
         """Return baseline power according to the configured strategy.
 
@@ -418,6 +430,7 @@ class _BaselineMixin:
             engine=f"{config.engine}",
             on_stage=on_stage,
             config_gpu_indices=self.study.study_execution.gpu_indices,
+            labels=self._container_labels(),
         )
 
     def _spot_check_baseline(
@@ -449,6 +462,7 @@ class _BaselineMixin:
             gpu_indices=gpu_indices,
             engine=f"{config.engine}",
             config_gpu_indices=self.study.study_execution.gpu_indices,
+            labels=self._container_labels(),
         )
         return result.power_w if result is not None else None
 

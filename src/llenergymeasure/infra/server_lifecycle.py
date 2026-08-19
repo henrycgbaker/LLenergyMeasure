@@ -154,15 +154,24 @@ class ProbeRequest:
 class ServerPlacement:
     """Where a server runs: process (host subprocess) or container (sibling image).
 
-    ``image`` and ``gpu_indices`` are consumed only by the container leg; the
-    adapter resolves a ``None`` image via the image registry. Constructed by the
-    caller (the server session, from the resolved ``RunnerSpec`` +
-    ``study_execution.gpu_indices``); tests construct it directly.
+    ``image``, ``gpu_indices``, and ``labels`` are consumed only by the container
+    leg; the adapter resolves a ``None`` image via the image registry.
+    Constructed by the caller (the server session, from the resolved
+    ``RunnerSpec`` + ``study_execution.gpu_indices`` + the study's container
+    ownership labels); tests construct it directly.
+
+    ``labels`` carries the study's ownership labels
+    (``study.container_lifecycle.generate_container_labels``) so a launched
+    server container is visible to the same leak protection the study's
+    experiment containers get: the study-scoped cleanup and the orphan reaper
+    both select on ``llem.study_id``. A container-mode placement built by the
+    study path always carries them.
     """
 
     mode: RunnerMode
     image: str | None = None
     gpu_indices: list[int] | None = None
+    labels: dict[str, str] | None = None
 
 
 @dataclass
@@ -273,6 +282,7 @@ def build_server_container_argv(
     gpu_indices: list[int] | None,
     serve_args: list[str],
     shm_size: str | None = None,
+    labels: dict[str, str] | None = None,
 ) -> list[str]:
     """Build the ``docker run`` argv for a long-lived engine server container.
 
@@ -306,7 +316,16 @@ def build_server_container_argv(
     offline docker dispatch uses, via :func:`hf_cache_mount_args`), so a launched
     server reuses already-downloaded weights instead of re-downloading the full
     model on every run.
+
+    ``labels`` are the study's container ownership labels (the same ones the
+    offline docker dispatch sets), rendered by
+    :func:`~llenergymeasure.infra.docker.command.docker_label_args`, so a server
+    container is attributable to its study and reachable by the study-scoped
+    cleanup and the orphan reaper. A server container that outlives its launching
+    process - the exact case ``shutdown`` cannot cover - is otherwise invisible to
+    them.
     """
+    from llenergymeasure.infra.docker.command import docker_label_args
     from llenergymeasure.utils.env_config import (
         docker_gpus_arg,
         docker_shm_size,
@@ -324,6 +343,7 @@ def build_server_container_argv(
     ]
     if container_name:
         argv += ["--name", container_name]
+    argv += docker_label_args(labels)
     argv += ["--shm-size", shm_size or docker_shm_size()]
     argv += hf_cache_mount_args()
     argv.append(image)
