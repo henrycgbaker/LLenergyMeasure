@@ -40,6 +40,16 @@ codecarbon = ["codecarbon>=2.8"]
 # compiled deps), so this extra installs on any host - engines still run in
 # their Docker images, but the traffic issuer runs wherever llem does.
 server = ["httpx>=0.27"]
+# Optimiser numerics. Floor is 1.15.0 because that release renamed the
+# `random_state` argument to `rng` across scipy's stochastic API under SPEC-7,
+# and `random_state` is already deleted on scipy's main branch - so this
+# package targets the `rng=` keyword era and never has to support both.
+optimize = ["scipy>=1.15"]
+# Sensitivity screening (Morris, Sobol) on top of the optimiser numerics.
+# SALib 1.5.2 requires numpy>=2.0 while the core floor is numpy>=1.24, so this
+# extra lifts the whole environment to numpy 2. pyarrow>=14 supports numpy 2,
+# so nothing else in the core has to move; ci.yml proves the resolution.
+screen = ["llenergymeasure[optimize]", "SALib>=1.5.2"]
 
 [dependency-groups]
 dev = [
@@ -57,6 +67,11 @@ dev = [
     # the generated config.py is byte-compared in CI, and the generator's
     # output formatting is version-sensitive.
     "datamodel-code-generator==0.72.1",
+    # Differential test oracle for the optimiser's Pareto/hypervolume maths.
+    # Dev-only on purpose: moocore is LGPL-2.1-or-later, so it must never
+    # appear in the core dependencies or in any runtime extra - nothing that
+    # ships imports it.
+    "moocore",
 ]
 
 [project.scripts]
@@ -155,6 +170,15 @@ url = "https://pypi.nvidia.com/"
 # specific git overrides are no longer needed. The nvidia index stays
 # registered for any future host-side tooling that resolves through it.
 index-strategy = "unsafe-best-match"
+# Lock-only ceiling on numpy, not a runtime bound: `numpy>=1.24` in
+# [project.dependencies] is unchanged, so an installed release still takes the
+# newest numpy its interpreter allows. The lock is what the type gate runs
+# against, and mypy is configured for the 3.10 floor while the CI runner is
+# 3.12: numpy 2.5 requires Python 3.12+ and its stubs use PEP 695 `type`
+# statements, which mypy rejects at a 3.10 target. Capping the locked numpy
+# keeps the gate checking our code instead of failing inside a dependency's
+# stubs. Lift this once the mypy target moves past 3.11.
+constraint-dependencies = ["numpy<2.5"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
