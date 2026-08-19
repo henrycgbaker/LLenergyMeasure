@@ -29,7 +29,7 @@ results/
         └── baseline_cache_<key>.json            # per-engine baseline cache
 ```
 
-`<UTC-timestamp>` is ISO-8601 (e.g. `2026-05-07T14-32-08`). Cell directory names encode `<NNN>_c<cycle>_<model>-<engine>_<config-hash>` so they sort sensibly and you can tell sibling cycles apart at a glance.
+`<UTC-timestamp>` is ISO-8601 (e.g. `2026-05-07T14-32-08`). The timestamp has one-second resolution, so a study started in the same second as another takes the next free numbered sibling instead (`<study-name>_<UTC-timestamp>-2`); two studies never share one directory. Cell directory names encode `<NNN>_c<cycle>_<model>-<engine>_<config-hash>` so they sort sensibly and you can tell sibling cycles apart at a glance.
 
 ## `result.json` - per-experiment record
 

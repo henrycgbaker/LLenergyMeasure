@@ -489,16 +489,27 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
         """Install the SIGINT handler, acquire per-GPU advisory locks, and wire the
         Docker container lifecycle + SIGTERM bridge.
 
+        A container-dispatching study is refused up front when it has no design
+        hash: that hash is the ownership key for every container the study
+        launches, so the failure fires before any handler is installed, any lock
+        is taken, and any container exists.
+
         Returns ``(original_sigint, original_sigterm, gpu_locks)`` for restoration in
         run()'s finally block via _restore_run_handlers.
         """
-        original_sigint = signal.signal(signal.SIGINT, self._handle_sigint)
-
         config_gpu_indices = self.study.study_execution.gpu_indices
         uses_docker = bool(
             self._runner_specs
             and any(s.mode == RUNNER_CONTAINER for s in self._runner_specs.values())
         )
+
+        study_id: str | None = None
+        if uses_docker:
+            from llenergymeasure.study.container_lifecycle import require_study_id
+
+            study_id = require_study_id(self.study.study_design_hash)
+
+        original_sigint = signal.signal(signal.SIGINT, self._handle_sigint)
 
         # Acquire per-GPU advisory locks before image preparation.
         # Lock names use the PHYSICAL device the study occupies, resolved from
@@ -524,14 +535,13 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
         # Container lifecycle: reap orphaned containers, register cleanup, install SIGTERM bridge.
         # Only activated for studies that use Docker runners.
         original_sigterm: signal.Handlers | None = None
-        if uses_docker:
+        if study_id is not None:
             from llenergymeasure.study.container_lifecycle import (
                 install_sigterm_bridge,
                 reap_orphaned_containers,
                 register_container_cleanup,
             )
 
-            study_id = self.study.study_design_hash or "unknown"
             reap_orphaned_containers()
             register_container_cleanup(study_id)
             original_sigterm = install_sigterm_bridge()

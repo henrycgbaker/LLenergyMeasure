@@ -1206,6 +1206,35 @@ class TestBaselineContainerDispatch:
         assert modes.count("measure") == 1
         assert modes.count("spot_check") == 1
 
+    def test_every_baseline_container_carries_the_study_ownership_labels(
+        self, tmp_path: Path, config_validated: ExperimentConfig
+    ):
+        """Both baseline dispatch modes label the container with the owning study.
+
+        The study-scoped cleanup and the orphan reaper select on those labels, so
+        an unlabelled baseline container would hold the GPU unreachably.
+        """
+        runner, _ = _docker_runner(tmp_path, config_validated)
+        calls = []
+
+        def dispatch_side_effect(**kwargs):
+            calls.append(kwargs)
+            # Return a drifting spot check so the re-measure dispatch runs too.
+            return _make_baseline(50.0 if kwargs["mode"] == "measure" else 70.0)
+
+        with (
+            patch(_RUN_BASELINE_CONTAINER, side_effect=dispatch_side_effect),
+            patch(_RESOLVE_GPU, return_value=[0]),
+            patch(_SAVE),
+        ):
+            runner._get_baseline(config_validated)
+            for _ in range(3):
+                runner._get_baseline(config_validated)
+
+        assert {c["mode"] for c in calls} == {"measure", "spot_check"}
+        for call_kwargs in calls:
+            assert call_kwargs["labels"]["llem.study_id"] == TEST_CONFIG_HASH
+
     def test_docker_runner_dispatches_measure_container_on_drift(
         self, tmp_path: Path, config_validated: ExperimentConfig
     ):

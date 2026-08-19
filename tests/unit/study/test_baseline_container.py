@@ -224,6 +224,35 @@ class TestBuildBaselineDockerCmd:
         mine = [p for p in cmd if p in set(expected)]
         assert mine == expected
 
+    def test_cmd_carries_ownership_labels(self, tmp_path: Path):
+        """Ownership labels ride before the image so cleanup and the reaper see it.
+
+        A baseline container holds the GPU while it samples; unlabelled, it is
+        invisible to the study-scoped cleanup and to the orphan reaper.
+        """
+        cmd = baseline_container.build_baseline_docker_cmd(
+            image="img:latest",
+            exchange_dir=str(tmp_path),
+            gpu_indices=[0],
+            engine="vllm",
+            labels={"llem.study_id": "abcdef12", "llem.parent_pid": "4242"},
+        )
+
+        for value in ("llem.study_id=abcdef12", "llem.parent_pid=4242"):
+            idx = cmd.index(value)
+            assert cmd[idx - 1] == "--label"
+            assert idx < cmd.index("img:latest")
+
+    def test_cmd_without_labels_emits_none(self, tmp_path: Path):
+        cmd = baseline_container.build_baseline_docker_cmd(
+            image="img:latest",
+            exchange_dir=str(tmp_path),
+            gpu_indices=[0],
+            engine="vllm",
+        )
+
+        assert "--label" not in cmd
+
 
 class TestParseStageLine:
     def test_non_marker_returns_none(self):
