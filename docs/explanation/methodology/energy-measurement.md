@@ -351,6 +351,7 @@ NVML polling is kept as a fallback because:
 - **NVML** - [NVIDIA Management Library Reference](https://docs.nvidia.com/deploy/nvml-api/index.html) (hardware sensor architecture, polling intervals, power reading modes)
 - **Zeus** - [Zeus: Understanding and Optimizing GPU Energy Consumption (NSDI '23)](https://www.usenix.org/conference/nsdi23/presentation/you) and the [Zeus repo](https://github.com/ml-energy/zeus) (hardware counters, CPU/DRAM measurement)
 - **CodeCarbon** - [CodeCarbon docs](https://mlco2.github.io/codecarbon/) (estimation modes, accuracy validation, regional carbon intensity)
+- **On-board sensor sampling behaviour** - Burtscher, Zecena and Zong, [Measuring GPU Power with the K20 Built-in Sensor](https://doi.org/10.1145/2576779.2576783) (GPGPU-7, 2014), and Bridges, Imam and Mintz, [Understanding GPU Power: A Survey of Profiling, Modeling, and Simulation Methods](https://doi.org/10.1145/2962131) (ACM Computing Surveys 49(3), 2016)
 
 ---
 
@@ -364,10 +365,14 @@ uncertainty (~25-40% total error).
 shunt resistor and ADC. All software samplers (Zeus, NVML, CodeCarbon) share this floor.
 For publication-quality results, report energy with appropriate uncertainty bounds.
 
-**A100 power sensor observes 25% of runtime.** The A100's power sensor averages over a
-25ms window within each 100ms update period (Bridges et al., 2023). During the remaining
-75ms, the GPU could draw substantially different power. Zeus's hardware energy counter
-mitigates this by accumulating continuously.
+**On-board power sensors do not observe power continuously.** The GPU's on-board power
+sensor takes readings intermittently rather than integrating continuously, and its
+effective sampling frequency varies, so a polled power series under-resolves power
+excursions that fall between readings. This was characterised in detail on the Kepler
+K20 (Burtscher et al., 2014) and surveyed as a general limitation of internal GPU power
+sensors (Bridges et al., 2016). The magnitude is architecture-dependent and is not
+independently characterised here for the A100. Zeus's hardware energy counter sidesteps
+the issue by accumulating on the die rather than being polled.
 
 **Multi-GPU measurement sums per-device energy.** For tensor-parallel runs across multiple
 GPUs, LLenergyMeasure sums per-device energy. All participating GPUs are automatically
