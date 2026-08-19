@@ -17,7 +17,7 @@ long, it wastes GPU time and slows every study. This study finds the shortest
 window whose energy-per-token figure is stable, and derives three shipped
 defaults from the result.
 
-> Traceability: this is study E2, run 2026-07-23. The values below are its
+> Traceability: this study was run 2026-07-23. The values below are its
 > ratified results.
 
 ---

@@ -16,7 +16,7 @@ This study asks whether that lag is large enough to matter, and, if so, whether
 the server warmup gate needs a temperature observable or whether power stability
 alone is enough.
 
-> Traceability: this is study E3, run 2026-07-29. The values below are its
+> Traceability: this study was run 2026-07-29. The values below are its
 > ratified results.
 
 ---
