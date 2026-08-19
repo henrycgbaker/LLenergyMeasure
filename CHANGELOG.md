@@ -7,10 +7,14 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 
 ## [Unreleased]
 
-> **Results-bundle format break (unreleased, ships with v0.7.0):** results-bundle
-> format 2.0, anchored at commit `09ec455e`. Every v0.7.0 format addition rides
-> this single untagged 2.0 stamp - there is no `2.1`. `v0.6.0` is the rollback
-> anchor. The clean breaks folded into 2.0 (no alias translation):
+<!-- towncrier release notes start -->
+
+## [0.7.0] - 2026-08-07
+
+> **Results-bundle format break:** results-bundle format 2.0, anchored at commit
+> `09ec455e`. Every v0.7.0 format addition rides this single untagged 2.0 stamp -
+> there is no `2.1`. `v0.6.0` is the rollback anchor. The clean breaks folded
+> into 2.0 (no alias translation):
 >
 > - Runner provenance is unified into one `RunnerProvenance` model and `bundle_version` stamps `"2.0"` ([#869]).
 > - The per-experiment `environment.json` sidecar is renamed `system.json` ([#879]).
@@ -21,10 +25,6 @@ Minor version bumps (`0.x.0`) mark milestone completions. Breaking changes can o
 > `mode` value, which fails validation loudly on read. See
 > [the results-schema reference](docs/reference/results-schema.md) for the full
 > read-tolerance contract.
-
-<!-- towncrier release notes start -->
-
-## [0.7.0] - 2026-08-07
 
 ### Added
 
@@ -1049,7 +1049,8 @@ Origin: first measurement scaffolding (multi-GPU aggregation, FLOPs, Optimum-ben
 - Major directory restructuring separating config, core, and result handling.
 
 
-[Unreleased]: https://github.com/henrycgbaker/llenergymeasure/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/henrycgbaker/llenergymeasure/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.7.0
 [v0.6.0]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.6.0
 [v0.5.1]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.5.1
 [v0.5.0]: https://github.com/henrycgbaker/llenergymeasure/releases/tag/v0.5.0
