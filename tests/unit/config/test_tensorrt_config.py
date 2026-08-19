@@ -355,12 +355,18 @@ class TestExperimentConfigIntegration:
         assert config.tensorrt.sampling_params is not None
         assert config.tensorrt.sampling_params.n == 1
 
-    def test_tensorrt_extra_allow_forwards_unknown(self):
-        """Extra fields on engine_params are accepted (not rejected)."""
-        config = _make_trt(tensor_parallel_size=1, custom_future_field="value")
+    def test_tensorrt_extra_allow_forwards_uncurated_field(self):
+        """An un-curated field on the discovered surface is accepted (not rejected).
+
+        ``enable_attention_dp`` is a real TRT-LLM argument that the generated config
+        does not curate, so it rides as extra="allow" passthrough. A key that is on
+        no part of the surface is rejected instead (see
+        ``tests/unit/config/test_engine_params_key_validation.py``).
+        """
+        config = _make_trt(tensor_parallel_size=1, enable_attention_dp=True)
         ep = config.tensorrt.engine_params
         assert ep.tensor_parallel_size == 1
-        assert getattr(ep, "custom_future_field", None) == "value"
+        assert getattr(ep, "enable_attention_dp", None) is True
 
     def test_engine_path_with_trt_backend_accepted(self):
         """engine_path with backend='trt' constructs cleanly (the valid pairing)."""
