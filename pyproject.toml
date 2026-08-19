@@ -1,5 +1,8 @@
 [build-system]
-requires = ["hatchling"]
+# Floor is 1.27: the first hatchling that understands the PEP 639 metadata
+# below (`license` as an SPDX expression plus `license-files`). Older
+# hatchling treats the string form as a legacy table and drops it.
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
@@ -10,6 +13,8 @@ authors = [
     {name = "henrycgbaker", email = "henry.c.g.baker@gmail.com"},
 ]
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.10"
 dependencies = [
     "pydantic>=2.0",
