@@ -74,6 +74,12 @@ class DiscoveredSchema:
     discovery_limitations: list[DiscoveryLimitation] = field(default_factory=list)
     engine_params: dict[str, dict[str, Any]] = field(default_factory=dict)
     sampling_params: dict[str, dict[str, Any]] = field(default_factory=dict)
+    definitions: dict[str, dict[str, Any]] = field(default_factory=dict)
+    """The envelope's ``$defs``: definitions of the nested blocks that
+    ``engine_params`` / ``sampling_params`` field specs point at by ``$ref``
+    (e.g. vLLM's ``speculative_config`` -> ``#/$defs/SpeculativeConfig``). This is
+    how the discovered surface represents structure below the top level. Empty for
+    an engine whose discovered surface is flat."""
 
 
 class SchemaLoader:
@@ -178,6 +184,7 @@ def _parse_envelope(*, engine: str, raw_text: str) -> DiscoveredSchema:
         discovery_limitations=limitations,
         engine_params=data.get("engine_params", {}),
         sampling_params=data.get("sampling_params", {}),
+        definitions=data.get("$defs", {}),
     )
 
 

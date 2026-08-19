@@ -28,6 +28,10 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal, get_args
 
 from pydantic import BaseModel, Field, PrivateAttr, model_validator
 
+from llenergymeasure.config.engine_params_keys import (
+    CLOSE_MATCH_CUTOFF,
+    validate_engine_params_keys,
+)
 from llenergymeasure.config.ssot import ALL_ENGINES, ENGINES, SAMPLING_PRESETS, Engine, engine_str
 from llenergymeasure.config.warnings import ConfigValidationWarning
 
@@ -109,12 +113,6 @@ def _get_rules_loader() -> EngineRulesLoader:
 def _reset_rules_loader_cache() -> None:
     """Clear the memoised loader; used by tests that mutate the on-disk corpus."""
     _get_rules_loader.cache_clear()
-
-
-# Soft-validation cutoff for difflib suggestions on extra keys. 0.8 keeps the
-# suggestion conservative (clear typos like ``dtypee`` -> ``dtype``) without
-# nagging on genuinely-new engine fields that happen to share a prefix.
-_CLOSE_MATCH_CUTOFF = 0.8
 
 
 def _nested_subsection_models(section: BaseModel) -> dict[str, type[BaseModel]]:
@@ -1230,9 +1228,9 @@ class ExperimentConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_engine_section_extras(self) -> ExperimentConfig:
-        """Soft/hard validation of extra keys on the active engine's nested section.
+        """Validate extra keys on the active engine's nested section.
 
-        Two checks against the generated nested shape (``engine_params`` /
+        Three checks against the generated nested shape (``engine_params`` /
         ``sampling_params`` sub-models):
 
         - Wrapper-level extras (keys on the section itself) are ERRORS: the
@@ -1242,11 +1240,18 @@ class ExperimentConfig(BaseModel):
           message is a migration hint pointing at the correct nested location;
           otherwise it is a typo and the message carries a ``did you mean``
           suggestion.
-        - Extras inside ``engine_params`` / ``sampling_params`` DO pass through
-          to the engine (``extra="allow"``), so a genuinely-new engine field is
-          legitimate. We only WARN, and only when the key is a close typo of a
-          known field, using the discovered schema plus generated fields as the
-          vocabulary.
+        - Keys inside ``engine_params`` are vetted against the engine-knowledge
+          corpus by :mod:`llenergymeasure.config.engine_params_keys`, nested
+          blocks included: an unrecognised key is an ERROR wherever the corpus
+          enumerates the whole engine surface, because it configures nothing yet
+          still shifts the config hash (a swept typo would expand into
+          distinct-looking experiments that all measure one point). Engines whose
+          corpus records an open var-kwargs surface, and engines with no corpus
+          installed, fall back to warn-and-admit.
+        - Extras inside ``sampling_params`` DO pass through to the engine
+          (``extra="allow"``), so a genuinely-new engine field is legitimate. We
+          only WARN, and only when the key is a close typo of a known field,
+          using the discovered schema plus generated fields as the vocabulary.
         """
         section = getattr(self, self.engine.value, None)
         if not isinstance(section, BaseModel):
@@ -1270,18 +1275,21 @@ class ExperimentConfig(BaseModel):
             hint = f"; did you mean engine_params.{suggestion[0]}?" if suggestion else ""
             raise ValueError(f"unknown field {key!r} on {self.engine.value}{hint}")
 
-        # (2) Sub-section extras: pass through to the engine - warn on close typos.
-        for sub_name, model in sub_models.items():
-            sub_section = getattr(section, sub_name, None)
-            if sub_section is None:
-                continue
-            extras = sub_section.model_extra
-            if not extras:
-                # No extra keys to vet: skip building the vocabulary (which
-                # reads the discovered-schema JSON off disk). The common case.
-                continue
+        # (2) engine_params keys: corpus-validated, to the depth the corpus sees.
+        engine_params = getattr(section, "engine_params", None)
+        if engine_params is not None:
+            validate_engine_params_keys(self.engine, engine_params)
+
+        # (3) sampling_params extras: pass through to the engine - warn on close typos.
+        sampling_model = sub_models.get("sampling_params")
+        sampling_params = getattr(section, "sampling_params", None)
+        extras = sampling_params.model_extra if sampling_params is not None else None
+        if sampling_model is not None and extras:
+            # Only build the vocabulary (which reads the discovered-schema JSON
+            # off disk) when there is an extra key to vet.
             vocabulary = sorted(
-                set(model.model_fields) | _discovered_field_names(self.engine.value, sub_name)
+                set(sampling_model.model_fields)
+                | _discovered_field_names(self.engine.value, "sampling_params")
             )
             for key in extras:
                 if key in vocabulary:
@@ -1289,11 +1297,11 @@ class ExperimentConfig(BaseModel):
                     # passthrough, no warning.
                     continue
                 suggestion = difflib.get_close_matches(
-                    key, vocabulary, n=1, cutoff=_CLOSE_MATCH_CUTOFF
+                    key, vocabulary, n=1, cutoff=CLOSE_MATCH_CUTOFF
                 )
                 if suggestion:
                     warnings.warn(
-                        f"unknown field {key!r} in {self.engine.value}.{sub_name}; "
+                        f"unknown field {key!r} in {self.engine.value}.sampling_params; "
                         f"did you mean {suggestion[0]}?",
                         ConfigValidationWarning,
                         stacklevel=2,

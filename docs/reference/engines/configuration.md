@@ -26,6 +26,16 @@ introspected inventory see the per-engine schema pages, and for which
 parameters are explicitly modelled vs forwarded see the curation pages (both
 linked under [See also](#see-also)).
 
+Forwarding covers the whole introspected surface, not just the modelled subset -
+but not arbitrary names. A key under `engine_params:` must appear somewhere on
+the engine's surface (the introspected inventory or the generated model), or the
+config is rejected with the closest matching field named, because a key the
+engine has no argument for configures nothing while still counting as a distinct
+experiment. Nested blocks are checked to whatever depth the snapshot describes
+them. The transformers loader takes `**kwargs` that introspection cannot
+enumerate, so on that engine an unrecognised `engine_params` key warns rather
+than failing; `sampling_params` keys warn on every engine.
+
 For study-level controls (sweeps, runners, images, cycles, output) see
 [study-config.md](../study-config.md).
 

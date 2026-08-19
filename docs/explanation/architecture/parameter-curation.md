@@ -54,6 +54,7 @@ The curation principles the generated surface encodes:
 - **Types may be narrowed.** A field typed `str` in discovery might become `Literal["bfloat16", "float16", "float32"]` in curation - this is intentional and allowed by the drift checker.
 - **Descriptions are added.** Pydantic field docs are user-facing; discovery has none.
 - **Unmodelled parameters still work.** The generated sub-models set `extra="allow"`, so a parameter the snapshot does not name explicitly is forwarded to the engine unchanged.
+- **Curation narrows what is documented, never what is admissible.** An `engine_params` key is admitted when it appears anywhere on the engine's surface - the whole discovered inventory, the generated model, or the small set of llem-owned passthrough keys declared on the engine descriptor (TensorRT-LLM's `engine_path`). A key on none of them is rejected at config validation rather than forwarded, because the engine has no argument for it: it configures nothing while still counting as a distinct experiment, so a swept typo would expand into several identical measurements. Nesting is checked as deep as the snapshot's `$defs` describe it; a block the snapshot leaves opaque admits any key. Engines whose discovered surface is open-ended - transformers, whose `from_pretrained` takes `**kwargs` that no introspection can enumerate, a limitation the snapshot itself records - warn instead of rejecting, as does an install shipping no snapshot for the engine.
 
 ---
 

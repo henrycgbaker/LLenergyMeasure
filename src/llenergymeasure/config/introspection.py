@@ -511,6 +511,21 @@ _MODEL_VALIDATOR_RULES: list[dict[str, str]] = [
         "resolution": "Move the key under <engine>.engine_params or <engine>.sampling_params.",
     },
     {
+        "engine": "all",
+        "validator": "validate_engine_section_extras",
+        "combination": "unknown key under <engine>.engine_params",
+        "reason": "A key under engine_params that is on no part of the engine's surface - "
+        "neither the discovered schema for the pinned engine version nor the curated "
+        "fields - configures nothing, yet it still shifts the config hash, so a sweep "
+        "over a misspelt key expands into distinct-looking experiments that all measure "
+        "one point (validate_engine_section_extras). Engines whose discovered surface is "
+        "open-ended (transformers, whose loader takes **kwargs) warn instead of "
+        "rejecting, as does an install with no schema for the engine.",
+        "resolution": "Correct the key to a name on the engine surface - the error names "
+        "the closest match when there is one, and the per-engine schema page lists the "
+        "full introspected inventory.",
+    },
+    {
         "engine": "transformers",
         "validator": "validate_transformers_flash_attn_dtype",
         "combination": "attn_implementation in [flash_attention_2, flash_attention_3] "
