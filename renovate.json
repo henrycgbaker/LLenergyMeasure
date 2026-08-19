@@ -7,7 +7,10 @@
     "opens a separate branch/PR per engine (its default for distinct packages: transformers, vllm,",
     "tensorrt-llm). Do not add a shared groupName across engines. One engine per bump PR keeps the",
     "PR reviewable and its absorb diff self-contained (evidence: #792's 23-file single-engine bump",
-    "vs #738's 82-file multi-engine diff)."
+    "vs #738's 82-file multi-engine diff).",
+    "Freeze (v0.8 development cycle): the per-engine rules below are currently held by the two",
+    "'enabled: false' freeze rules at the end of packageRules. The one-engine-per-PR policy above",
+    "still governs; it resumes as soon as the freeze rules are removed."
   ],
   "enabledManagers": ["dockerfile", "custom.regex", "pep621", "github-actions"],
   "gitIgnoredAuthors": ["llem-ci-bot[bot]"],
@@ -68,6 +71,20 @@
     {
       "matchManagers": ["pep621"],
       "rangeStrategy": "replace"
+    },
+    {
+      "description": "Engine pins are frozen for the v0.8 development cycle: mined engine-knowledge artefacts and measurement baselines are tied to the pinned versions, so a mid-cycle engine bump would invalidate them. Covers the three regex-managed pins in engine_versions/<engine>/current.yaml (transformers, vllm, tensorrt-llm). Remove this rule when the freeze lifts. See #926.",
+      "matchManagers": ["custom.regex"],
+      "matchDatasources": ["pypi"],
+      "matchPackageNames": ["transformers", "vllm", "tensorrt-llm"],
+      "enabled": false
+    },
+    {
+      "description": "Frozen alongside the engine pins for the v0.8 development cycle: pytorch/pytorch is the transformers engine image substrate, so bumping it moves the same measurement baseline the engine pins hold fixed. Tooling images (ghcr.io/astral-sh/uv) are deliberately not matched. Remove this rule when the freeze lifts. See #926.",
+      "matchManagers": ["dockerfile"],
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["pytorch/pytorch"],
+      "enabled": false
     }
   ],
   "statusCheckNames": {
