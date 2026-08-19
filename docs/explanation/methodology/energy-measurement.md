@@ -309,6 +309,10 @@ implementation details, or have single correct values:
 | Integration method | Trapezoidal rule | Standard for non-uniform timesteps; Simpson's offers no practical gain given +/-5% sensor noise. |
 | Power reading mode | Instantaneous | Uses least-smoothed NVML reading for best temporal resolution. |
 
+The provenance of these sampler choices, along with the baseline-measurement
+location and default token lengths, is catalogued in
+[Empirical grounding](/explanation/methodology/empirical-grounding).
+
 ---
 
 ## Design Rationale
@@ -347,6 +351,8 @@ NVML polling is kept as a fallback because:
 - **NVML** - [NVIDIA Management Library Reference](https://docs.nvidia.com/deploy/nvml-api/index.html) (hardware sensor architecture, polling intervals, power reading modes)
 - **Zeus** - [Zeus: Understanding and Optimizing GPU Energy Consumption (NSDI '23)](https://www.usenix.org/conference/nsdi23/presentation/you) and the [Zeus repo](https://github.com/ml-energy/zeus) (hardware counters, CPU/DRAM measurement)
 - **CodeCarbon** - [CodeCarbon docs](https://mlco2.github.io/codecarbon/) (estimation modes, accuracy validation, regional carbon intensity)
+- **On-board sensor sampling behaviour** - Burtscher, Zecena and Zong, [Measuring GPU Power with the K20 Built-in Sensor](https://doi.org/10.1145/2576779.2576783) (GPGPU-7, 2014) and Bridges, Imam and Mintz, [Understanding GPU Power: A Survey of Profiling, Modeling, and Simulation Methods](https://doi.org/10.1145/2962131) (ACM Computing Surveys 49(3), 2016) establish that the sensor reads intermittently
+- **Per-generation averaging windows** - Yang, Adamek and Armour, [Accurate and Convenient Energy Measurements for GPUs: A Detailed Study of NVIDIA GPU's Built-In Power Sensor](https://doi.org/10.1109/SC41406.2024.00028) (SC24, 2024), preprint [arXiv:2312.02741](https://arxiv.org/abs/2312.02741) as "Part-time Power Measurements: nvidia-smi's Lack of Attention" (measured update periods and averaging windows across 12 GPU generations, including the A100 and H100 25 ms window)
 
 ---
 
@@ -360,10 +366,17 @@ uncertainty (~25-40% total error).
 shunt resistor and ADC. All software samplers (Zeus, NVML, CodeCarbon) share this floor.
 For publication-quality results, report energy with appropriate uncertainty bounds.
 
-**A100 power sensor observes 25% of runtime.** The A100's power sensor averages over a
-25ms window within each 100ms update period (Bridges et al., 2023). During the remaining
-75ms, the GPU could draw substantially different power. Zeus's hardware energy counter
-mitigates this by accumulating continuously.
+**The A100 power sensor observes about 25% of runtime.** The on-board sensor does not
+integrate continuously. It reports a boxcar average of the most recent slice of each
+update period, so power excursions outside that slice are never seen. On the A100 the
+averaging window is about 25 ms within a roughly 100 ms update period, so only about
+25% of runtime is sampled and the GPU can draw substantially different power during the
+other 75% (Yang et al., 2024). The duty cycle is architecture-dependent: Volta and
+Pascal average over 10 ms of a 20 ms period, while Turing averages over the full 100 ms
+of its 100 ms period and so has no blind spot at all. The phenomenon was identified on
+the Kepler K20 (Burtscher et al., 2014) and surveyed as a general limitation of internal
+GPU power sensors (Bridges et al., 2016). Zeus's hardware energy counter sidesteps it by
+accumulating on the die rather than being polled.
 
 **Multi-GPU measurement sums per-device energy.** For tensor-parallel runs across multiple
 GPUs, LLenergyMeasure sums per-device energy. All participating GPUs are automatically
