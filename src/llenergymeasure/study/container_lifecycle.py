@@ -10,6 +10,11 @@ Four-layer strategy to prevent Docker container leaks on study abort:
 3. atexit handler: stops containers with matching study_id label on exit.
 4. SIGTERM bridge: converts SIGTERM to sys.exit(0) so atexit handlers fire.
 5. Startup reaper: stops orphaned containers whose parent PID is dead.
+
+Every layer keys on the study design hash, so that identity is mandatory: a
+study without one is refused by :func:`require_study_id` rather than sharing a
+placeholder ownership key (and therefore a cleanup blast radius) with every
+other unidentified study running on the host.
 """
 
 from __future__ import annotations
@@ -26,6 +31,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from llenergymeasure.config.ssot import TIMEOUT_DOCKER_CLI, TIMEOUT_DOCKER_STOP
+from llenergymeasure.utils.exceptions import StudyError
 
 if TYPE_CHECKING:
     from llenergymeasure.utils.exceptions import DockerError
@@ -40,9 +46,46 @@ __all__ = [
     "persist_failure_traceback",
     "reap_orphaned_containers",
     "register_container_cleanup",
+    "require_study_id",
 ]
 
 logger = logging.getLogger(__name__)
+
+
+def require_study_id(study_design_hash: str | None) -> str:
+    """Return the study identity every container of this study is owned by.
+
+    The study design hash is the ownership key for the whole container
+    lifecycle: it names containers, becomes the ``llem.study_id`` label, and is
+    the filter both the atexit cleanup and the startup reaper select on. It is
+    therefore required, not best-effort - a study that cannot be identified
+    cannot have its containers managed in isolation from anyone else's.
+
+    Args:
+        study_design_hash: ``StudyConfig.study_design_hash``, possibly None.
+
+    Returns:
+        The non-empty study identity.
+
+    Raises:
+        StudyError: If the hash is missing, empty, or whitespace-only.
+    """
+    study_id = (study_design_hash or "").strip()
+    if not study_id:
+        raise StudyError(
+            "Study has no study_design_hash, so its Docker containers cannot be "
+            "managed safely and the study is refused. The hash is the container "
+            "ownership key: it names containers, it is the llem.study_id label, "
+            "and it is the filter the cleanup handler and the startup reaper "
+            "select on. Substituting a shared placeholder would make every "
+            "unidentified study share one ownership key, so cleaning up after "
+            "one of them would stop the containers of every concurrently "
+            "running trial that shares it. Studies loaded from YAML always "
+            "carry the hash; a programmatically constructed StudyConfig must "
+            "have it computed before containers are launched (see "
+            "https://github.com/henrycgbaker/llenergymeasure/issues/886)."
+        )
+    return study_id
 
 
 def generate_container_name(study_id: str, experiment_index: int) -> str:
@@ -51,7 +94,6 @@ def generate_container_name(study_id: str, experiment_index: int) -> str:
     Format: ``llem-{study_id_short}-{index:04d}``
 
     ``study_id_short`` is the first 8 characters of the study_design_hash.
-    Falls back to ``unknown`` when study_id is empty.
 
     Args:
         study_id:         Study design hash (typically a full hex string).
@@ -59,8 +101,11 @@ def generate_container_name(study_id: str, experiment_index: int) -> str:
 
     Returns:
         Container name string, e.g. ``"llem-abcdef12-0001"``.
+
+    Raises:
+        StudyError: If study_id is empty - see :func:`require_study_id`.
     """
-    short = study_id[:8] if study_id else "unknown"
+    short = require_study_id(study_id)[:8]
     return f"llem-{short}-{experiment_index:04d}"
 
 
@@ -72,12 +117,19 @@ def generate_container_labels(study_id: str) -> dict[str, str]:
         ``llem.parent_pid``: PID of the host process that launched the container.
         ``llem.started_at``: UTC ISO-8601 timestamp when the labels were generated.
 
+    Every container a study launches (experiment, engine server, baseline) wears
+    these labels, so the four-layer leak protection sees all of them.
+
     Args:
         study_id: Study design hash.
 
     Returns:
         Dict of label key -> value pairs.
+
+    Raises:
+        StudyError: If study_id is empty - see :func:`require_study_id`.
     """
+    study_id = require_study_id(study_id)
     return {
         "llem.study_id": study_id,
         "llem.parent_pid": str(os.getpid()),
@@ -93,11 +145,17 @@ def cleanup_study_containers(study_id: str) -> None:
     graceful ``docker stop -t 5`` to each.
 
     This function must never raise - atexit handlers that raise produce
-    confusing output and may mask the original exception.
+    confusing output and may mask the original exception. An empty study_id is
+    therefore refused silently rather than loudly: the loud refusal belongs at
+    registration time (:func:`register_container_cleanup`), and an unscoped
+    filter here could reach containers this study does not own.
 
     Args:
         study_id: Study design hash used as the label filter value.
     """
+    if not (study_id or "").strip():
+        logger.warning("Container cleanup skipped: no study identity to scope it to")
+        return
     try:
         result = subprocess.run(
             ["docker", "ps", "-q", "--filter", f"label=llem.study_id={study_id}"],
@@ -124,8 +182,11 @@ def register_container_cleanup(study_id: str) -> None:
 
     Args:
         study_id: Study design hash passed to cleanup_study_containers.
+
+    Raises:
+        StudyError: If study_id is empty - see :func:`require_study_id`.
     """
-    atexit.register(cleanup_study_containers, study_id)
+    atexit.register(cleanup_study_containers, require_study_id(study_id))
 
 
 def install_sigterm_bridge() -> Any:

@@ -15,7 +15,34 @@ from llenergymeasure.study.container_lifecycle import (
     install_sigterm_bridge,
     reap_orphaned_containers,
     register_container_cleanup,
+    require_study_id,
 )
+from llenergymeasure.utils.exceptions import StudyError
+
+# ---------------------------------------------------------------------------
+# require_study_id
+# ---------------------------------------------------------------------------
+
+
+class TestRequireStudyId:
+    def test_returns_hash_unchanged(self) -> None:
+        assert require_study_id("abcdef1234567890") == "abcdef1234567890"
+
+    @pytest.mark.parametrize("missing", [None, "", "   ", "\t\n"])
+    def test_missing_identity_raises(self, missing: str | None) -> None:
+        with pytest.raises(StudyError) as exc_info:
+            require_study_id(missing)
+
+        message = str(exc_info.value)
+        assert "study_design_hash" in message
+        # The message must name the hazard, not just the missing field.
+        assert "llem.study_id" in message
+
+    def test_no_placeholder_identity_is_synthesised(self) -> None:
+        """The old behaviour (fall back to a shared "unknown" id) is gone."""
+        with pytest.raises(StudyError):
+            require_study_id(None)
+
 
 # ---------------------------------------------------------------------------
 # generate_container_name
@@ -31,9 +58,10 @@ class TestGenerateContainerName:
         name = generate_container_name("abcdef1234567890", 42)
         assert name == "llem-abcdef12-0042"
 
-    def test_empty_study_id_falls_back_to_unknown(self) -> None:
-        name = generate_container_name("", 42)
-        assert name == "llem-unknown-0042"
+    def test_empty_study_id_is_refused(self) -> None:
+        """No placeholder name: an unidentified study cannot own a container."""
+        with pytest.raises(StudyError):
+            generate_container_name("", 42)
 
     def test_short_study_id_used_as_is(self) -> None:
         name = generate_container_name("abc", 1)
@@ -75,6 +103,11 @@ class TestGenerateContainerLabels:
         # Should be parseable as a datetime with timezone
         dt = datetime.fromisoformat(labels["llem.started_at"])
         assert dt.tzinfo is not None
+
+    def test_empty_study_id_is_refused(self) -> None:
+        """An unlabelled-by-identity container would be un-scopeable; refuse it."""
+        with pytest.raises(StudyError):
+            generate_container_labels("")
 
 
 # ---------------------------------------------------------------------------
@@ -124,6 +157,17 @@ class TestCleanupStudyContainers:
         stop_calls = [c for c in mock_run.call_args_list if "stop" in c[0][0]]
         assert len(stop_calls) == 1
 
+    def test_empty_study_id_issues_no_docker_command(self) -> None:
+        """Never run an unscoped filter: it could reach containers we do not own.
+
+        This path must stay silent (it is an atexit handler), so the refusal is
+        a no-op plus a warning rather than an exception.
+        """
+        with patch("subprocess.run") as mock_run:
+            cleanup_study_containers("")
+
+        assert mock_run.call_count == 0
+
     def test_no_containers_running(self) -> None:
         ps_result = MagicMock(stdout="", returncode=0)
 
@@ -145,6 +189,12 @@ class TestRegisterContainerCleanup:
             register_container_cleanup("my-study")
 
         mock_register.assert_called_once_with(cleanup_study_containers, "my-study")
+
+    def test_missing_identity_refuses_registration(self) -> None:
+        with patch("atexit.register") as mock_register, pytest.raises(StudyError):
+            register_container_cleanup("")
+
+        assert mock_register.call_count == 0
 
 
 # ---------------------------------------------------------------------------

@@ -445,6 +445,7 @@ class DockerSession(_OfflineSession):
         from llenergymeasure.study.container_lifecycle import (
             generate_container_labels,
             generate_container_name,
+            require_study_id,
         )
         from llenergymeasure.study.gpu_memory import check_gpu_memory_residual
 
@@ -457,7 +458,7 @@ class DockerSession(_OfflineSession):
         # outside the study path.
         self._image = spec.image if spec.image is not None else get_default_image(config.engine)
 
-        study_id = runner.study.study_design_hash or "unknown"
+        study_id = require_study_id(runner.study.study_design_hash)
         container_name = generate_container_name(study_id, self.index)
         labels = generate_container_labels(study_id)
 
