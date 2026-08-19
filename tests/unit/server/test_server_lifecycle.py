@@ -367,6 +367,42 @@ def test_container_argv_has_ruled_flags():
     assert "-p" not in argv
 
 
+def test_container_argv_carries_ownership_labels():
+    """Ownership labels are emitted before the image, so the study owns the server.
+
+    The study-scoped cleanup filters on ``llem.study_id`` and the orphan reaper on
+    ``llem.parent_pid``; an unlabelled server container is invisible to both.
+    """
+    argv = sl.build_server_container_argv(
+        image="vllm/vllm-openai:v0.19.1",
+        container_name="llem-vllm-server-abc",
+        gpu_indices=None,
+        serve_args=["m", "--port", "8123"],
+        shm_size="8g",
+        labels={"llem.study_id": "abcdef12", "llem.parent_pid": "4242"},
+    )
+
+    assert "llem.study_id=abcdef12" in argv
+    assert "llem.parent_pid=4242" in argv
+    for value in ("llem.study_id=abcdef12", "llem.parent_pid=4242"):
+        idx = argv.index(value)
+        assert argv[idx - 1] == "--label"
+        # docker run options must precede the image name.
+        assert idx < argv.index("vllm/vllm-openai:v0.19.1")
+
+
+def test_container_argv_without_labels_emits_none():
+    """No labels supplied (e.g. a direct non-study launch) emits no --label flags."""
+    argv = sl.build_server_container_argv(
+        image="img:v1",
+        container_name=None,
+        gpu_indices=None,
+        serve_args=["m"],
+    )
+
+    assert "--label" not in argv
+
+
 def test_container_argv_mounts_hf_cache(monkeypatch):
     """The server container binds the HF cache + sets HF_HOME (else weights re-download).
 

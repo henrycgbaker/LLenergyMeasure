@@ -1216,6 +1216,108 @@ def test_docker_timeout_normalised_to_timeout_error(
 
 
 # =============================================================================
+# Study identity is mandatory for container dispatch
+# =============================================================================
+
+
+def _study_without_design_hash(basic_config: ExperimentConfig) -> StudyConfig:
+    """A StudyConfig with no study_design_hash (the programmatic-construction gap)."""
+    return StudyConfig(
+        experiments=[basic_config],
+        study_name="no-identity",
+        study_execution=ExecutionConfig(n_cycles=1, experiment_order="sequential"),
+    )
+
+
+def test_container_study_without_design_hash_is_refused(
+    basic_config: ExperimentConfig, tmp_path: Path
+) -> None:
+    """A container study with no design hash fails loudly instead of running.
+
+    Without the hash there is no ownership key for the study's containers, so
+    cleanup would be scoped to a placeholder shared with every other
+    unidentified study - stopping a concurrent trial's containers.
+    """
+    from llenergymeasure.utils.exceptions import StudyError
+
+    study = _study_without_design_hash(basic_config)
+    assert study.study_design_hash is None
+    runner = StudyRunner(
+        study,
+        MagicMock(),
+        tmp_path,
+        runner_specs={"transformers": _make_docker_runner_spec()},
+        no_lock=True,
+    )
+
+    with pytest.raises(StudyError, match="study_design_hash"):
+        runner.run()
+
+
+def test_identity_refusal_precedes_every_side_effect(
+    basic_config: ExperimentConfig, tmp_path: Path
+) -> None:
+    """The refusal fires before handlers, locks, reaping, or image preparation.
+
+    Nothing is left installed or half-acquired by the refused run, and no docker
+    command is issued on behalf of a study that cannot own its containers.
+    """
+    from llenergymeasure.utils.exceptions import StudyError
+
+    study = _study_without_design_hash(basic_config)
+    runner = StudyRunner(
+        study,
+        MagicMock(),
+        tmp_path,
+        runner_specs={"transformers": _make_docker_runner_spec()},
+        no_lock=False,
+    )
+
+    original_sigint = signal.getsignal(signal.SIGINT)
+    original_sigterm = signal.getsignal(signal.SIGTERM)
+
+    with (
+        patch("llenergymeasure.study.gpu_locks.acquire_gpu_locks") as mock_acquire,
+        patch("llenergymeasure.study.container_lifecycle.reap_orphaned_containers") as mock_reap,
+        patch("atexit.register") as mock_atexit,
+        patch.object(StudyRunner, "_prepare_images") as mock_prepare,
+        pytest.raises(StudyError),
+    ):
+        runner.run()
+
+    mock_acquire.assert_not_called()
+    mock_reap.assert_not_called()
+    mock_atexit.assert_not_called()
+    mock_prepare.assert_not_called()
+    assert signal.getsignal(signal.SIGINT) is original_sigint
+    assert signal.getsignal(signal.SIGTERM) is original_sigterm
+
+
+def test_process_study_without_design_hash_still_runs(
+    basic_config: ExperimentConfig, tmp_path: Path
+) -> None:
+    """The requirement is container-scoped: a process-mode study is unaffected."""
+    study = _study_without_design_hash(basic_config)
+    proc = _make_mock_process(is_alive_after_join=False, exitcode=0)
+    ctx = _make_mock_context(proc, pipe_data={"status": "ok"})
+
+    with (
+        patch("multiprocessing.get_context", return_value=ctx),
+        patch("llenergymeasure.study.gpu_memory.check_gpu_memory_residual"),
+    ):
+        runner = StudyRunner(
+            study,
+            MagicMock(),
+            tmp_path,
+            runner_specs={"transformers": _make_local_runner_spec()},
+            no_lock=True,
+        )
+        results = runner.run()
+
+    assert len(results) == 1
+
+
+# =============================================================================
 # recv-before-join ordering (pipe deadlock prevention)
 # =============================================================================
 

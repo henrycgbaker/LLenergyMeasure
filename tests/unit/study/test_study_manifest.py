@@ -351,6 +351,72 @@ def test_create_study_dir_raises_study_error_on_failure(tmp_path: Path) -> None:
         create_study_dir(name="sweep", output_dir=tmp_path)
 
 
+def _freeze_clock(monkeypatch: pytest.MonkeyPatch, instant: datetime) -> None:
+    """Pin ``manifest.datetime.now`` so every call lands in the same second."""
+
+    class _Frozen(datetime):
+        @classmethod
+        def now(cls, tz: object = None) -> datetime:  # type: ignore[override]
+            return instant
+
+    monkeypatch.setattr("llenergymeasure.study.manifest.datetime", _Frozen)
+
+
+def test_create_study_dir_same_second_does_not_collide(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Studies started in the same second get distinct directories.
+
+    The timestamp has one-second resolution, so the name alone cannot separate
+    them; each study claims a fresh directory rather than adopting a sibling's.
+    """
+    _freeze_clock(monkeypatch, datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc))
+
+    first = create_study_dir(name="sweep", output_dir=tmp_path)
+    second = create_study_dir(name="sweep", output_dir=tmp_path)
+    third = create_study_dir(name="sweep", output_dir=tmp_path)
+
+    assert first.name == "sweep_2026-01-01T12-00-00"
+    assert second.name == "sweep_2026-01-01T12-00-00-2"
+    assert third.name == "sweep_2026-01-01T12-00-00-3"
+    assert len({first, second, third}) == 3
+    assert all(d.is_dir() for d in (first, second, third))
+
+
+def test_create_study_dir_never_adopts_an_existing_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A pre-existing directory of the same name is stepped over, not reused."""
+    _freeze_clock(monkeypatch, datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc))
+    squatter = tmp_path / "sweep_2026-01-01T12-00-00"
+    squatter.mkdir()
+    (squatter / "manifest.json").write_text("{}", encoding="utf-8")
+
+    result = create_study_dir(name="sweep", output_dir=tmp_path)
+
+    assert result != squatter
+    assert list(result.iterdir()) == []
+    # The squatter's contents are untouched.
+    assert (squatter / "manifest.json").read_text(encoding="utf-8") == "{}"
+
+
+def test_same_second_studies_keep_separate_manifests(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The hazard the distinct directories close: one manifest overwriting another."""
+    _freeze_clock(monkeypatch, datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc))
+
+    dir_a = create_study_dir(name="sweep", output_dir=tmp_path)
+    dir_b = create_study_dir(name="sweep", output_dir=tmp_path)
+    ManifestWriter(study=_make_study(n_experiments=1, n_cycles=1), study_dir=dir_a)
+    ManifestWriter(study=_make_study(n_experiments=3, n_cycles=1), study_dir=dir_b)
+
+    manifest_a = json.loads((dir_a / "manifest.json").read_text(encoding="utf-8"))
+    manifest_b = json.loads((dir_b / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest_a["total_experiments"] == 1
+    assert manifest_b["total_experiments"] == 3
+
+
 # ---------------------------------------------------------------------------
 # build_config_summary tests
 # ---------------------------------------------------------------------------

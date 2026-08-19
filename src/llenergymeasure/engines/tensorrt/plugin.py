@@ -672,6 +672,7 @@ class TensorRTEngine:
                 container_name=container_name,
                 gpu_indices=placement.gpu_indices,
                 serve_args=_serving.serve_command(model, port),
+                labels=placement.labels,
             )
             return sl.launch_container_server(
                 argv, base_url=base_url, engine="tensorrt", container_name=container_name
