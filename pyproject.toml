@@ -299,13 +299,15 @@ allow_indirect_imports = true
 
 # The engine parameter corpus (discovered schemas, validation rules, study
 # overrides) ships inside engines/<engine>/ and is reached by file path, which
-# import-linter cannot police. What it can police is the import surface: keep
-# the corpus readers few and named so the dependency stays auditable. The three
-# declared readers are config/schema_loader.py, config/engine_rules/loader.py
-# and config/series.py; any *other* config module that starts reaching into
-# engine internals by import trips this contract. Deliberately narrower and
-# more explicit than the config entry in foundation-independence below, which
-# forbids the same edge for the whole foundation at once.
+# import-linter cannot police. Only three config modules resolve those paths:
+# config/schema_loader.py, config/engine_rules/loader.py and config/series.py.
+#
+# foundation-independence below already forbids every config -> engines import
+# wholesale, so this contract adds no reach. It is deliberately narrower: it
+# names the three config modules most likely to drift towards engine internals
+# (models, introspection, grid) and guards them individually, so the guarded
+# set is explicit in the config rather than implied, and survives any future
+# loosening of foundation-independence.
 [[tool.importlinter.contracts]]
 id = "engine-data-readers"
 name = "Only the declared corpus readers may reach engine package data"
