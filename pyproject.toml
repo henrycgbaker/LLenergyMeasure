@@ -251,10 +251,16 @@ unmatched_ignore_imports_alerting = "warn"
 id = "main-layers"
 name = "Main architectural layers"
 type = "layers"
+# entrypoints sits on its own level below study, not alongside cli. It is the
+# in-container process entry point: it is entered by the container runner and
+# drives one already-resolved experiment, so it must never re-enter the public
+# API or the study orchestrator. Its own level makes that structurally
+# impossible rather than merely unlikely.
 layers = [
-    "llenergymeasure.cli | llenergymeasure.entrypoints",
+    "llenergymeasure.cli",
     "llenergymeasure.api",
     "llenergymeasure.study",
+    "llenergymeasure.entrypoints",
     "llenergymeasure.harness",
     "llenergymeasure.results",
     "llenergymeasure.engines | llenergymeasure.energy | llenergymeasure.datasets",
@@ -277,15 +283,41 @@ forbidden_modules = [
     "llenergymeasure.study",
     "llenergymeasure.results",
     "llenergymeasure.datasets",
+    # entrypoints stays listed here on purpose. Now that entrypoints sits below
+    # cli in the layers contract, that contract would permit cli -> entrypoints
+    # as an ordinary downward import; this line is what keeps the CLI routing
+    # through the public API instead of invoking a container entry point.
     "llenergymeasure.entrypoints",
 ]
 allow_indirect_imports = true
 # No ignore_imports needed.
-# CLI imports from llenergymeasure.api (Layer 7) which internally reaches harness/engines.
+# CLI imports from llenergymeasure.api, which internally reaches harness/engines.
 # allow_indirect_imports = true means only DIRECT imports are forbidden.
 # cli/run.py uses `from llenergymeasure.api import run_experiment` and
 # `from llenergymeasure import run_study` (root re-export); no direct lower-layer imports.
 # cli/__init__.py uses _version.py directly (no root import).
+
+# The engine parameter corpus (discovered schemas, validation rules, study
+# overrides) ships inside engines/<engine>/ and is reached by file path, which
+# import-linter cannot police. Only three config modules resolve those paths:
+# config/schema_loader.py, config/engine_rules/loader.py and config/series.py.
+#
+# foundation-independence below already forbids every config -> engines import
+# wholesale, so this contract adds no reach. It is deliberately narrower: it
+# names the three config modules most likely to drift towards engine internals
+# (models, introspection, grid) and guards them individually, so the guarded
+# set is explicit in the config rather than implied, and survives any future
+# loosening of foundation-independence.
+[[tool.importlinter.contracts]]
+id = "engine-data-readers"
+name = "Only the declared corpus readers may reach engine package data"
+type = "forbidden"
+source_modules = [
+    "llenergymeasure.config.models",
+    "llenergymeasure.config.introspection",
+    "llenergymeasure.config.grid",
+]
+forbidden_modules = ["llenergymeasure.engines"]
 
 [[tool.importlinter.contracts]]
 id = "foundation-independence"
@@ -301,10 +333,12 @@ forbidden_modules = [
     "llenergymeasure.cli",
     "llenergymeasure.entrypoints",
     "llenergymeasure.api",
+    "llenergymeasure.search",
     "llenergymeasure.study",
     "llenergymeasure.harness",
     "llenergymeasure.engines",
     "llenergymeasure.energy",
+    "llenergymeasure.serving",
     "llenergymeasure.infra",
     "llenergymeasure.results",
     "llenergymeasure.datasets",
@@ -318,12 +352,14 @@ source_modules = [
     "llenergymeasure.cli",
     "llenergymeasure.entrypoints",
     "llenergymeasure.api",
+    "llenergymeasure.search",
     "llenergymeasure.study",
     "llenergymeasure.harness",
     "llenergymeasure.results",
     "llenergymeasure.engines",
     "llenergymeasure.energy",
     "llenergymeasure.datasets",
+    "llenergymeasure.serving",
     "llenergymeasure.infra",
     "llenergymeasure.device",
     "llenergymeasure.config",
@@ -347,12 +383,14 @@ source_modules = [
     "llenergymeasure.cli",
     "llenergymeasure.entrypoints",
     "llenergymeasure.api",
+    "llenergymeasure.search",
     "llenergymeasure.study",
     "llenergymeasure.harness",
     "llenergymeasure.results",
     "llenergymeasure.engines",
     "llenergymeasure.energy",
     "llenergymeasure.datasets",
+    "llenergymeasure.serving",
     "llenergymeasure.infra",
     "llenergymeasure.device",
     "llenergymeasure.config",
