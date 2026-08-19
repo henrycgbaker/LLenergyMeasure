@@ -22,6 +22,7 @@ Charter:
 from __future__ import annotations
 
 import asyncio
+import os
 import threading
 from types import SimpleNamespace
 from typing import Any
@@ -1006,3 +1007,54 @@ class TestMakeLevelPlans:
         assert plan.token_receipt_fn is client_token_receipts
         assert plan.spec.rate == 20.0
         assert plan.spec.duration_seconds == 40.0
+
+
+# ---------------------------------------------------------------------------
+# Real _make_placement - a server container is owned by its study
+# ---------------------------------------------------------------------------
+
+
+class TestMakePlacement:
+    """The container leg carries the study's ownership labels.
+
+    Without them a launched server container is invisible to the study-scoped
+    cleanup and to the orphan reaper, so a server that outlives its launching
+    process (the one case ``shutdown`` cannot cover) leaks holding the GPU.
+    """
+
+    @staticmethod
+    def _session_with_identity(study_id: str | None, mode: str) -> ServerSession:
+        from llenergymeasure.config.runner_spec import RunnerSpec
+
+        runner = _fake_runner()
+        runner.study.study_design_hash = study_id
+        spec = RunnerSpec(mode=mode, image="img:v1" if mode == "container" else None, source="yaml")
+        return ServerSession(
+            runner, _server_config(), spec, config_hash="h", cycle=1, index=1, engine=FakeEngine()
+        )
+
+    def test_container_placement_carries_ownership_labels(self) -> None:
+        session = self._session_with_identity("abcdef1234567890", "container")
+
+        placement = session._make_placement()
+
+        assert placement.mode == "container"
+        assert placement.labels is not None
+        assert placement.labels["llem.study_id"] == "abcdef1234567890"
+        assert placement.labels["llem.parent_pid"] == str(os.getpid())
+
+    def test_process_placement_has_no_labels(self) -> None:
+        session = self._session_with_identity("abcdef1234567890", "process")
+
+        placement = session._make_placement()
+
+        assert placement.mode == "process"
+        assert placement.labels is None
+
+    def test_container_placement_without_study_identity_is_refused(self) -> None:
+        from llenergymeasure.utils.exceptions import StudyError
+
+        session = self._session_with_identity(None, "container")
+
+        with pytest.raises(StudyError, match="study_design_hash"):
+            session._make_placement()

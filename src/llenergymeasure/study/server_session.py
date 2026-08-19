@@ -1755,12 +1755,30 @@ class ServerSession:
     # -- placement / config accessors ---------------------------------------
 
     def _make_placement(self) -> ServerPlacement:
-        from llenergymeasure.config.ssot import RUNNER_PROCESS
+        from llenergymeasure.config.ssot import RUNNER_CONTAINER, RUNNER_PROCESS
         from llenergymeasure.infra.server_lifecycle import ServerPlacement
 
         mode = self.spec.mode if self.spec is not None else RUNNER_PROCESS
         image = self.spec.image if self.spec is not None else None
-        return ServerPlacement(mode=mode, image=image, gpu_indices=self._placement_gpu_indices())
+        # A server container wears the study's ownership labels, exactly like the
+        # offline experiment containers, so the study-scoped cleanup and the
+        # orphan reaper can see and scope it. Process mode has no container.
+        labels: dict[str, str] | None = None
+        if mode == RUNNER_CONTAINER:
+            from llenergymeasure.study.container_lifecycle import (
+                generate_container_labels,
+                require_study_id,
+            )
+
+            labels = generate_container_labels(
+                require_study_id(self._runner.study.study_design_hash)
+            )
+        return ServerPlacement(
+            mode=mode,
+            image=image,
+            gpu_indices=self._placement_gpu_indices(),
+            labels=labels,
+        )
 
     def _traffic(self) -> TrafficConfig:
         assert self.config.server is not None  # server mode requires the section
