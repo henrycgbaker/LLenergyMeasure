@@ -223,6 +223,19 @@ jobs:
           /tmp/pkg-check/bin/python -c "from llenergymeasure import run_experiment, ExperimentConfig, ExperimentResult; print('Public API import OK')"
           /tmp/pkg-check/bin/llem --help
           /tmp/pkg-check/bin/llem doctor
+      - name: Check screen extra resolves numpy 2
+        # SALib requires numpy>=2.0 while the core floor is numpy>=1.24, so
+        # installing [screen] lifts the whole environment to numpy 2. pyarrow>=14
+        # supports numpy 2, so no conflict is expected - this step demonstrates
+        # that rather than assuming it, and fails loudly if a future floor change
+        # ever pins the resolution back to numpy 1. Clean venv, CPU-only, no
+        # engine images.
+        run: |
+          python -m venv /tmp/screen-check
+          /tmp/screen-check/bin/pip install '.[screen]' --quiet
+          NUMPY_VER=$(/tmp/screen-check/bin/python -c "import numpy; print(numpy.__version__)")
+          echo "[screen] resolved numpy: ${NUMPY_VER}"
+          [ "${NUMPY_VER%%.*}" -ge 2 ] || { echo "ERROR: [screen] resolved numpy ${NUMPY_VER}; SALib requires numpy>=2.0"; exit 1; }
       - name: Version sync check
         run: |
           PYPROJECT_VER=$(python3 -c "import tomllib; f=open('pyproject.toml','rb'); print(tomllib.load(f)['project']['version'])")
