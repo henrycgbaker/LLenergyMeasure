@@ -367,12 +367,12 @@ def test_execution_defaults_fill_only_what_the_study_left_unset() -> None:
 
 
 def test_bad_execution_defaults_raise_a_config_error() -> None:
-    """A typo in the caller's defaults names the parameter, not a study block."""
+    """A typo in a caller-supplied execution layer names the bad key, not a traceback."""
     with pytest.raises(ConfigError) as exc:
         resolve_study(_raw(), execution_defaults={"n_cyles": 3})
 
     msg = str(exc.value)
-    assert "execution_defaults" in msg
+    assert "execution settings" in msg
     assert "n_cyles" in msg
     assert "n_cycles" in msg  # the valid field names are listed
 

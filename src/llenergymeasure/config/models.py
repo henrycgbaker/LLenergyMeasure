@@ -1696,6 +1696,16 @@ class StudyConfig(BaseModel):
             "taken as resolved and dispatched as-is."
         ),
     )
+    settings_provenance: dict[str, str] = Field(
+        default_factory=dict,
+        description=(
+            "Which precedence layer supplied each study-wide setting, keyed by "
+            "study-file path ('output.results_dir', 'study_execution.n_cycles', "
+            "'runners.vllm', 'images.vllm'). Values are the source vocabulary "
+            "'call_site' / 'env' / 'yaml' / 'user_config' / 'default'. Emitted by "
+            "the resolution merge itself, so it records which layer actually won."
+        ),
+    )
     skipped_configs: list[dict[str, Any]] = Field(
         default_factory=list,
         description=(
