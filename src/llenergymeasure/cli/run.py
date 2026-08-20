@@ -19,7 +19,7 @@ from llenergymeasure.cli._display import (
     print_result_summary,
 )
 from llenergymeasure.cli._options import VerboseOption
-from llenergymeasure.cli._study_defaults import build_study_cli_overrides
+from llenergymeasure.cli._study_defaults import STUDY_EXECUTION_DEFAULTS
 from llenergymeasure.cli._vram import estimate_vram, get_gpu_vram_gb
 from llenergymeasure.config.loader import load_experiment_config
 from llenergymeasure.config.ssot import (
@@ -497,15 +497,10 @@ def _run_study_impl(
     # pre-populate the completed experiments table.
     resume_dir, _resume_manifest, is_resume = _resolve_resume_target(resume, resume_dir, output)
 
-    # Check what the YAML execution block specifies (to apply CLI effective defaults)
+    # Read the file once, for the sweep-structure counts the preflight panel shows.
     raw = yaml.safe_load(config.read_text()) or {}
-    yaml_execution = raw.get("study_execution", {}) or {}
 
-    # Apply the CLI-layer research-appropriate effective defaults (n_cycles=3,
-    # shuffle) unless the YAML study_execution block already sets them.
-    study_cli_overrides = build_study_cli_overrides(yaml_execution)
-
-    # Load study config with overrides - show step-format spinner during expansion
+    # Load study config - show step-format spinner during expansion
     from rich.console import Console as _ExpandConsole
     from rich.live import Live as _ExpandLive
     from rich.text import Text as _ExpandText
@@ -539,10 +534,9 @@ def _run_study_impl(
         refresh_per_second=8,
         transient=True,
     ):
-        study_config = load_study(
-            config,
-            cli_overrides=study_cli_overrides if study_cli_overrides else None,
-        )
+        # The CLI-layer research-appropriate effective defaults (n_cycles=3,
+        # shuffle) apply to whatever the study file leaves unset.
+        study_config = load_study(config, execution_defaults=STUDY_EXECUTION_DEFAULTS)
     expand_elapsed = time.perf_counter() - t0_expand
 
     # Print completed lines with green ticks (same format as step display)
