@@ -1278,7 +1278,7 @@ def test_identity_refusal_precedes_every_side_effect(
 
     with (
         patch("llenergymeasure.study.gpu_locks.acquire_gpu_locks") as mock_acquire,
-        patch("llenergymeasure.study.container_lifecycle.reap_orphaned_containers") as mock_reap,
+        patch("llenergymeasure.infra.docker.ownership.reap_orphaned_containers") as mock_reap,
         patch("atexit.register") as mock_atexit,
         patch.object(StudyRunner, "_prepare_images") as mock_prepare,
         pytest.raises(StudyError),

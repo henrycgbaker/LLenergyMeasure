@@ -87,7 +87,7 @@ def run_single_experiment(
         from llenergymeasure.infra.docker_errors import docker_exc_to_failure
         from llenergymeasure.infra.docker_runner import DockerRunner
         from llenergymeasure.infra.image_registry import get_default_image
-        from llenergymeasure.study.container_lifecycle import persist_failure_artefacts
+        from llenergymeasure.study.failure_artefacts import persist_failure_artefacts
         from llenergymeasure.utils.exceptions import DockerError
 
         image = spec.image if spec.image is not None else get_default_image(config.engine)
@@ -183,7 +183,7 @@ def run_single_experiment(
             # traceback still reach the CLI (format_error surfaces the live
             # traceback under -v), so display fidelity is preserved while the
             # failure also becomes debuggable from disk.
-            from llenergymeasure.study.container_lifecycle import persist_failure_traceback
+            from llenergymeasure.study.failure_artefacts import persist_failure_traceback
 
             local_failure: dict[str, Any] = {"type": type(exc).__name__, "message": str(exc)}
             persist_failure_traceback(

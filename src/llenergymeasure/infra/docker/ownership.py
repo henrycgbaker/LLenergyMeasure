@@ -1,9 +1,12 @@
-"""Container lifecycle management for Docker-backed studies.
+"""Who owns a container, and the machinery that reclaims it.
 
-Provides deterministic container naming, label generation, atexit cleanup
-handlers, a SIGTERM bridge, and a startup reaper for orphaned containers.
+Every container llenergymeasure launches is owned by exactly one study, and this
+module is where that ownership is stamped on and acted upon: deterministic
+container naming, label generation, the atexit cleanup handler, the SIGTERM
+bridge that makes atexit fire at all, and the startup reaper for containers whose
+launching process is gone.
 
-Four-layer strategy to prevent Docker container leaks on study abort:
+Layered strategy to prevent container leaks on abort:
 
 1. Named containers: deterministic ``llem-{hash8}-{index:04d}`` names.
 2. Labels: ``llem.study_id``, ``llem.parent_pid``, ``llem.started_at`` for targeted cleanup.
@@ -13,7 +16,13 @@ Four-layer strategy to prevent Docker container leaks on study abort:
 
 Every layer keys on the study design hash, so that identity is mandatory:
 :func:`require_study_id` refuses a study without one, and the StudyError it
-raises spells out why.
+raises spells out why. That is the one place study vocabulary surfaces here: the
+identity being enforced belongs to the caller's study, so the refusal is phrased
+in the caller's terms even though the mechanics live at this layer.
+
+These are mechanics only. WHETHER to install the atexit net and the SIGTERM
+bridge for a given run is a decision the study layer makes; nothing here reaches
+back up to make it.
 """
 
 from __future__ import annotations
@@ -21,28 +30,20 @@ from __future__ import annotations
 import atexit
 import logging
 import os
-import shutil
 import signal
 import subprocess
 import sys
 from datetime import datetime, timezone
-from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from llenergymeasure.config.ssot import TIMEOUT_DOCKER_CLI, TIMEOUT_DOCKER_STOP
 from llenergymeasure.utils.exceptions import StudyError
 
-if TYPE_CHECKING:
-    from llenergymeasure.utils.exceptions import DockerError
-
 __all__ = [
     "cleanup_study_containers",
-    "copy_artefact",
     "generate_container_labels",
     "generate_container_name",
     "install_sigterm_bridge",
-    "persist_failure_artefacts",
-    "persist_failure_traceback",
     "reap_orphaned_containers",
     "register_container_cleanup",
     "require_study_id",
@@ -263,117 +264,3 @@ def reap_orphaned_containers() -> int:
     except Exception:
         pass  # Never block study start
     return reaped
-
-
-def copy_artefact(src: Path, dest: Path) -> str | None:
-    """Copy a single file, returning the dest filename on success or None."""
-    if not src.exists():
-        return None
-    try:
-        shutil.copy2(src, dest)
-        logger.debug("Artefact persisted to %s", dest)
-        return dest.name
-    except Exception as copy_exc:
-        logger.warning("Failed to persist %s to %s: %s", src.name, dest, copy_exc)
-        return None
-
-
-def _ensure_failed_runs_dir(
-    study_dir: Path, config_hash: str, cycle: int
-) -> tuple[Path, str] | None:
-    """Create ``{study_dir}/failed-runs/`` and return it with the artefact prefix.
-
-    Returns ``(failed_runs_dir, prefix)`` where ``prefix`` is the shared
-    ``{config_hash}_cycle{cycle}`` stem used to name every persisted failure
-    artefact. Returns ``None`` (logging a warning) if the directory cannot be
-    created - failure persistence is best-effort and must never mask the
-    original error.
-    """
-    failed_runs_dir = study_dir / "failed-runs"
-    try:
-        failed_runs_dir.mkdir(parents=True, exist_ok=True)
-    except OSError as mkdir_exc:
-        logger.warning("Failed to create failed-runs/: %s", mkdir_exc)
-        return None
-    return failed_runs_dir, f"{config_hash}_cycle{cycle}"
-
-
-def persist_failure_artefacts(
-    exc: DockerError,
-    study_dir: Path,
-    config_hash: str,
-    cycle: int,
-    result: dict[str, Any],
-) -> None:
-    """Copy failure artefacts from the Docker exchange dir into ``failed-runs/``.
-
-    Copies ``container.log`` and any ``*_error.json`` from the exchange
-    directory. Adds a ``log_file`` key to *result* so the manifest records
-    where the log can be found.
-    """
-    exchange_dir_str = getattr(exc, "exchange_dir", None)
-    if not exchange_dir_str:
-        return
-
-    exchange_dir = Path(exchange_dir_str)
-    ensured = _ensure_failed_runs_dir(study_dir, config_hash, cycle)
-    if ensured is None:
-        return
-    failed_runs_dir, prefix = ensured
-
-    # Copy container.log (Docker stderr capture)
-    log_file = copy_artefact(
-        exchange_dir / "container.log",
-        failed_runs_dir / f"{prefix}_container.log",
-    )
-    if log_file:
-        result["log_file"] = f"failed-runs/{log_file}"
-
-    # Copy error JSON (structured traceback from container entrypoint).
-    # The error JSON uses the Docker config hash (output_dir=/run/llem),
-    # which differs from the study-level config_hash, so glob for it.
-    for src in exchange_dir.glob("*_error.json"):
-        copy_artefact(src, failed_runs_dir / f"{prefix}_error.json")
-        break  # only one expected
-
-
-def persist_failure_traceback(
-    study_dir: Path,
-    config_hash: str,
-    cycle: int,
-    traceback_str: str,
-    result: dict[str, Any],
-) -> None:
-    """Persist a captured traceback into ``failed-runs/`` for a local failure.
-
-    The Docker path keeps the real in-container traceback debuggable via
-    :func:`persist_failure_artefacts` (it copies the ``*_error.json`` the
-    container entrypoint wrote). Local/subprocess dispatch has no exchange dir,
-    but the subprocess worker and the single-experiment in-process path still
-    capture a full traceback string on failure - this helper gives that string
-    the same on-disk home (``failed-runs/{prefix}_traceback.txt``) and the same
-    ``log_file`` manifest pointer, so a local failure is as debuggable as a
-    Docker one regardless of dispatch mode.
-
-    Best-effort: a persistence failure must never mask the original error, so
-    write problems are logged and swallowed. Despite living in the
-    container-lifecycle module (home of the ``failed-runs/`` convention), this
-    helper is dispatch-neutral - it takes a plain traceback string, not a
-    ``DockerError``.
-    """
-    if not traceback_str:
-        return
-
-    ensured = _ensure_failed_runs_dir(study_dir, config_hash, cycle)
-    if ensured is None:
-        return
-    failed_runs_dir, prefix = ensured
-
-    dest = failed_runs_dir / f"{prefix}_traceback.txt"
-    try:
-        dest.write_text(traceback_str, encoding="utf-8")
-    except OSError as write_exc:
-        logger.warning("Failed to persist traceback to %s: %s", dest, write_exc)
-        return
-
-    result["log_file"] = f"failed-runs/{dest.name}"

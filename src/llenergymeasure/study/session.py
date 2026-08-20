@@ -440,13 +440,13 @@ class DockerSession(_OfflineSession):
         self._docker_ts_dir: Path | None = None
 
     def __enter__(self) -> DockerSession:
-        from llenergymeasure.infra.docker_runner import DockerRunner
-        from llenergymeasure.infra.image_registry import get_default_image
-        from llenergymeasure.study.container_lifecycle import (
+        from llenergymeasure.infra.docker.ownership import (
             generate_container_labels,
             generate_container_name,
             require_study_id,
         )
+        from llenergymeasure.infra.docker_runner import DockerRunner
+        from llenergymeasure.infra.image_registry import get_default_image
         from llenergymeasure.study.gpu_memory import check_gpu_memory_residual
 
         runner = self._runner
@@ -519,7 +519,7 @@ class DockerSession(_OfflineSession):
 
     def run(self) -> Any:
         from llenergymeasure.infra.docker_errors import docker_exc_to_failure
-        from llenergymeasure.study.container_lifecycle import persist_failure_artefacts
+        from llenergymeasure.study.failure_artefacts import persist_failure_artefacts
         from llenergymeasure.utils.exceptions import DockerError
 
         runner = self._runner

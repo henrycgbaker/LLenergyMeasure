@@ -11,7 +11,7 @@ The startup reaper is deliberately NOT exercised here. Its ``docker ps`` filter
 is host-wide (any ``llem.study_id``), so running it against a real daemon could
 stop containers belonging to something else on the machine; its scoping is proved
 against the in-memory docker fake in
-tests/unit/study/test_container_lifecycle.py instead.
+tests/unit/docker/test_container_ownership.py instead.
 
 Run: pytest tests/integration/test_container_cleanup_docker.py -m docker -v
 Requires: a running Docker daemon and a local busybox image.
@@ -25,7 +25,7 @@ import uuid
 
 import pytest
 
-from llenergymeasure.study.container_lifecycle import (
+from llenergymeasure.infra.docker.ownership import (
     cleanup_study_containers,
     generate_container_labels,
 )

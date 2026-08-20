@@ -14,8 +14,10 @@ The separable concerns live in sibling modules and are mixed in or imported:
   caching, and drift validation.
 - ``study.image_prep`` (``_ImageMixin``): Docker image preparation and
   schema-fingerprint verification.
-- ``study.container_lifecycle``: container naming/labels/cleanup plus failure
-  artefact persistence.
+- ``study.failure_artefacts``: the ``failed-runs/`` evidence trail a failed
+  experiment leaves behind. The container naming/labels/cleanup mechanics this
+  loop installs live one layer down, in ``infra.docker.ownership``; the DECISION
+  to install them for a container-dispatching study is made here.
 
 Each experiment runs in a freshly spawned subprocess with a clean CUDA context
 (or in a Docker container). Results travel parent<-child via multiprocessing.Pipe
@@ -505,7 +507,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
 
         study_id: str | None = None
         if uses_docker:
-            from llenergymeasure.study.container_lifecycle import require_study_id
+            from llenergymeasure.infra.docker.ownership import require_study_id
 
             study_id = require_study_id(self.study.study_design_hash)
 
@@ -536,7 +538,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
         # Only activated for studies that use Docker runners.
         original_sigterm: signal.Handlers | None = None
         if study_id is not None:
-            from llenergymeasure.study.container_lifecycle import (
+            from llenergymeasure.infra.docker.ownership import (
                 install_sigterm_bridge,
                 reap_orphaned_containers,
                 register_container_cleanup,
@@ -970,7 +972,7 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
             # log_file via persist_failure_artefacts). Docker failure dicts carry
             # no "traceback" key, so this only fires for local dispatch.
             if log_file is None and result.get("traceback"):
-                from llenergymeasure.study.container_lifecycle import persist_failure_traceback
+                from llenergymeasure.study.failure_artefacts import persist_failure_traceback
 
                 persist_failure_traceback(
                     self.study_dir, config_hash, cycle, result["traceback"], result

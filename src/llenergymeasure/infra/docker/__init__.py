@@ -11,6 +11,9 @@ unchanged). This package holds the concerns that facade composes:
   block-until-exit wait, and the stdout-silence watchdog isolated inside the wait path.
 - :mod:`exchange` - exchange-dir lifecycle, result read, and the artefact rescue sweep.
 - :mod:`diagnostics` - container failure classification (error payload, log tail).
+- :mod:`ownership` - who owns a container and the machinery that reclaims it:
+  naming, ownership labels, the atexit net, the SIGTERM bridge, the orphan reaper.
+  Mechanics only; whether to install the net is the caller's decision.
 """
 
 from __future__ import annotations

@@ -1766,7 +1766,7 @@ class ServerSession:
         # orphan reaper can see and scope it. Process mode has no container.
         labels: dict[str, str] | None = None
         if mode == RUNNER_CONTAINER:
-            from llenergymeasure.study.container_lifecycle import generate_container_labels
+            from llenergymeasure.infra.docker.ownership import generate_container_labels
 
             labels = generate_container_labels(self._runner.study.study_design_hash)
         return ServerPlacement(

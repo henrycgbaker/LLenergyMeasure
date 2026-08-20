@@ -1,4 +1,4 @@
-"""Tests for container_lifecycle module."""
+"""Tests for the container-ownership mechanics: naming, labels, cleanup, reaper."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from llenergymeasure.study.container_lifecycle import (
+from llenergymeasure.infra.docker.ownership import (
     cleanup_study_containers,
     generate_container_labels,
     generate_container_name,
