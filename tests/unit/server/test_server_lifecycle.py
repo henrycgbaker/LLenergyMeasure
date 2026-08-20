@@ -11,6 +11,7 @@ with monkeypatched container-self detection.
 from __future__ import annotations
 
 import signal
+import subprocess
 import sys
 import time
 from unittest.mock import MagicMock, patch
@@ -30,6 +31,34 @@ COMPLETIONS_PROBE = ProbeRequest(
     path="/v1/completions",
     payload={"model": "stub", "prompt": "ping", "max_tokens": 1},
 )
+
+
+# ---------------------------------------------------------------------------
+# Vocabulary without the mechanism
+# ---------------------------------------------------------------------------
+
+
+def test_importing_the_types_does_not_load_the_mechanism():
+    """Naming a server must not cost the launch machinery.
+
+    The split exists so a consumer that only needs the value and error types -
+    an annotation, a constructor call, an ``except`` clause - does not pull in
+    the launch, readiness and docker-argv code it will never call. That only
+    holds while nothing re-exports the submodules eagerly, which is easy to undo
+    by accident, so it is asserted in a fresh interpreter (this test module has
+    already imported both halves).
+    """
+    probe = (
+        "import sys, llenergymeasure.serving.types;"
+        "loaded = [m for m in ('llenergymeasure.serving.lifecycle',"
+        "'llenergymeasure.serving.transport',"
+        "'llenergymeasure.infra.docker.command') if m in sys.modules];"
+        "print(','.join(loaded))"
+    )
+    result = subprocess.run([sys.executable, "-c", probe], capture_output=True, text=True)
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "", f"importing the types loaded: {result.stdout.strip()}"
 
 
 # ---------------------------------------------------------------------------
