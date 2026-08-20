@@ -427,6 +427,53 @@ def test_container_argv_mounts_hf_cache(monkeypatch):
     assert f"HF_HOME={target}" in argv
 
 
+def test_container_argv_is_pinned_exactly(monkeypatch):
+    """The whole argv is pinned, flag order included, for one fully-specified launch.
+
+    The other argv tests assert individual flags and their adjacency; this one
+    fixes the complete list so a reordering or an accidental extra flag cannot
+    slip through. Every env-driven input is pinned so the expectation is stable
+    on any host.
+    """
+    monkeypatch.delenv("LLEM_DOCKER_GPUS", raising=False)
+    monkeypatch.setenv("LLEM_DOCKER_HF_CACHE", "/data/hf")
+
+    argv = sl.build_server_container_argv(
+        image="vllm/vllm-openai:v0.19.1",
+        container_name="llem-vllm-server-abc",
+        gpu_indices=[2, 3],
+        serve_args=["Qwen/Qwen2.5-0.5B", "--port", "8123"],
+        shm_size="8g",
+        labels={"llem.study_id": "abcdef12", "llem.parent_pid": "4242"},
+    )
+
+    assert argv == [
+        "docker",
+        "run",
+        "-d",
+        "--network",
+        "host",
+        "--gpus",
+        '"device=2,3"',
+        "--name",
+        "llem-vllm-server-abc",
+        "--label",
+        "llem.study_id=abcdef12",
+        "--label",
+        "llem.parent_pid=4242",
+        "--shm-size",
+        "8g",
+        "-v",
+        "/data/hf:/root/.cache/huggingface",
+        "-e",
+        "HF_HOME=/root/.cache/huggingface",
+        "vllm/vllm-openai:v0.19.1",
+        "Qwen/Qwen2.5-0.5B",
+        "--port",
+        "8123",
+    ]
+
+
 def test_launch_container_server_success_and_cleanup_on_failure():
     """A non-zero docker run force-removes the container; success returns a handle."""
     # Success: docker run -d returns 0 with a container id on stdout.

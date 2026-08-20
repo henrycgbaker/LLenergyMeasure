@@ -63,6 +63,11 @@ from llenergymeasure.config.ssot import (
     TIMEOUT_SIGTERM_GRACE,
     RunnerMode,
 )
+
+# The server container's `docker run` argv is built beside the other container
+# shapes, in the one argv-construction home. Re-exported here so a server
+# adapter composes launch, readiness and shutdown from this module alone.
+from llenergymeasure.infra.docker.command import build_server_container_argv
 from llenergymeasure.utils.exceptions import LLEMError
 
 logger = logging.getLogger(__name__)
@@ -268,87 +273,6 @@ def server_container_name(engine: str) -> str:
 def default_server_log_path(engine: str, port: int) -> Path:
     """Return a temp-dir log path for a process-leg server's captured output."""
     return Path(tempfile.gettempdir()) / f"llem-{engine}-server-{port}.log"
-
-
-# ---------------------------------------------------------------------------
-# Container-leg command construction (pure - unit-testable without docker)
-# ---------------------------------------------------------------------------
-
-
-def build_server_container_argv(
-    *,
-    image: str,
-    container_name: str | None,
-    gpu_indices: list[int] | None,
-    serve_args: list[str],
-    shm_size: str | None = None,
-    labels: dict[str, str] | None = None,
-) -> list[str]:
-    """Build the ``docker run`` argv for a long-lived engine server container.
-
-    Detached (``-d``) so the launch returns immediately and readiness is polled.
-    Deliberately NO ``--rm``: a container that crashes during startup must
-    SURVIVE so ``docker logs`` can recover the startup diagnostic (the
-    failure-artefact hand-off ``read_logs`` promises). ``--rm`` destroys the
-    exited container within ~1s of the crash and the logs with it, so the
-    diagnostic would be permanently lost. Leak-freeness is instead the explicit
-    responsibility of :func:`shutdown` (``docker stop`` then ``docker rm -f``),
-    the crashed-startup fast-detection (:func:`_ensure_container_alive`), and the
-    failed-launch cleanup - all of which force-remove.
-
-    ``--network host`` is UNCONDITIONAL (the peer convention: genai-perf, vllm
-    benchmark_serving and MLPerf vendor repros
-    co-locate client + server on one host; docker bridge overhead is real and
-    directional). Because the container shares the host network namespace, the
-    port is NOT published with ``-p`` - the server binds the host port directly,
-    which the port passed inside ``serve_args`` (e.g. ``--port 8000``) selects.
-
-    ``serve_args`` are the engine command appended after the image; for vLLM the
-    upstream ``vllm/vllm-openai`` image's ``ENTRYPOINT`` is ``["vllm", "serve"]``,
-    so the adapter passes ``[<model>, "--port", <port>]`` and the entrypoint
-    supplies ``vllm serve``. TRT-LLM's NGC image is NOT entrypoint-baked with
-    ``trtllm-serve``, so its adapter passes the full ``["trtllm-serve", <model>,
-    "--port", <port>]`` command (the NGC entrypoint sets up the CUDA libs and
-    execs it).
-
-    The host HuggingFace cache is bind-mounted at ``/root/.cache/huggingface``
-    with ``HF_HOME`` pointed at it (the SAME LLEM_DOCKER_HF_CACHE-driven mount the
-    offline docker dispatch uses, via :func:`hf_cache_mount_args`), so a launched
-    server reuses already-downloaded weights instead of re-downloading the full
-    model on every run.
-
-    ``labels`` are the study's container ownership labels (the same ones the
-    offline docker dispatch sets), rendered by
-    :func:`~llenergymeasure.infra.docker.command.docker_label_args`, so a server
-    container is attributable to its study and reachable by the study-scoped
-    cleanup and the orphan reaper. A server container that outlives its launching
-    process - the exact case ``shutdown`` cannot cover - is otherwise invisible to
-    them.
-    """
-    from llenergymeasure.infra.docker.command import docker_label_args
-    from llenergymeasure.utils.env_config import (
-        docker_gpus_arg,
-        docker_shm_size,
-        hf_cache_mount_args,
-    )
-
-    argv = [
-        "docker",
-        "run",
-        "-d",
-        "--network",
-        "host",
-        "--gpus",
-        docker_gpus_arg(gpu_indices),
-    ]
-    if container_name:
-        argv += ["--name", container_name]
-    argv += docker_label_args(labels)
-    argv += ["--shm-size", shm_size or docker_shm_size()]
-    argv += hf_cache_mount_args()
-    argv.append(image)
-    argv += list(serve_args)
-    return argv
 
 
 # ---------------------------------------------------------------------------
