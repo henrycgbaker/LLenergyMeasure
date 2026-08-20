@@ -1,7 +1,7 @@
 """TensorRT-LLM-specific server command construction for the ServerCapable adapter.
 
 Holds the engine knowledge the generic lifecycle mechanics
-(:mod:`llenergymeasure.infra.server_lifecycle`) do not have: how TRT-LLM is
+(:mod:`llenergymeasure.serving.lifecycle`) do not have: how TRT-LLM is
 invoked as an online server (``trtllm-serve <model> --port <port>``), and a
 minimal OpenAI-completions readiness probe.
 
@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from llenergymeasure.infra.server_lifecycle import ProbeRequest
+from llenergymeasure.serving.types import ProbeRequest
 
 #: The TRT-LLM online-serving CLI verb. Invoked explicitly (the NGC image is not
 #: entrypoint-baked with it - see the module docstring), so it leads the command

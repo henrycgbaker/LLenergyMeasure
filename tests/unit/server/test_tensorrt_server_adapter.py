@@ -15,8 +15,8 @@ from pathlib import Path
 from llenergymeasure.engines.protocol import EnginePlugin, ServerCapable
 from llenergymeasure.engines.tensorrt import _serving
 from llenergymeasure.engines.tensorrt.plugin import TensorRTEngine
-from llenergymeasure.infra import server_lifecycle as sl
-from llenergymeasure.infra.server_lifecycle import ServerHandle, ServerPlacement
+from llenergymeasure.serving import lifecycle as sl
+from llenergymeasure.serving.types import ServerHandle, ServerPlacement
 from tests.conftest import make_config
 
 STUB_SERVER = Path(__file__).parent / "_stub_server.py"

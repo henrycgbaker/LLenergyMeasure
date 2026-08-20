@@ -5,7 +5,7 @@ cleanup, check_hardware) and, additively, the ServerCapable online-serving
 extension (launch, await_ready, shutdown) - an additive sibling of the single-call
 offline contract, not a change to it. The serving methods delegate the generic
 launch/probe/shutdown mechanics to
-:mod:`llenergymeasure.infra.server_lifecycle` and hold only the TRT-LLM command
+:mod:`llenergymeasure.serving.lifecycle` and hold only the TRT-LLM command
 knowledge (``trtllm-serve``) in
 :mod:`llenergymeasure.engines.tensorrt._serving`.
 
@@ -37,7 +37,7 @@ from llenergymeasure.utils.exceptions import ConfigError, EngineError
 from llenergymeasure.utils.io import load_json
 
 if TYPE_CHECKING:
-    from llenergymeasure.infra.server_lifecycle import (
+    from llenergymeasure.serving.types import (
         ProbeRequest,
         ServerHandle,
         ServerPlacement,
@@ -656,7 +656,7 @@ class TensorRTEngine:
         ``trtllm-serve``; the issuer receives ``handle.base_url``.
         """
         from llenergymeasure.engines.tensorrt import _serving
-        from llenergymeasure.infra import server_lifecycle as sl
+        from llenergymeasure.serving import lifecycle as sl
 
         port = sl.allocate_free_port()
         base_url = sl.base_url_for(port)
@@ -692,13 +692,13 @@ class TensorRTEngine:
         timeout: float,
     ) -> None:
         """Wait until TRT-LLM is ready: liveness poll THEN a real probe."""
-        from llenergymeasure.infra import server_lifecycle as sl
+        from llenergymeasure.serving import lifecycle as sl
 
         sl.await_ready(handle, probe_request, timeout=timeout)
 
     def shutdown(self, handle: ServerHandle) -> None:
         """Stop the TRT-LLM server (graceful, escalating to a hard kill); idempotent."""
-        from llenergymeasure.infra import server_lifecycle as sl
+        from llenergymeasure.serving import lifecycle as sl
 
         sl.shutdown(handle)
 

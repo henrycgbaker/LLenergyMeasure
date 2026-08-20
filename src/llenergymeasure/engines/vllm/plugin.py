@@ -5,7 +5,7 @@ run_inference, cleanup, ...) and, additively, the ServerCapable online-serving
 extension (launch, await_ready, shutdown) - an additive sibling of the single-call
 offline contract, not a change to it. The serving methods delegate the generic
 launch/probe/shutdown mechanics to
-:mod:`llenergymeasure.infra.server_lifecycle` and hold only the vLLM command
+:mod:`llenergymeasure.serving.lifecycle` and hold only the vLLM command
 knowledge (``vllm serve``) in :mod:`llenergymeasure.engines.vllm._serving`.
 
 All measurement lifecycle is delegated to MeasurementHarness. This module
@@ -30,7 +30,7 @@ from llenergymeasure.utils.exceptions import EngineError
 from llenergymeasure.utils.formatting import bytes_to_mb
 
 if TYPE_CHECKING:
-    from llenergymeasure.infra.server_lifecycle import (
+    from llenergymeasure.serving.types import (
         ProbeRequest,
         ServerHandle,
         ServerPlacement,
@@ -568,7 +568,7 @@ class VLLMEngine:
         passed to ``vllm serve``; the issuer receives ``handle.base_url``.
         """
         from llenergymeasure.engines.vllm import _serving
-        from llenergymeasure.infra import server_lifecycle as sl
+        from llenergymeasure.serving import lifecycle as sl
 
         port = sl.allocate_free_port()
         base_url = sl.base_url_for(port)
@@ -602,13 +602,13 @@ class VLLMEngine:
         timeout: float,
     ) -> None:
         """Wait until vLLM is ready: liveness poll THEN a real probe."""
-        from llenergymeasure.infra import server_lifecycle as sl
+        from llenergymeasure.serving import lifecycle as sl
 
         sl.await_ready(handle, probe_request, timeout=timeout)
 
     def shutdown(self, handle: ServerHandle) -> None:
         """Stop the vLLM server (graceful, escalating to a hard kill); idempotent."""
-        from llenergymeasure.infra import server_lifecycle as sl
+        from llenergymeasure.serving import lifecycle as sl
 
         sl.shutdown(handle)
 

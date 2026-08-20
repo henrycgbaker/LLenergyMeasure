@@ -13,8 +13,8 @@ from pathlib import Path
 from llenergymeasure.engines.protocol import EnginePlugin, ServerCapable
 from llenergymeasure.engines.vllm import _serving
 from llenergymeasure.engines.vllm.plugin import VLLMEngine
-from llenergymeasure.infra import server_lifecycle as sl
-from llenergymeasure.infra.server_lifecycle import ServerHandle, ServerPlacement
+from llenergymeasure.serving import lifecycle as sl
+from llenergymeasure.serving.types import ServerHandle, ServerPlacement
 from tests.conftest import make_config
 
 STUB_SERVER = Path(__file__).parent / "_stub_server.py"

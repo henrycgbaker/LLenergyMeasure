@@ -107,8 +107,8 @@ if TYPE_CHECKING:
     from llenergymeasure.engines.protocol import ServerCapable
     from llenergymeasure.harness.bracket import MeasuredWindowCore, MeasurementBracket
     from llenergymeasure.harness.traffic import RequestRecord, ShapeSource, TrafficSource, Transport
-    from llenergymeasure.infra.server_lifecycle import ServerHandle, ServerPlacement
     from llenergymeasure.results.bundle import BundleWriter
+    from llenergymeasure.serving.types import ServerHandle, ServerPlacement
     from llenergymeasure.study.runner import StudyRunner
 
 logger = logging.getLogger(__name__)
@@ -1756,7 +1756,7 @@ class ServerSession:
 
     def _make_placement(self) -> ServerPlacement:
         from llenergymeasure.config.ssot import RUNNER_CONTAINER, RUNNER_PROCESS
-        from llenergymeasure.infra.server_lifecycle import ServerPlacement
+        from llenergymeasure.serving.types import ServerPlacement
 
         mode = self.spec.mode if self.spec is not None else RUNNER_PROCESS
         image = self.spec.image if self.spec is not None else None
@@ -1917,11 +1917,11 @@ class ServerSession:
                 writer.finalize()
 
     def _shutdown_handle(self, handle: ServerHandle) -> None:
-        """Reap the launched server via the engine protocol (falls back to infra)."""
+        """Reap the launched server via the engine protocol (falls back to serving)."""
         if self._engine is not None:
             self._engine.shutdown(handle)
             return
-        from llenergymeasure.infra.server_lifecycle import shutdown
+        from llenergymeasure.serving.lifecycle import shutdown
 
         shutdown(handle)
 

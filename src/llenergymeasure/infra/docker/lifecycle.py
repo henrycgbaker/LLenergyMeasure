@@ -4,7 +4,7 @@ This module owns everything that runs a docker subprocess for offline dispatch.
 The block-until-exit mode is expressed as two separable steps so the
 stdout-silence watchdog stays isolated to the wait path (the same launch/wait
 separation server-mode measurement follows in its own
-:mod:`llenergymeasure.infra.server_lifecycle`):
+:mod:`llenergymeasure.serving.lifecycle`):
 
 - :func:`launch` starts the container process (``subprocess.Popen``) and returns
   it. It is detach-capable: a detached caller would call this, then add its own
@@ -171,7 +171,7 @@ def launch(cmd: list[str]) -> subprocess.Popen[str]:
     :func:`wait_to_completion` (which owns the watchdog) by the streaming path.
     Server measurement mode does NOT reuse this: it owns an independent detached
     ``docker run -d`` lifecycle (launch / readiness poll / stop) in
-    :mod:`llenergymeasure.infra.server_lifecycle`.
+    :mod:`llenergymeasure.serving.lifecycle`.
     """
     try:
         return subprocess.Popen(

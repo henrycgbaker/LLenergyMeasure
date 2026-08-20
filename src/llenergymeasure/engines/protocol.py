@@ -9,12 +9,12 @@ from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 from llenergymeasure.config.models import ExperimentConfig
 
 if TYPE_CHECKING:
-    # Server-lifecycle value types live at the infra altitude (the docker /
-    # process plumbing lives there). They are referenced only in annotations,
-    # so a TYPE_CHECKING import keeps this widely-imported core module free of a
-    # runtime infra dependency; runtime_checkable conformance keys on method
-    # names, not these types.
-    from llenergymeasure.infra.server_lifecycle import (
+    # Server-lifecycle value types live in the serving layer, which owns the
+    # vocabulary separately from the launch/readiness mechanics. They are
+    # referenced only in annotations, so a TYPE_CHECKING import keeps this
+    # widely-imported core module free of a runtime serving dependency;
+    # runtime_checkable conformance keys on method names, not these types.
+    from llenergymeasure.serving.types import (
         ProbeRequest,
         ServerHandle,
         ServerPlacement,
@@ -196,12 +196,12 @@ class ServerCapable(Protocol):
 
     - :meth:`launch` starts the server (a sibling container under container
       placement, or a host subprocess under process placement) and returns a
-      :class:`~llenergymeasure.infra.server_lifecycle.ServerHandle` exposing the
+      :class:`~llenergymeasure.serving.types.ServerHandle` exposing the
       base URL, the process/container identity, and log access.
     - :meth:`await_ready` polls liveness THEN drives a real inference request
       through the serving path; readiness is satisfied ONLY when that request
-      completes (``/health`` alone never suffices). The server-lifecycle layer
-      owns the probe MECHANICS; the request SHAPE (``probe_request``) is supplied
+      completes (``/health`` alone never suffices). The serving layer owns the
+      probe MECHANICS; the request SHAPE (``probe_request``) is supplied
       by the caller (the server warmup protocol draws it from the measured traffic
       distribution).
     - :meth:`shutdown` stops the server gracefully with a hard-kill escalation;
@@ -229,7 +229,7 @@ class ServerCapable(Protocol):
 
         Liveness poll THEN a real inference request through the serving path.
         Returns ``None`` on success; raises a
-        :class:`~llenergymeasure.infra.server_lifecycle.ServerLifecycleError`
+        :class:`~llenergymeasure.serving.types.ServerLifecycleError`
         subclass on launch failure, readiness timeout, or an unreachable
         docker-outside-of-docker topology.
         """

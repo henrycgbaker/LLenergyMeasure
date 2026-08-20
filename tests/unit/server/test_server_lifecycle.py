@@ -17,8 +17,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from llenergymeasure.infra import server_lifecycle as sl
-from llenergymeasure.infra.server_lifecycle import (
+from llenergymeasure.serving import lifecycle as sl
+from llenergymeasure.serving.types import (
     ProbeRequest,
     ServerHandle,
     ServerLaunchError,
