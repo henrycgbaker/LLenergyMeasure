@@ -189,6 +189,95 @@ def test_run_experiment_resolves_its_single_experiment_study(monkeypatch) -> Non
     assert len(resolved.pre_run_equivalence_groups) == 1
 
 
+# ---------------------------------------------------------------------------
+# Which form of a dormant-field config actually gets dispatched
+# ---------------------------------------------------------------------------
+
+# ``do_sample: false`` makes decoding greedy, so transformers ignores
+# ``temperature`` entirely. A shipped engine rule marks it dormant under greedy
+# decoding and drives it back to absent.
+_DORMANT_DECLARED = {
+    "serving_mode": "offline",
+    "engine": "transformers",
+    "task": {"model": "gpt2"},
+    "transformers": {"sampling_params": {"do_sample": False, "temperature": 0.9}},
+}
+_DORMANT_RULE_ID = "transformers_greedy_strips_temperature"
+
+
+def _dormant_experiment() -> ExperimentConfig:
+    return ExperimentConfig(**_DORMANT_DECLARED)
+
+
+def test_the_canonicalised_form_is_dispatched_on_every_route(tmp_path: Path, monkeypatch) -> None:
+    """Pin which object a dormant-field config actually runs as, on every route.
+
+    Resolution rewrites a field the engine ignores back to absent, and it is the
+    REWRITTEN config that is dispatched and recorded - so its
+    ``declared_config_hash`` (the experiment id, and hence the artefact names)
+    differs from the hash of the config as written. The equivalence-group record
+    keeps the as-declared hash, which is how a run traces back to what was asked
+    for. The study file, a study built from objects and the single-experiment
+    entry point must agree on all of this, or the same declared config would
+    produce differently named results depending on how it was submitted.
+    """
+    from llenergymeasure.domain.experiment import compute_declared_config_hash
+
+    as_declared = _dormant_experiment()
+    assert as_declared.transformers is not None
+    assert as_declared.transformers.sampling_params.temperature == 0.9
+    declared_hash = compute_declared_config_hash(as_declared)
+
+    captured = _capture_orchestrated(monkeypatch)
+    run_study(_write_study(tmp_path, dict(_DORMANT_DECLARED, study_name="dormant")))
+    run_study(StudyConfig(experiments=[_dormant_experiment()]))
+    run_experiment(_dormant_experiment())
+    from_yaml, from_objects, from_run_experiment = captured
+    routes = (
+        ("yaml", from_yaml),
+        ("objects", from_objects),
+        ("run_experiment", from_run_experiment),
+    )
+
+    for route, resolved in routes:
+        dispatched = resolved.experiments[0]
+        assert dispatched.transformers is not None
+        # The dispatched config is the canonicalised one: the ignored field is gone.
+        assert dispatched.transformers.sampling_params.temperature is None, route
+        # ...so its identity is NOT the identity of the config as written.
+        dispatched_hash = compute_declared_config_hash(dispatched)
+        assert dispatched_hash != declared_hash, route
+        # The as-declared identity survives in the equivalence-group record.
+        groups = resolved.pre_run_equivalence_groups
+        assert [g["member_experiment_ids"] for g in groups] == [[declared_hash]], route
+        # And the rewrite is surfaced rather than silent.
+        assert [obs["rule_id"] for obs in resolved.dormant_observations] == [_DORMANT_RULE_ID], (
+            route
+        )
+
+    # Every route agrees exactly on the dispatched form and its identity.
+    assert len({compute_declared_config_hash(r.experiments[0]) for _, r in routes}) == 1
+    assert len({r.study_design_hash for _, r in routes}) == 1
+
+
+def test_resolution_does_not_rewrite_the_callers_own_config(monkeypatch) -> None:
+    """Canonicalisation works on copies, so a caller's own object keeps its fields.
+
+    The one thing resolution does write onto the caller's objects is the resolved
+    server warmup protocol, which is attached as side-channel state rather than a
+    declared field; see ``test_server_dispatch``.
+    """
+    captured = _capture_orchestrated(monkeypatch)
+    mine = _dormant_experiment()
+
+    run_study(StudyConfig(experiments=[mine]))
+
+    assert mine.transformers is not None
+    assert mine.transformers.sampling_params.temperature == 0.9
+    dispatched = captured[0].experiments[0]
+    assert dispatched is not mine
+
+
 def test_an_already_resolved_study_is_not_resolved_twice(tmp_path: Path, monkeypatch) -> None:
     """Passing a load_study result to run_study must not re-expand the cycles."""
     captured = _capture_orchestrated(monkeypatch)
