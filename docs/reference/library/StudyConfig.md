@@ -23,12 +23,17 @@ and harness never perform expansion - they iterate the list.
 
 Loading a `StudyConfig` from YAML is a two-step pipeline. The config loader
 (`config.loader.load_study_config`) does pure parse + sweep-expansion and returns a
-`LoadedStudyRaw`; study finalisation (`study.loading.finalise_study`) applies dedup,
+`LoadedStudyRaw`; study resolution (`study.loading.resolve_study`) applies dedup,
 computes `study_design_hash`, and orders cycles to produce the resolved `StudyConfig`. The
 public entry that runs both steps is `api.load_study`. `run_study` calls it for you.
 
+`resolve_study` is the only resolution path, so a `StudyConfig` you build yourself is
+resolved exactly the same way: `run_study` and `run_experiment` route it through the same
+entry point before running it, without touching a file. A study that has not been resolved
+is refused rather than run undeduplicated and unhashed.
+
 `StudyConfig` is rarely constructed directly in userland. The normal path is to pass a YAML
-path to [`run_study`](./run_study) and let it load and finalise the config. Direct
+path to [`run_study`](./run_study) and let it load and resolve the config. Direct
 construction is useful for programmatic test generation or pipeline integration.
 
 ---
@@ -53,7 +58,7 @@ study = load_study(Path("study.yaml"))
 print(f"Expanded to {len(study.experiments)} experiments")
 ```
 
-`load_study` returns the resolved `StudyConfig`. For the raw pre-finalisation material
+`load_study` returns the resolved `StudyConfig`. For the raw pre-resolution material
 (sweep-expanded but before dedup/hash/cycles), call `config.loader.load_study_config`
 directly; it returns a `LoadedStudyRaw` whose `valid_experiments` list holds the expanded
 configs.
@@ -102,8 +107,8 @@ Controls sequencing, cycles, and failure handling:
 |-------|------|---------|-------------|
 | `n_cycles` | `int` | `1` | Number of times to repeat the full experiment list. |
 | `experiment_order` | `"sequential" \| "interleave" \| "shuffle" \| "reverse" \| "latin_square"` | `"sequential"` | Ordering across cycles. `"interleave"` runs A,B,A,B; `"shuffle"` randomises per-cycle. |
-| `experiment_gap_seconds` | `float \| None` | `None` | Seconds to wait between individual experiments. `None` uses machine default from user config. |
-| `cycle_gap_seconds` | `float \| None` | `None` | Longer thermal-equalisation pause at cycle boundaries (only when `n_cycles >= 2`). Boundary depends on `experiment_order`: for `sequential` it fires between the per-config repetition blocks (`[A,A,A\|B,B,B]`); for `interleave`/`reverse`/`shuffle`/`latin_square` it fires between full passes over the configs. `None` uses machine default. |
+| `experiment_gap_seconds` | `float \| None` | `None` | Seconds to wait between individual experiments. `None` resolves to the machine default from the user config (60s unless you change it). |
+| `cycle_gap_seconds` | `float \| None` | `None` | Longer thermal-equalisation pause at cycle boundaries (only when `n_cycles >= 2`). Boundary depends on `experiment_order`: for `sequential` it fires between the per-config repetition blocks (`[A,A,A\|B,B,B]`); for `interleave`/`reverse`/`shuffle`/`latin_square` it fires between full passes over the configs. `None` resolves to the machine default from the user config (300s unless you change it). |
 | `shuffle_seed` | `int \| None` | `None` | Explicit seed for `shuffle` ordering. `None` derives seed from `study_design_hash` (same study always shuffles identically). |
 | `skip_preflight` | `bool` | `False` | Skip Docker pre-flight checks in the execution block (the `--skip-preflight` CLI flag always overrides). |
 | `max_consecutive_failures` | `int` | `10` | Circuit breaker: abort after N consecutive failures. `0` = disabled. |
@@ -186,13 +191,17 @@ study = StudyConfig(
 result = run_study(study)
 ```
 
+`run_study` resolves this study before running it, so the three cycles are expanded,
+equivalent configs are merged, and the run gets a `study_design_hash` - the same treatment
+a YAML study gets.
+
 ---
 
 ## See also
 
 - [`ExperimentConfig`](./ExperimentConfig) - the per-experiment config model
 - [`run_study`](./run_study) - the function that accepts a `StudyConfig`
-- `api.load_study` - load a YAML path into a resolved `StudyConfig` (parse + finalise)
+- `api.load_study` - load a YAML path into a resolved `StudyConfig` (parse + resolve)
 - [`ExperimentResult`](./ExperimentResult) - result type for each experiment
 - [Study config reference](/reference/study-config) - YAML syntax (sweep, execution block)
 - [Results schema](/reference/results-schema) - on-disk layout
