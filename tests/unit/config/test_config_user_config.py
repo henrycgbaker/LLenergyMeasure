@@ -1,7 +1,9 @@
 """Unit tests for user configuration loading (llenergymeasure.config.user_config).
 
-Tests XDG path, missing file graceful defaults, valid file loading, and
-env var overrides.
+Tests XDG path, missing file graceful defaults, valid file loading, and the
+removed-field error messages. Loading is all this module does: ranking the file's
+values against env vars and the study file is the precedence chain's job, tested
+in test_precedence.py.
 """
 
 from __future__ import annotations
@@ -10,13 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from llenergymeasure.config.ssot import (
-    ENV_CARBON_INTENSITY,
-    ENV_DATACENTER_PUE,
-    ENV_NO_PROMPT,
-    ENV_RUNNER_PREFIX,
-)
 from llenergymeasure.config.user_config import UserConfig, get_user_config_path, load_user_config
+from llenergymeasure.utils.exceptions import ConfigError
 
 # ---------------------------------------------------------------------------
 # get_user_config_path
@@ -54,7 +51,7 @@ def test_load_user_config_missing_file_returns_defaults(tmp_path):
     # Default values from the model
     assert config.output.results_dir == "./results"
     assert config.measurement.energy_sampler == "auto"
-    assert config.ui.log_level == "WARNING"
+    assert config.ui.progress_mode == "auto"
 
 
 def test_load_user_config_missing_file_no_error(tmp_path):
@@ -73,18 +70,18 @@ def test_load_user_config_missing_file_no_error(tmp_path):
 def test_load_user_config_valid_file(tmp_path):
     """load_user_config() with valid YAML returns UserConfig with overridden values."""
     config_file = tmp_path / "config.yaml"
-    config_file.write_text("output:\n  results_dir: /custom/results\nui:\n  log_level: DEBUG\n")
+    config_file.write_text("output:\n  results_dir: /custom/results\nui:\n  progress_mode: plain\n")
     config = load_user_config(config_path=config_file)
     assert config.output.results_dir == "/custom/results"
-    assert config.ui.log_level == "DEBUG"
+    assert config.ui.progress_mode == "plain"
 
 
 def test_load_user_config_partial_file_uses_defaults_for_missing(tmp_path):
     """Partial user config file merges with defaults for unspecified fields."""
     config_file = tmp_path / "config.yaml"
-    config_file.write_text("ui:\n  log_level: INFO\n")
+    config_file.write_text("ui:\n  progress_mode: quiet\n")
     config = load_user_config(config_path=config_file)
-    assert config.ui.log_level == "INFO"
+    assert config.ui.progress_mode == "quiet"
     # Unspecified fields retain defaults
     assert config.output.results_dir == "./results"
 
@@ -98,70 +95,49 @@ def test_load_user_config_energy_sampler_override(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Env var overrides
+# Removed fields error loudly and name their replacement
 # ---------------------------------------------------------------------------
 
 
-def test_env_var_llem_carbon_intensity(tmp_path, monkeypatch):
-    """LLEM_CARBON_INTENSITY env var sets carbon_intensity_gco2_kwh."""
-    monkeypatch.setenv(ENV_CARBON_INTENSITY, "450.0")
-    config = load_user_config(config_path=tmp_path / "nonexistent.yaml")
-    assert config.measurement.carbon_intensity_gco2_kwh == pytest.approx(450.0)
+@pytest.mark.parametrize(
+    ("yaml_text", "field", "hint"),
+    [
+        ("output:\n  model_cache_dir: ~/.cache/hf\n", "output.model_cache_dir", "HF_HOME"),
+        (
+            "measurement:\n  carbon_intensity_gco2_kwh: 300\n",
+            "measurement.carbon_intensity_gco2_kwh",
+            "CodeCarbon",
+        ),
+        ("measurement:\n  datacenter_pue: 1.2\n", "measurement.datacenter_pue", "CodeCarbon"),
+        ("ui:\n  log_level: DEBUG\n", "ui.log_level", "LLEM_LOG_LEVEL"),
+        ("ui:\n  prompt: false\n", "ui.prompt", "no interactive prompts"),
+    ],
+)
+def test_removed_field_errors_loudly_and_names_the_field(tmp_path, yaml_text, field, hint):
+    """A config file still carrying a removed field fails with the removal reason.
 
-
-def test_env_var_llem_datacenter_pue(tmp_path, monkeypatch):
-    """LLEM_DATACENTER_PUE env var sets datacenter_pue."""
-    monkeypatch.setenv(ENV_DATACENTER_PUE, "1.5")
-    config = load_user_config(config_path=tmp_path / "nonexistent.yaml")
-    assert config.measurement.datacenter_pue == pytest.approx(1.5)
-
-
-def test_env_var_llem_no_prompt(tmp_path, monkeypatch):
-    """LLEM_NO_PROMPT env var disables interactive prompts."""
-    monkeypatch.setenv(ENV_NO_PROMPT, "1")
-    config = load_user_config(config_path=tmp_path / "nonexistent.yaml")
-    assert config.ui.prompt is False
-
-
-def test_env_var_runner_transformers(tmp_path, monkeypatch):
-    """LLEM_RUNNER_TRANSFORMERS env var overrides transformers runner."""
-    monkeypatch.setenv(
-        f"{ENV_RUNNER_PREFIX}TRANSFORMERS", "container:nvcr.io/nvidia/pytorch:latest"
-    )
-    config = load_user_config(config_path=tmp_path / "nonexistent.yaml")
-    assert config.runners.transformers == "container:nvcr.io/nvidia/pytorch:latest"
-
-
-def test_env_var_overrides_take_precedence_over_file(tmp_path, monkeypatch):
-    """Env var overrides take precedence over config file values."""
+    The removed fields were never read by anything; each error names the mechanism
+    that covers the need instead, so the fix is in the message.
+    """
     config_file = tmp_path / "config.yaml"
-    config_file.write_text("measurement:\n  datacenter_pue: 1.2\n")
-    monkeypatch.setenv(ENV_DATACENTER_PUE, "1.8")
-    config = load_user_config(config_path=config_file)
-    assert config.measurement.datacenter_pue == pytest.approx(1.8)
+    config_file.write_text(yaml_text)
+    with pytest.raises(ConfigError) as exc:
+        load_user_config(config_path=config_file)
+    message = str(exc.value)
+    assert field in message
+    assert "removed" in message
+    assert hint in message
 
 
-# ---------------------------------------------------------------------------
-# Silent ignore of invalid env var values
-# ---------------------------------------------------------------------------
-
-
-def test_silent_ignore_invalid_float_carbon_intensity(tmp_path, monkeypatch):
-    """LLEM_CARBON_INTENSITY='not_a_number' is silently ignored (treated as not set)."""
-    monkeypatch.setenv(ENV_CARBON_INTENSITY, "not_a_number")
-    # Should not raise
-    config = load_user_config(config_path=tmp_path / "nonexistent.yaml")
-    # Value is not set (treated as None - same as not providing the env var)
-    assert config.measurement.carbon_intensity_gco2_kwh is None
-
-
-def test_silent_ignore_invalid_float_datacenter_pue(tmp_path, monkeypatch):
-    """LLEM_DATACENTER_PUE='abc' is silently ignored (treated as not set)."""
-    monkeypatch.setenv(ENV_DATACENTER_PUE, "abc")
-    # Should not raise - value is silently ignored
-    config = load_user_config(config_path=tmp_path / "nonexistent.yaml")
-    # Falls back to default when invalid
-    assert config.measurement.datacenter_pue == pytest.approx(1.0)
+def test_unknown_field_still_errors_plainly(tmp_path):
+    """A field that never existed gets the plain extra-input error, not a removal note."""
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text("output:\n  made_up_field: 1\n")
+    with pytest.raises(ConfigError) as exc:
+        load_user_config(config_path=config_file)
+    message = str(exc.value)
+    assert "output.made_up_field" in message
+    assert "removed" not in message
 
 
 # ---------------------------------------------------------------------------

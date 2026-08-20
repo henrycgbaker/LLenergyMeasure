@@ -4,27 +4,24 @@ Loads optional user preferences from ~/.config/llenergymeasure/config.yaml
 (XDG-compliant path via platformdirs). Missing file silently applies all
 defaults. Invalid YAML or schema raises ConfigError.
 
-Precedence (low → high):
-  built-in defaults < config file < env vars < CLI flags (handled elsewhere)
+This module only LOADS the file. Where its values rank against the study file,
+env vars and call-site overrides is the precedence chain's business
+(:mod:`llenergymeasure.config.precedence`): user config sits above the built-in
+defaults and below everything else.
 """
 
 from __future__ import annotations
 
-import contextlib
-import os
 from pathlib import Path
-from typing import Any, Literal
+from typing import Literal
 
 import yaml
 from pydantic import BaseModel, Field, ValidationError, model_validator
+from pydantic_core import ErrorDetails
 
 from llenergymeasure.config.models import EnergySamplerName, ServerWarmupConfig
 from llenergymeasure.config.ssot import (
     ALL_ENGINES,
-    ENV_CARBON_INTENSITY,
-    ENV_DATACENTER_PUE,
-    ENV_NO_PROMPT,
-    ENV_RUNNER_PREFIX,
     legacy_runner_migration_message,
     legacy_runner_replacement,
 )
@@ -36,9 +33,6 @@ class UserOutputConfig(BaseModel):
     model_config = {"extra": "forbid"}
 
     results_dir: str = Field(default="./results", description="Default results output location")
-    model_cache_dir: str = Field(
-        default="~/.cache/huggingface", description="HuggingFace model cache"
-    )
 
 
 class UserRunnersConfig(BaseModel):
@@ -97,10 +91,6 @@ class UserMeasurementConfig(BaseModel):
     energy_sampler: EnergySamplerName = Field(
         default="auto", description="Energy sampler: auto=best available (Zeus>NVML>CodeCarbon)"
     )
-    carbon_intensity_gco2_kwh: float | None = Field(
-        default=None, ge=0.0, description="gCO2/kWh for local electricity grid"
-    )
-    datacenter_pue: float = Field(default=1.0, ge=1.0, description="Power Usage Effectiveness")
 
 
 class UserUIConfig(BaseModel):
@@ -108,8 +98,6 @@ class UserUIConfig(BaseModel):
 
     model_config = {"extra": "forbid"}
 
-    log_level: Literal["WARNING", "INFO", "DEBUG"] = Field(default="WARNING")
-    prompt: bool = Field(default=True, description="Enable interactive prompts (False for CI/HPC)")
     progress_mode: Literal["auto", "plain", "quiet"] = Field(
         default="auto",
         description="Progress output mode: auto=Rich Live TTY, plain=sequential print, quiet=silent",
@@ -196,52 +184,6 @@ def get_user_config_path() -> Path:
     return Path(user_config_dir("llenergymeasure")) / "config.yaml"
 
 
-def _apply_env_overrides(config: UserConfig) -> UserConfig:
-    """Apply LLEM_* environment variable overrides to user config.
-
-    Env vars sit above config file and below CLI flags in precedence.
-    Returns updated UserConfig (Pydantic models are immutable; use model_copy).
-    """
-    runners_updates: dict[str, str] = {}
-    for engine in ALL_ENGINES:
-        env_key = f"{ENV_RUNNER_PREFIX}{engine.upper()}"
-        if val := os.environ.get(env_key):
-            runners_updates[engine] = val
-
-    measurement_updates: dict[str, Any] = {}
-    if val := os.environ.get(ENV_CARBON_INTENSITY):
-        with contextlib.suppress(ValueError):
-            measurement_updates["carbon_intensity_gco2_kwh"] = float(val)
-    if val := os.environ.get(ENV_DATACENTER_PUE):
-        with contextlib.suppress(ValueError):
-            measurement_updates["datacenter_pue"] = float(val)
-
-    ui_updates: dict[str, Any] = {}
-    if os.environ.get(ENV_NO_PROMPT):
-        ui_updates["prompt"] = False
-
-    # Apply updates using model_copy(update=...) for immutable Pydantic models
-    new_runners = (
-        config.runners.model_copy(update=runners_updates) if runners_updates else config.runners
-    )
-    new_measurement = (
-        config.measurement.model_copy(update=measurement_updates)
-        if measurement_updates
-        else config.measurement
-    )
-    new_ui = config.ui.model_copy(update=ui_updates) if ui_updates else config.ui
-
-    if runners_updates or measurement_updates or ui_updates:
-        return config.model_copy(
-            update={
-                "runners": new_runners,
-                "measurement": new_measurement,
-                "ui": new_ui,
-            }
-        )
-    return config
-
-
 def load_user_config(config_path: Path | None = None) -> UserConfig:
     """Load user configuration from ~/.config/llenergymeasure/config.yaml.
 
@@ -253,15 +195,15 @@ def load_user_config(config_path: Path | None = None) -> UserConfig:
         config_path: Explicit path override (for testing). None = XDG default.
 
     Returns:
-        UserConfig with file values merged over defaults, env vars applied on top.
+        UserConfig with file values merged over defaults.
     """
     from llenergymeasure.utils.exceptions import ConfigError
 
     path = config_path or get_user_config_path()
 
     if not path.exists():
-        # Missing file - zero-config, apply all defaults + env var overrides
-        return _apply_env_overrides(UserConfig())
+        # Missing file - zero-config, all defaults
+        return UserConfig()
 
     try:
         content = path.read_text()
@@ -272,13 +214,37 @@ def load_user_config(config_path: Path | None = None) -> UserConfig:
         raise ConfigError(f"Invalid YAML in user config {path}: {e}") from e
 
     try:
-        config = UserConfig.model_validate(data)
+        return UserConfig.model_validate(data)
     except ValidationError as e:
         # Format Pydantic errors as ConfigError with field paths for researcher clarity
-        errors = [f"  {err['loc']}: {err['msg']}" for err in e.errors()]
+        errors = [f"  {_format_user_config_error(err)}" for err in e.errors()]
         raise ConfigError(f"Invalid user config {path}:\n" + "\n".join(errors)) from e
 
-    return _apply_env_overrides(config)
+
+#: Fields deleted from the user-config schema, with what replaced each. A config
+#: file still carrying one gets the removal reason, not a bare "extra input" error.
+_REMOVED_FIELDS: dict[str, str] = {
+    "output.model_cache_dir": (
+        "model caching follows the standard HuggingFace cache environment variables"
+        " (HF_HOME etc.); for container runs, LLEM_DOCKER_HF_CACHE sets the mounted cache"
+    ),
+    "measurement.carbon_intensity_gco2_kwh": (
+        "CO2 estimation belongs to the CodeCarbon sampler, which sources grid intensity itself"
+    ),
+    "measurement.datacenter_pue": (
+        "CO2 estimation belongs to the CodeCarbon sampler, which sources PUE itself"
+    ),
+    "ui.log_level": "logging is controlled by the -v flag or the LLEM_LOG_LEVEL env var",
+    "ui.prompt": "the tool has no interactive prompts to disable",
+}
+
+
+def _format_user_config_error(err: ErrorDetails) -> str:
+    """One pydantic error as a researcher-facing line, naming removed fields."""
+    dotted = ".".join(str(part) for part in err["loc"])
+    if err["type"] == "extra_forbidden" and dotted in _REMOVED_FIELDS:
+        return f"{dotted}: this field was removed - {_REMOVED_FIELDS[dotted]}"
+    return f"{dotted}: {err['msg']}"
 
 
 __all__ = ["UserConfig", "get_user_config_path", "load_user_config"]
