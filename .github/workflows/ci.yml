@@ -223,6 +223,25 @@ jobs:
           /tmp/pkg-check/bin/python -c "from llenergymeasure import run_experiment, ExperimentConfig, ExperimentResult; print('Public API import OK')"
           /tmp/pkg-check/bin/llem --help
           /tmp/pkg-check/bin/llem doctor
+      - name: Check container dispatch assets ship as package data
+        # The in-container entrypoint script and the dependency-priming probe are
+        # bind-mounted from the INSTALLED package, and their directory is plain
+        # package data rather than an importable package. Nothing imports them,
+        # so a packaging regression that dropped them would pass every other
+        # check here and only surface as a broken container dispatch at run time.
+        # Resolve them the way the dispatch does, from the clean venv's install.
+        run: |
+          /tmp/pkg-check/bin/python - <<'PY'
+          import importlib.resources
+          for name in ("container_entrypoint.sh", "probe_imports.py"):
+              resource = importlib.resources.files("llenergymeasure.infra").joinpath(
+                  f"_container/{name}"
+              )
+              payload = resource.read_bytes()
+              assert payload, f"{name} is present but empty in the installed package"
+              print(f"{name}: {len(payload)} bytes")
+          PY
+
       - name: Check screen extra resolves numpy 2
         # SALib requires numpy>=2.0 while the core floor is numpy>=1.24, so
         # installing [screen] lifts the whole environment to numpy 2. pyarrow>=14
