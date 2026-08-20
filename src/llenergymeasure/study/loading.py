@@ -87,7 +87,8 @@ def resolve_study(
         mode, and pre-run equivalence groups.
 
     Raises:
-        ConfigError: The study mixes serving_mode values.
+        ConfigError: The study mixes serving_mode values, or
+            ``execution_defaults`` is not a valid execution-block layer.
     """
     _validate_homogeneous_serving_mode(raw.valid_experiments)
 
@@ -233,19 +234,38 @@ def _resolve_execution(
       default is applied. Leaving them None made the runner read them as zero, so
       experiments ran back-to-back and thermal state bled between measurements
       for anyone relying on their machine defaults (#886).
+
+    Raises:
+        ConfigError: ``execution_defaults`` names a field the execution block does
+            not have, or gives one a value it will not take.
     """
     execution = declared
 
     if execution_defaults:
-        from llenergymeasure.config.precedence import fields_set_layer, resolve_layers
+        from pydantic import ValidationError
 
-        execution = ExecutionConfig.model_validate(
-            resolve_layers(
-                ExecutionConfig().model_dump(mode="python"),
-                dict(execution_defaults),
-                fields_set_layer(declared),
+        from llenergymeasure.config.precedence import fields_set_layer, resolve_layers
+        from llenergymeasure.utils.exceptions import ConfigError
+
+        try:
+            execution = ExecutionConfig.model_validate(
+                resolve_layers(
+                    ExecutionConfig().model_dump(mode="python"),
+                    dict(execution_defaults),
+                    fields_set_layer(declared),
+                )
             )
-        )
+        except ValidationError as exc:
+            # execution_defaults is caller-supplied, so a typo here is a caller
+            # mistake and deserves a message that names the parameter rather than
+            # a bare pydantic traceback about a study block the caller never wrote.
+            details = "; ".join(
+                f"{'.'.join(str(p) for p in e['loc'])}: {e['msg']}" for e in exc.errors()
+            )
+            raise ConfigError(
+                f"Invalid execution_defaults: {details}. Keys must be "
+                f"study_execution fields ({', '.join(sorted(ExecutionConfig.model_fields))})."
+            ) from exc
 
     if user_config is not None:
         gaps: dict[str, Any] = {}

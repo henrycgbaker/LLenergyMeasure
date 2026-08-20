@@ -81,7 +81,8 @@ def load_study(
         mode, and pre-run equivalence groups.
 
     Raises:
-        ConfigError: File not found, parse error, all configs invalid, empty study.
+        ConfigError: File not found, parse error, all configs invalid, empty study,
+            a study mixing serving_mode values, or invalid ``execution_defaults``.
         ValidationError: Pydantic structural errors pass through unchanged.
     """
     from llenergymeasure.config.loader import load_study_config

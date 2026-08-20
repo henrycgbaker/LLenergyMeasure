@@ -366,6 +366,17 @@ def test_execution_defaults_fill_only_what_the_study_left_unset() -> None:
     assert resolved.study_execution.experiment_order == "shuffle"  # default fills
 
 
+def test_bad_execution_defaults_raise_a_config_error() -> None:
+    """A typo in the caller's defaults names the parameter, not a study block."""
+    with pytest.raises(ConfigError) as exc:
+        resolve_study(_raw(), execution_defaults={"n_cyles": 3})
+
+    msg = str(exc.value)
+    assert "execution_defaults" in msg
+    assert "n_cyles" in msg
+    assert "n_cycles" in msg  # the valid field names are listed
+
+
 def test_execution_defaults_reach_the_yaml_route(tmp_path: Path) -> None:
     """load_study applies the defaults without re-reading the study file."""
     path = _write_study(
