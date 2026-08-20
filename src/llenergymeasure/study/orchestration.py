@@ -70,7 +70,6 @@ def orchestrate_study(
     skip_preflight: bool = False,
     progress: ProgressCallback | None = None,
     resume_dir: Path | None = None,
-    results_dir_override: Path | None = None,
     skip_set: set[tuple[str, int]] | None = None,
     no_lock: bool = False,
     config_path: Path | None = None,
@@ -88,11 +87,11 @@ def orchestrate_study(
     Single-experiment / n_cycles=1:  runs in-process or via DockerRunner directly.
     Otherwise:                         delegates to StudyRunner.
 
-    The two directory parameters are single-purpose (the ``api`` adapter maps the
-    overloaded public ``output_dir`` onto them):
-    - ``resume_dir``: an explicit study directory to reattach and resume into.
-    - ``results_dir_override``: the results-dir override for a fresh run
-      (precedence head, above YAML ``output.results_dir`` and user config).
+    ``resume_dir`` is an explicit study directory to reattach and resume into. A
+    fresh run writes to the study's already-resolved ``output.results_dir``: the
+    results-dir precedence chain (a ``-o`` flag or ``output_dir`` argument over the
+    study file over the user config over the built-in default) was settled when the
+    study was resolved, so there is nothing to re-decide here.
 
     Requires an ALREADY-RESOLVED study and asserts as much: resolution (the warmup
     overlay, dedup, the design hash, cycle expansion, equivalence groups) belongs
@@ -100,7 +99,6 @@ def orchestrate_study(
     entry routes through. Orchestration dispatches and assembles; it never
     resolves, so the two cannot drift apart.
     """
-    from llenergymeasure.config.user_config import load_user_config
     from llenergymeasure.study.manifest import ManifestWriter, create_study_dir
 
     _require_resolved(study)
@@ -110,16 +108,12 @@ def orchestrate_study(
     if preresolved is not None and not skip_preflight:
         raise ValueError("preresolved requires skip_preflight=True")
 
-    # Load user config first so runner context can be forwarded to preflight,
-    # ensuring preflight uses the same runner resolution as the actual dispatch path.
-    user_config = load_user_config()
-
     runner_specs, system_overrides = _resolve_runner_specs(
-        study, user_config, preresolved, skip_preflight, progress
+        study, preresolved, skip_preflight, progress
     )
 
-    # Resolve results_dir: resume_dir takes priority, then the fresh-run chain
-    # (CLI -o override > YAML output.results_dir > user config > built-in default).
+    # The results directory: a resume reattaches its existing study directory,
+    # otherwise the study's already-resolved results_dir is used as given.
     if resume_dir is not None:
         study_dir = resume_dir
         # Resume: load the existing manifest written by prepare_resume_manifest()
@@ -129,13 +123,7 @@ def orchestrate_study(
         loaded_manifest, _ = load_resume_state(study_dir)
         manifest = ManifestWriter.from_existing(study_dir, loaded_manifest)
     else:
-        if results_dir_override is not None:
-            results_dir_str = str(results_dir_override)
-        else:
-            results_dir_str = (
-                study.output.results_dir or user_config.output.results_dir or "./results"
-            )
-        study_dir = create_study_dir(study.study_name, Path(results_dir_str))
+        study_dir = create_study_dir(study.study_name, Path(study.output.results_dir or ""))
         manifest = ManifestWriter(study, study_dir)
 
     # Create _study-artefacts/ once for config copy, skipped log, and study-level env.
@@ -224,7 +212,6 @@ def orchestrate_study(
 
 def _resolve_runner_specs(
     study: StudyConfig,
-    user_config: Any,
     preresolved: tuple[dict[str, RunnerSpec], dict[str, dict[str, str]]] | None,
     skip_preflight: bool,
     progress: ProgressCallback | None,
@@ -249,12 +236,7 @@ def _resolve_runner_specs(
             t0_pf = time.perf_counter()
         try:
             runner_specs, system_overrides = run_study_preflight(
-                study,
-                skip_preflight=skip_preflight,
-                yaml_runners=study.runners,
-                user_config=user_config.runners,
-                yaml_images=study.images,
-                user_config_images=user_config.images or None,
+                study, skip_preflight=skip_preflight
             )
         except Exception:
             if progress:

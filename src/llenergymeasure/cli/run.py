@@ -535,8 +535,13 @@ def _run_study_impl(
         transient=True,
     ):
         # The CLI-layer research-appropriate effective defaults (n_cycles=3,
-        # shuffle) apply to whatever the study file leaves unset.
-        study_config = load_study(config, execution_defaults=STUDY_EXECUTION_DEFAULTS)
+        # shuffle) apply to whatever the study file leaves unset; -o is a
+        # call-site override, so it wins over what the file declares.
+        study_config = load_study(
+            config,
+            execution_defaults=STUDY_EXECUTION_DEFAULTS,
+            overrides={"output": {"results_dir": output}} if output else None,
+        )
     expand_elapsed = time.perf_counter() - t0_expand
 
     # Print completed lines with green ticks (same format as step display)
@@ -554,31 +559,24 @@ def _run_study_impl(
     # dry-run and actual-run so both show the same preflight panel.
     # ---------------------------------------------------------------
     from llenergymeasure.api import probe_energy_sampler, run_study_preflight, study_dir_name
-    from llenergymeasure.config.user_config import load_user_config
 
-    user_config = load_user_config()
     preresolved: tuple[dict[str, Any], dict[str, dict[str, str]]] | None = None
     try:
         runner_specs, _system_overrides = run_study_preflight(
             study_config,
             # Dry-run: skip Docker binary checks (just resolve runner modes).
             skip_preflight=skip_preflight or dry_run,
-            yaml_runners=study_config.runners,
-            user_config=user_config.runners,
-            yaml_images=study_config.images,
-            user_config_images=user_config.images or None,
         )
         preresolved = (runner_specs, _system_overrides)
     except Exception:
-        runner_specs = None  # graceful: Docker unavailable, show YAML runners
+        runner_specs = None  # graceful: Docker unavailable, show the study's runners
 
-    # Mirror the fresh-run results-dir precedence used by _run() so the preflight
-    # panel and dry-run preview show where results will actually land:
-    # CLI -o override > YAML output.results_dir > user config > default.
-    _preview_base = (
-        output or study_config.output.results_dir or user_config.output.results_dir or "results"
+    # The study's results_dir is already resolved (-o over the study file over the
+    # user config over the built-in default), so the panel and the dry-run preview
+    # show the directory the run will actually write to - one chain, one answer.
+    study_dir_preview = Path(study_config.output.results_dir or "") / study_dir_name(
+        study_config.study_name
     )
-    study_dir_preview = Path(_preview_base) / study_dir_name(study_config.study_name)
 
     # --- Dry-run branch ---
     if dry_run:

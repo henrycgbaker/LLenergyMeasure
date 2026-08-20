@@ -21,7 +21,6 @@ from llenergymeasure.utils.exceptions import PreFlightError
 
 if TYPE_CHECKING:
     from llenergymeasure.config.runner_spec import RunnerSpec
-    from llenergymeasure.config.user_config import UserRunnersConfig
 
 logger = logging.getLogger(__name__)
 
@@ -29,15 +28,15 @@ logger = logging.getLogger(__name__)
 def run_study_preflight(
     study: StudyConfig,
     skip_preflight: bool = False,
-    yaml_runners: dict[str, str] | None = None,
-    user_config: UserRunnersConfig | None = None,
-    yaml_images: dict[str, str] | None = None,
-    user_config_images: dict[str, str] | None = None,
 ) -> tuple[dict[str, RunnerSpec], dict[str, dict[str, str]]]:
     """Pre-flight checks for a study configuration.
 
     Single-engine studies pass through - per-experiment pre-flight runs later
     in the subprocess.
+
+    Which config layer pinned each engine's runner and image was decided when the
+    study was resolved; this reads those pins off the study rather than consulting
+    the user config or the environment again.
 
     Multi-engine studies resolve Docker elevation by precedence: an engine the
     user explicitly pinned (env var / study YAML / user config) keeps its
@@ -52,23 +51,15 @@ def run_study_preflight(
     When any experiment in the study will use a Docker runner, runs Docker
     pre-flight checks (GPU visibility, CUDA/driver compat) unless skipped.
 
-    After runner mode resolution, resolves Docker images for all Docker
-    engines using the orthogonal image precedence chain (env > YAML > user
-    config > local build > registry).
+    After runner mode resolution, resolves Docker images for all Docker engines
+    on the orthogonal image axis: the study's resolved image pin, the
+    ``container:<image>`` runner shorthand, then the smart default.
 
     Args:
         study: Resolved StudyConfig.
         skip_preflight: Skip Docker pre-flight checks. The effective skip value
             is ``skip_preflight OR study.study_execution.skip_preflight`` - CLI flag
             takes priority, then YAML config.
-        yaml_runners: Runner config from the study YAML ``runners:`` section.
-            Forwarded to ``resolve_study_runners()`` so pre-flight uses the same
-            runner resolution as the actual dispatch path.
-        user_config: Loaded UserRunnersConfig. Forwarded to
-            ``resolve_study_runners()`` to match actual dispatch precedence.
-        yaml_images: Image overrides from the study YAML ``images:`` section.
-        user_config_images: Image overrides from the user config ``images:``
-            section.
 
     Returns:
         Tuple of (runner_specs, system_overrides):
@@ -86,20 +77,21 @@ def run_study_preflight(
             sibling containers (docker-in-docker is not supported).
         DockerPreFlightError: Docker pre-flight check failed (inherits PreFlightError).
     """
-    from llenergymeasure.config.runner_spec import RunnerSpec
+    from llenergymeasure.config.runner_spec import RunnerSpec, pins_from_resolved
     from llenergymeasure.infra.runner_resolution import resolve_study_runners
 
     engines = {exp.engine for exp in study.experiments}
     is_multi_engine = len(engines) > 1
     system_overrides: dict[str, dict[str, str]] = {}
 
-    # Resolve runners via the normal precedence chain first. Precedence-based
+    runner_pins = pins_from_resolved(study.runners, study.settings_provenance, section="runners")
+    image_pins = pins_from_resolved(study.images, study.settings_provenance, section="images")
+
+    # Turn each engine's pin (or the absence of one) into a runner. Precedence-based
     # elevation (below) reads each spec.source to tell explicit user pins
     # (env / yaml / user_config) from auto-resolved runners
     # (auto_detected / default).
-    runner_specs = resolve_study_runners(
-        list(engines), yaml_runners=yaml_runners, user_config=user_config
-    )
+    runner_specs = resolve_study_runners(list(engines), runner_pins)
 
     # Multi-engine precedence: explicit pins win; auto-resolved runners elevate
     # to Docker for cross-engine isolation.
@@ -114,8 +106,7 @@ def run_study_preflight(
             image, image_source = resolve_image(
                 engine_name,
                 spec_image=spec.image,
-                yaml_images=yaml_images,
-                user_config_images=user_config_images,
+                pin=image_pins.get(engine_name),
             )
             runner_specs[engine_name] = RunnerSpec(
                 mode=spec.mode,

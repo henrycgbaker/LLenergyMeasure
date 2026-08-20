@@ -429,9 +429,20 @@ def _load_user_config_safe() -> tuple[UserConfig | None, str | None]:
 
 
 def _resolve_runner_specs(user_cfg: UserConfig | None) -> dict[str, RunnerSpec]:
-    runners = user_cfg.runners if user_cfg is not None else None
+    """The runner each engine would resolve to, via the same chain a run uses."""
+    from llenergymeasure.config.precedence import resolve_study_settings
+    from llenergymeasure.config.runner_spec import pins_from_resolved
+
+    settings = resolve_study_settings(
+        study_output={},
+        study_execution={},
+        study_runners=None,
+        study_images=None,
+        user_config=user_cfg,
+    )
+    pins = pins_from_resolved(settings.runners, settings.provenance, section="runners")
     return {
-        engine_str(engine): resolve_runner(engine_str(engine), user_config=runners)
+        engine_str(engine): resolve_runner(engine_str(engine), pins.get(engine_str(engine)))
         for engine in ENGINE_PACKAGES
     }
 

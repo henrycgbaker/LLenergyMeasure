@@ -541,6 +541,7 @@ def test_run_study_resume_uses_output_dir_as_search_base(monkeypatch, tmp_path):
     captured: dict = {}
 
     def _capture_run(study, **kw):
+        captured["study"] = study
         captured.update(kw)
         return make_study_result()
 
@@ -552,7 +553,9 @@ def test_run_study_resume_uses_output_dir_as_search_base(monkeypatch, tmp_path):
 
     assert search_bases == [search_base]
     assert captured["resume_dir"] == fake_resume_dir
-    assert captured["results_dir_override"] is None
+    # output_dir was consumed as the search base, not as a results-dir override:
+    # the resolved study keeps its own results_dir.
+    assert captured["study"].output.results_dir != str(search_base)
 
 
 def test_run_preresolved_without_skip_preflight_raises():

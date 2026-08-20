@@ -7,7 +7,32 @@ from unittest.mock import patch
 
 import pytest
 
+from llenergymeasure.config.precedence import resolve_study_settings
+from llenergymeasure.config.runner_spec import pins_from_resolved
 from llenergymeasure.config.ssot import ENV_IMAGE_PREFIX, Engine
+from llenergymeasure.config.user_config import UserConfig
+
+
+def _resolve_image(
+    engine: str,
+    *,
+    spec_image: str | None = None,
+    yaml_images: dict[str, str] | None = None,
+    user_config_images: dict[str, str] | None = None,
+) -> tuple[str, str]:
+    """Resolve an image the way a run does: precedence chain, then the mechanics."""
+    from llenergymeasure.infra.image_registry import resolve_image
+
+    settings = resolve_study_settings(
+        study_output={},
+        study_execution={},
+        study_runners=None,
+        study_images=yaml_images,
+        user_config=UserConfig(images=user_config_images or {}),
+    )
+    pins = pins_from_resolved(settings.images, settings.provenance, section="images")
+    return resolve_image(engine, spec_image=spec_image, pin=pins.get(engine))
+
 
 # ---------------------------------------------------------------------------
 # parse_runner_value
@@ -298,11 +323,9 @@ class TestShowImageResolution:
 
 class TestResolveImage:
     def test_env_var_takes_highest_precedence(self, monkeypatch):
-        from llenergymeasure.infra.image_registry import resolve_image
-
         monkeypatch.setenv(f"{ENV_IMAGE_PREFIX}VLLM", "custom/env-image:v1")
 
-        image, source = resolve_image(
+        image, source = _resolve_image(
             "vllm",
             spec_image="spec-image:v1",
             yaml_images={"vllm": "yaml-image:v1"},
@@ -313,9 +336,7 @@ class TestResolveImage:
         assert source == "env"
 
     def test_yaml_images_second_precedence(self):
-        from llenergymeasure.infra.image_registry import resolve_image
-
-        image, source = resolve_image(
+        image, source = _resolve_image(
             "vllm",
             spec_image="spec-image:v1",
             yaml_images={"vllm": "yaml-image:v1"},
@@ -326,9 +347,7 @@ class TestResolveImage:
         assert source == "yaml"
 
     def test_spec_image_third_precedence(self):
-        from llenergymeasure.infra.image_registry import resolve_image
-
-        image, source = resolve_image(
+        image, source = _resolve_image(
             "vllm",
             spec_image="spec-image:v1",
             user_config_images={"vllm": "uc-image:v1"},
@@ -338,12 +357,11 @@ class TestResolveImage:
         assert source == "runner_override"
 
     def test_user_config_images_fourth_precedence(self):
-        from llenergymeasure.infra.image_registry import resolve_image
 
         with patch(
             "llenergymeasure.infra.image_registry._image_exists_locally", return_value=False
         ):
-            image, source = resolve_image(
+            image, source = _resolve_image(
                 "vllm",
                 user_config_images={"vllm": "uc-image:v1"},
             )
@@ -372,18 +390,15 @@ class TestResolveImage:
         assert source == "registry"
 
     def test_env_var_case_insensitive_engine(self, monkeypatch):
-        from llenergymeasure.infra.image_registry import resolve_image
-
         monkeypatch.setenv(f"{ENV_IMAGE_PREFIX}TRANSFORMERS", "my/pytorch:v1")
-        image, source = resolve_image("transformers")
+        image, source = _resolve_image("transformers")
         assert image == "my/pytorch:v1"
         assert source == "env"
 
     def test_yaml_images_ignores_other_engines(self):
-        from llenergymeasure.infra.image_registry import resolve_image
 
         with patch("llenergymeasure.infra.image_registry._image_exists_locally", return_value=True):
-            image, source = resolve_image(
+            image, source = _resolve_image(
                 "vllm",
                 yaml_images={"transformers": "pytorch-image:v1"},
             )

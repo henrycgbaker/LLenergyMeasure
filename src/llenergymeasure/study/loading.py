@@ -203,6 +203,7 @@ def resolve_study_objects(
     study: StudyConfig,
     *,
     user_config: UserConfig | None = None,
+    overrides: Mapping[str, Any] | None = None,
 ) -> StudyConfig:
     """Resolve a StudyConfig a caller built in memory, touching no file.
 
@@ -240,7 +241,7 @@ def resolve_study_objects(
         runners=study.runners,
         images=study.images,
     )
-    resolved = resolve_study(raw, user_config=user_config)
+    resolved = resolve_study(raw, user_config=user_config, overrides=overrides)
     if study.skipped_configs:
         resolved = resolved.model_copy(update={"skipped_configs": study.skipped_configs})
     return resolved

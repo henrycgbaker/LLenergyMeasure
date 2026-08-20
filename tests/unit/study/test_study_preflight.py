@@ -30,6 +30,16 @@ def two_engine_study() -> StudyConfig:
     )
 
 
+def with_runners(study: StudyConfig, runners: dict[str, str]) -> StudyConfig:
+    """A study carrying resolved runner pins, as resolution would leave it.
+
+    Preflight reads the pins off the study rather than resolving them, so a test
+    that wants an engine pinned puts the pin where resolution would have put it.
+    Pins with no recorded provenance are labelled as declared on the study ("yaml").
+    """
+    return study.model_copy(update={"runners": runners})
+
+
 def patch_env(
     monkeypatch,
     *,
@@ -98,7 +108,7 @@ def test_single_engine_local_pin_not_import_checked(monkeypatch):
     study = StudyConfig(
         experiments=[ExperimentConfig(task={"model": "m1"}, engine="vllm", serving_mode="offline")]
     )
-    specs, overrides = run_study_preflight(study, yaml_runners={"vllm": "process"})
+    specs, overrides = run_study_preflight(with_runners(study, {"vllm": "process"}))
     assert specs["vllm"].mode == "process"
     assert specs["vllm"].source == "yaml"
     assert overrides == {}
@@ -147,7 +157,7 @@ def test_multi_engine_explicit_local_kept_auto_elevated(monkeypatch, two_engine_
     # transformers is pinned process and importable on the host.
     patch_env(monkeypatch, docker=True, importable=True)
     specs, overrides = run_study_preflight(
-        two_engine_study, yaml_runners={"transformers": "process"}
+        with_runners(two_engine_study, {"transformers": "process"})
     )
 
     # Explicit process pin kept.
@@ -172,7 +182,7 @@ def test_multi_engine_explicit_process_missing_package_raises(monkeypatch):
         ]
     )
     with pytest.raises(PreFlightError) as exc_info:
-        run_study_preflight(study, yaml_runners={"tensorrt": "process"})
+        run_study_preflight(with_runners(study, {"tensorrt": "process"}))
 
     msg = str(exc_info.value)
     assert "tensorrt" in msg
@@ -188,7 +198,7 @@ def test_multi_engine_all_explicit_local_without_docker_passes(monkeypatch, two_
     # Both engines pinned process and importable on the host.
     docker_preflight = patch_env(monkeypatch, docker=False, importable=True)
     specs, overrides = run_study_preflight(
-        two_engine_study, yaml_runners={"transformers": "process", "vllm": "process"}
+        with_runners(two_engine_study, {"transformers": "process", "vllm": "process"})
     )
 
     assert specs["transformers"].mode == "process"
@@ -205,7 +215,7 @@ def test_multi_engine_all_local_caution_fires_once(monkeypatch, two_engine_study
     patch_env(monkeypatch, docker=False, importable=True)
     with caplog.at_level(logging.WARNING, logger="llenergymeasure.study.preflight"):
         run_study_preflight(
-            two_engine_study, yaml_runners={"transformers": "process", "vllm": "process"}
+            with_runners(two_engine_study, {"transformers": "process", "vllm": "process"})
         )
     cautions = [
         r
@@ -224,7 +234,7 @@ def test_single_engine_no_all_local_caution(monkeypatch, caplog):
         ]
     )
     with caplog.at_level(logging.WARNING, logger="llenergymeasure.study.preflight"):
-        run_study_preflight(study, yaml_runners={"transformers": "process"})
+        run_study_preflight(with_runners(study, {"transformers": "process"}))
     assert not [r for r in caplog.records if _ALL_LOCAL_CAUTION in r.message]
 
 
@@ -232,17 +242,16 @@ def test_multi_engine_mixed_no_all_local_caution(monkeypatch, two_engine_study, 
     """A mixed process+elevated study is not all-process, so the caution must not fire."""
     patch_env(monkeypatch, docker=True, importable=True)
     with caplog.at_level(logging.WARNING, logger="llenergymeasure.study.preflight"):
-        run_study_preflight(two_engine_study, yaml_runners={"transformers": "process"})
+        run_study_preflight(with_runners(two_engine_study, {"transformers": "process"}))
     assert not [r for r in caplog.records if _ALL_LOCAL_CAUTION in r.message]
 
 
-def test_preflight_forwards_runner_context(monkeypatch):
-    """run_study_preflight forwards yaml_runners and user_config to resolve_study_runners."""
+def test_preflight_forwards_resolved_runner_pins(monkeypatch):
+    """Preflight hands the study's resolved pins to the runner mechanics."""
     captured_calls: list[dict] = []
 
-    def mock_resolve_study_runners(engines, yaml_runners=None, user_config=None):
-        captured_calls.append({"yaml_runners": yaml_runners, "user_config": user_config})
-        # Return process specs so no Docker preflight is triggered
+    def mock_resolve_study_runners(engines, pins=None):
+        captured_calls.append({"engines": list(engines), "pins": pins})
         from llenergymeasure.config.runner_spec import RunnerSpec
 
         return {b: RunnerSpec(mode="process", image=None, source="default") for b in engines}
@@ -255,28 +264,29 @@ def test_preflight_forwards_runner_context(monkeypatch):
         mock_resolve_study_runners,
     )
 
-    mock_user_config = MagicMock()
     study = StudyConfig(
         experiments=[
             ExperimentConfig(task={"model": "m1"}, engine="transformers", serving_mode="offline")
-        ]
+        ],
+        runners={"transformers": "process"},
+        settings_provenance={"runners.transformers": "user_config"},
     )
 
-    run_study_preflight(
-        study, yaml_runners={"transformers": "process"}, user_config=mock_user_config
-    )
+    run_study_preflight(study)
 
     assert len(captured_calls) == 1
-    assert captured_calls[0]["yaml_runners"] == {"transformers": "process"}
-    assert captured_calls[0]["user_config"] is mock_user_config
+    pins = captured_calls[0]["pins"]
+    assert pins["transformers"].value == "process"
+    # The layer that supplied the pin travels with it, so the spec can record it.
+    assert pins["transformers"].source == "user_config"
 
 
-def test_preflight_defaults_to_auto_detect_without_context(monkeypatch):
-    """Calling run_study_preflight without yaml_runners/user_config passes None for both."""
+def test_preflight_passes_no_pins_when_the_study_has_none(monkeypatch):
+    """A study with no resolved pins leaves every engine to auto-detection."""
     captured_calls: list[dict] = []
 
-    def mock_resolve_study_runners(engines, yaml_runners=None, user_config=None):
-        captured_calls.append({"yaml_runners": yaml_runners, "user_config": user_config})
+    def mock_resolve_study_runners(engines, pins=None):
+        captured_calls.append({"pins": pins})
         from llenergymeasure.config.runner_spec import RunnerSpec
 
         return {b: RunnerSpec(mode="process", image=None, source="default") for b in engines}
@@ -298,18 +308,7 @@ def test_preflight_defaults_to_auto_detect_without_context(monkeypatch):
     run_study_preflight(study)
 
     assert len(captured_calls) == 1
-    assert captured_calls[0]["yaml_runners"] is None
-    assert captured_calls[0]["user_config"] is None
-
-
-# ---------------------------------------------------------------------------
-# Container-self-aware multi-engine elevation
-# ---------------------------------------------------------------------------
-#
-# When llem itself runs inside a container, auto-elevation to a container is only
-# viable as docker-outside-of-docker (a mounted host Docker socket). A socketless
-# container cannot start sibling containers, so elevation fails with an actionable
-# error rather than attempting docker-in-docker. The host path is unchanged.
+    assert captured_calls[0]["pins"] == {}
 
 
 def test_multi_engine_in_container_no_socket_raises_actionable(monkeypatch, two_engine_study):
@@ -360,7 +359,7 @@ def test_multi_engine_in_container_no_socket_all_explicit_process_passes(
         monkeypatch, docker=False, importable=True, in_container=True, socket=False
     )
     specs, overrides = run_study_preflight(
-        two_engine_study, yaml_runners={"transformers": "process", "vllm": "process"}
+        with_runners(two_engine_study, {"transformers": "process", "vllm": "process"})
     )
 
     assert specs["transformers"].mode == "process"

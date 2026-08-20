@@ -48,6 +48,7 @@ Widening that coverage, and the offline warmup protocol, stay with #886.
 
 from __future__ import annotations
 
+import functools
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -455,8 +456,30 @@ def _study_file_layer(
     }
 
 
+@functools.cache
+def _load_dotenv() -> None:
+    """Load ``.env`` from the working directory if present.
+
+    Uses ``override=False`` so shell environment variables always win. Cached so the
+    filesystem scan happens at most once per process. The CLI also loads ``.env`` at
+    import time; this covers the library entry points, which never import the CLI.
+    """
+    try:
+        from dotenv import load_dotenv
+
+        load_dotenv(override=False)
+    except ImportError:
+        pass
+
+
 def _env_layer(env: Mapping[str, Any] | None) -> dict[str, Any]:
-    """Per-engine runner and image overrides from ``LLEM_RUNNER_*`` / ``LLEM_IMAGE_*``."""
+    """Per-engine runner and image overrides from ``LLEM_RUNNER_*`` / ``LLEM_IMAGE_*``.
+
+    A ``.env`` file in the working directory counts as environment, so it is loaded
+    before the layer is read.
+    """
+    if env is None:
+        _load_dotenv()
     environ = os.environ if env is None else env
     runners = {}
     images = {}
