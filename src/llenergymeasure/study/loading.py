@@ -23,6 +23,8 @@ from collections.abc import Mapping
 from dataclasses import asdict
 from typing import TYPE_CHECKING, Any, Literal
 
+from pydantic import ValidationError
+
 from llenergymeasure.config.grid import (
     ExperimentOrder,
     apply_cycles,
@@ -31,6 +33,7 @@ from llenergymeasure.config.grid import (
 from llenergymeasure.config.loader import LoadedStudyRaw
 from llenergymeasure.config.models import ExecutionConfig, ExperimentConfig, StudyConfig
 from llenergymeasure.study.library_resolution import resolve_library_effective
+from llenergymeasure.utils.exceptions import ConfigError
 
 if TYPE_CHECKING:
     from llenergymeasure.config.user_config import UserConfig
@@ -251,8 +254,6 @@ def _validate_homogeneous_serving_mode(experiments: list[ExperimentConfig]) -> N
     """
     modes = sorted({exp.serving_mode for exp in experiments})
     if len(modes) > 1:
-        from llenergymeasure.utils.exceptions import ConfigError
-
         raise ConfigError(
             f"This study mixes serving_mode values ({', '.join(modes)}), but a "
             "single study must use exactly one serving_mode at this release. "
@@ -289,10 +290,7 @@ def _resolve_execution(
     execution = declared
 
     if execution_defaults:
-        from pydantic import ValidationError
-
         from llenergymeasure.config.precedence import fields_set_layer, resolve_layers
-        from llenergymeasure.utils.exceptions import ConfigError
 
         try:
             execution = ExecutionConfig.model_validate(
