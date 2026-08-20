@@ -1,5 +1,9 @@
 """Tests for the host-side baseline container dispatch helper.
 
+Covers the study-altitude orchestration only - spec write, stage-marker parsing,
+container run, result read. The argv it runs is built one layer down and is
+tested in ``tests/unit/docker/test_baseline_container_argv.py``.
+
 All tests patch ``subprocess.Popen`` at the module boundary - nothing actually
 talks to Docker.
 """
@@ -15,7 +19,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from llenergymeasure.config.ssot import ENV_BASELINE_SPEC_PATH, ENV_ENGINE, ENV_ENTRY_MODULE
 from llenergymeasure.study import baseline_container
 
 _MODULE = "llenergymeasure.study.baseline_container"
@@ -67,191 +70,6 @@ def _make_fake_popen(
         return mock
 
     return _factory
-
-
-class TestBuildBaselineDockerCmd:
-    def test_cmd_contains_mode_env_and_gpu_filter(self, tmp_path: Path):
-        cmd = baseline_container.build_baseline_docker_cmd(
-            image="ghcr.io/foo/bar:v1",
-            exchange_dir=str(tmp_path),
-            gpu_indices=[0, 2],
-            engine="vllm",
-        )
-        assert cmd[0] == "docker"
-        assert "run" in cmd
-        assert "--rm" in cmd
-        assert "--gpus" in cmd
-        # env vars
-        assert any(f"{ENV_BASELINE_SPEC_PATH}=" in part for part in cmd)
-        assert any("CUDA_VISIBLE_DEVICES=0,2" in part for part in cmd)
-        # image is the LAST arg (the entrypoint script invokes the module itself)
-        assert cmd[-1] == "ghcr.io/foo/bar:v1"
-        # default --gpus request is "all"
-        assert cmd[cmd.index("--gpus") + 1] == "all"
-
-    def test_cmd_honours_llem_docker_gpus(self, tmp_path: Path, monkeypatch):
-        """LLEM_DOCKER_GPUS overrides the --gpus value (shared-host pinning)."""
-        monkeypatch.setenv("LLEM_DOCKER_GPUS", "device=2")
-        cmd = baseline_container.build_baseline_docker_cmd(
-            image="ghcr.io/foo/bar:v1",
-            exchange_dir=str(tmp_path),
-            gpu_indices=[0],
-            engine="vllm",
-        )
-        assert cmd[cmd.index("--gpus") + 1] == "device=2"
-
-    def test_cmd_scopes_gpus_from_config_indices(self, tmp_path: Path, monkeypatch):
-        """config_gpu_indices scopes the baseline --gpus to the same physical
-        devices as the experiment container (single -> device=N)."""
-        monkeypatch.delenv("LLEM_DOCKER_GPUS", raising=False)
-        cmd = baseline_container.build_baseline_docker_cmd(
-            image="img:latest",
-            exchange_dir=str(tmp_path),
-            gpu_indices=[0],
-            engine="vllm",
-            config_gpu_indices=[2],
-        )
-        assert cmd[cmd.index("--gpus") + 1] == "device=2"
-
-    def test_cmd_scopes_gpus_from_config_indices_multi(self, tmp_path: Path, monkeypatch):
-        """Multi config indices are quoted for docker's CSV parser."""
-        monkeypatch.delenv("LLEM_DOCKER_GPUS", raising=False)
-        cmd = baseline_container.build_baseline_docker_cmd(
-            image="img:latest",
-            exchange_dir=str(tmp_path),
-            gpu_indices=[0, 1],
-            engine="vllm",
-            config_gpu_indices=[2, 3],
-        )
-        assert cmd[cmd.index("--gpus") + 1] == '"device=2,3"'
-
-    def test_env_overrides_config_gpu_indices(self, tmp_path: Path, monkeypatch):
-        """LLEM_DOCKER_GPUS still wins over config_gpu_indices for the baseline."""
-        monkeypatch.setenv("LLEM_DOCKER_GPUS", "device=5")
-        cmd = baseline_container.build_baseline_docker_cmd(
-            image="img:latest",
-            exchange_dir=str(tmp_path),
-            gpu_indices=[0],
-            engine="vllm",
-            config_gpu_indices=[2, 3],
-        )
-        assert cmd[cmd.index("--gpus") + 1] == "device=5"
-
-    def test_cmd_makes_package_importable(self, tmp_path: Path):
-        """The baseline command must mount the host package + route through the
-        entrypoint script so the upstream engine image can import the package.
-
-        Without this, every Docker baseline run fails with ModuleNotFoundError:
-        upstream engine images do not ship the llenergymeasure package.
-        """
-        cmd = baseline_container.build_baseline_docker_cmd(
-            image="img:latest",
-            exchange_dir=str(tmp_path),
-            gpu_indices=[0],
-            engine="vllm",
-        )
-        # Package source bind-mount (makes the package importable via PYTHONPATH).
-        # The package dir is mounted at the nested target so /llem-src exposes
-        # only llenergymeasure, never a host site-packages sibling.
-        assert any(arg.endswith(":/llem-src/llenergymeasure:ro") for arg in cmd)
-        # Dispatch routes through the shared in-container bootstrap script.
-        ep_idx = cmd.index("--entrypoint")
-        assert cmd[ep_idx + 1] == "/llem-entry.sh"
-        # The script exec's the baseline module (not the experiment one).
-        assert f"{ENV_ENTRY_MODULE}=llenergymeasure.entrypoints.baseline_measure" in cmd
-        # Engine is propagated so the script can route tensorrt correctly.
-        assert f"{ENV_ENGINE}=vllm" in cmd
-        # The old, broken trailing "python3 -m ..." form must be gone.
-        assert "python3" not in cmd
-
-    def test_cmd_tensorrt_engine_propagated(self, tmp_path: Path):
-        cmd = baseline_container.build_baseline_docker_cmd(
-            image="img:latest",
-            exchange_dir=str(tmp_path),
-            gpu_indices=[0],
-            engine="tensorrt",
-        )
-        assert f"{ENV_ENGINE}=tensorrt" in cmd
-
-    def test_cmd_empty_gpu_indices(self, tmp_path: Path):
-        cmd = baseline_container.build_baseline_docker_cmd(
-            image="img:latest",
-            exchange_dir=str(tmp_path),
-            gpu_indices=[],
-            engine="transformers",
-        )
-        assert any("CUDA_VISIBLE_DEVICES=" in part for part in cmd)
-
-    def test_nccl_vars_forwarded(self, tmp_path: Path, monkeypatch):
-        """Host NCCL_* vars are forwarded into the baseline container, matching
-        the experiment path (e.g. NCCL_P2P_DISABLE=1 on PCIe hosts without P2P)."""
-        monkeypatch.setenv("NCCL_P2P_DISABLE", "1")
-        monkeypatch.setenv("NCCL_IB_DISABLE", "1")
-        cmd = baseline_container.build_baseline_docker_cmd(
-            image="img:latest",
-            exchange_dir=str(tmp_path),
-            gpu_indices=[0, 1],
-            engine="vllm",
-        )
-        assert "NCCL_P2P_DISABLE=1" in cmd
-        assert "NCCL_IB_DISABLE=1" in cmd
-
-    def test_non_nccl_var_not_forwarded(self, tmp_path: Path, monkeypatch):
-        """A non-NCCL host var must not be forwarded into the baseline container."""
-        monkeypatch.setenv("SOME_UNRELATED_VAR", "leak")
-        cmd = baseline_container.build_baseline_docker_cmd(
-            image="img:latest",
-            exchange_dir=str(tmp_path),
-            gpu_indices=[0],
-            engine="vllm",
-        )
-        assert not any("SOME_UNRELATED_VAR" in part for part in cmd)
-
-    def test_nccl_vars_sorted(self, tmp_path: Path, monkeypatch):
-        """NCCL_* vars are emitted in sorted key order (deterministic argv)."""
-        monkeypatch.setenv("NCCL_SOCKET_IFNAME", "eth0")
-        monkeypatch.setenv("NCCL_DEBUG", "INFO")
-        monkeypatch.setenv("NCCL_P2P_DISABLE", "1")
-        cmd = baseline_container.build_baseline_docker_cmd(
-            image="img:latest",
-            exchange_dir=str(tmp_path),
-            gpu_indices=[0],
-            engine="vllm",
-        )
-        # Filter to the three we set so a stray host NCCL_* var can't perturb
-        # the assertion; their relative order must be alphabetical.
-        expected = ["NCCL_DEBUG=INFO", "NCCL_P2P_DISABLE=1", "NCCL_SOCKET_IFNAME=eth0"]
-        mine = [p for p in cmd if p in set(expected)]
-        assert mine == expected
-
-    def test_cmd_carries_ownership_labels(self, tmp_path: Path):
-        """Ownership labels ride before the image so cleanup and the reaper see it.
-
-        A baseline container holds the GPU while it samples; unlabelled, it is
-        invisible to the study-scoped cleanup and to the orphan reaper.
-        """
-        cmd = baseline_container.build_baseline_docker_cmd(
-            image="img:latest",
-            exchange_dir=str(tmp_path),
-            gpu_indices=[0],
-            engine="vllm",
-            labels={"llem.study_id": "abcdef12", "llem.parent_pid": "4242"},
-        )
-
-        for value in ("llem.study_id=abcdef12", "llem.parent_pid=4242"):
-            idx = cmd.index(value)
-            assert cmd[idx - 1] == "--label"
-            assert idx < cmd.index("img:latest")
-
-    def test_cmd_without_labels_emits_none(self, tmp_path: Path):
-        cmd = baseline_container.build_baseline_docker_cmd(
-            image="img:latest",
-            exchange_dir=str(tmp_path),
-            gpu_indices=[0],
-            engine="vllm",
-        )
-
-        assert "--label" not in cmd
 
 
 class TestParseStageLine:

@@ -4,8 +4,9 @@ The public surface is the :class:`~llenergymeasure.infra.docker_runner.DockerRun
 facade (kept at ``llenergymeasure.infra.docker_runner`` so consumers import it
 unchanged). This package holds the concerns that facade composes:
 
-- :mod:`command` - pure ``docker run`` command building (env forwarding, mounts,
-  GPU/shm flags, image ref, package-dispatch bootstrap). Unit-testable without docker.
+- :mod:`command` - the single home for ``docker run`` argv: one shared core plus the
+  three container shapes (offline experiment dispatch, idle baseline, engine server)
+  as parameterisations of it. Pure builders, unit-testable without docker.
 - :mod:`lifecycle` - container process execution: image ensure, launch (detach-capable),
   block-until-exit wait, and the stdout-silence watchdog isolated inside the wait path.
 - :mod:`exchange` - exchange-dir lifecycle, result read, and the artefact rescue sweep.

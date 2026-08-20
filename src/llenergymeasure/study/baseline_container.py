@@ -6,6 +6,12 @@ the host has no CUDA context and no torch memory pool seeded. Measuring the
 baseline inside a container whose CUDA state matches the experiment container
 eliminates the bias.
 
+This module is the study-altitude orchestration only: write the spec, run the
+container, stream its stage markers back to the caller, read the result. The argv
+it runs is built by
+:func:`~llenergymeasure.infra.docker.command.build_baseline_container_argv`,
+beside the other container shapes.
+
 This helper deliberately does not use ``infra.docker_runner.DockerRunner``:
 baseline dispatch needs none of DockerRunner's experiment-specific machinery
 (config-hash indirection, streamed stdout progress, timeseries rescue, result
@@ -27,25 +33,20 @@ from collections.abc import Callable
 from pathlib import Path
 
 from llenergymeasure.config.ssot import (
-    CONTAINER_EXCHANGE_DIR,
-    ENV_BASELINE_SPEC_PATH,
     STAGE_LINE_PREFIX,
     TEMP_PREFIX_EXCHANGE,
 )
 from llenergymeasure.harness.baseline import BaselineCache
 from llenergymeasure.infra.docker.command import (
-    append_nccl_env,
-    append_package_dispatch,
-    docker_label_args,
+    BASELINE_SPEC_FILENAME,
+    build_baseline_container_argv,
 )
-from llenergymeasure.utils.env_config import docker_gpus_arg
 from llenergymeasure.utils.io import load_json
 
 logger = logging.getLogger(__name__)
 
 __all__ = [
     "StageCallback",
-    "build_baseline_docker_cmd",
     "parse_stage_line",
     "run_baseline_container",
 ]
@@ -58,74 +59,6 @@ StageCallback = Callable[[str, float, "dict[str, str]"], None]
 # "<STAGE_LINE_PREFIX> stage=<name> ...". Derived from the producer's exported
 # prefix so the two sides cannot drift.
 _STAGE_LINE_PREFIX = f"{STAGE_LINE_PREFIX} stage="
-
-
-BASELINE_SPEC_FILENAME = "baseline_spec.json"
-
-
-_BASELINE_ENTRY_MODULE = "llenergymeasure.entrypoints.baseline_measure"
-
-
-def build_baseline_docker_cmd(
-    image: str,
-    exchange_dir: str,
-    gpu_indices: list[int],
-    engine: str,
-    config_gpu_indices: list[int] | None = None,
-    labels: dict[str, str] | None = None,
-) -> list[str]:
-    """Build the ``docker run`` command list for a baseline-only container.
-
-    Reuses ``infra.docker.command.append_package_dispatch`` (the same mechanism
-    the experiment path uses) to bind-mount the host package source and route
-    through ``/llem-entry.sh``. Upstream engine images do not ship the
-    ``llenergymeasure`` package, so without this the baseline entry module would
-    fail with ``ModuleNotFoundError``. The script exec's the baseline entry
-    module (set via ``LLEM_ENTRY_MODULE``) instead of the experiment one.
-
-    Two distinct GPU params: ``gpu_indices`` are the LOGICAL in-container
-    monitoring indices (``CUDA_VISIBLE_DEVICES``); ``config_gpu_indices`` are the
-    study's HOST ``--gpus`` selector (``study_execution.gpu_indices``, env>config
-    via ``docker_gpus_arg``; see ``utils.env_config.ENV_DOCKER_GPUS``). Threading
-    the latter scopes the baseline container to the same physical devices as the
-    experiment container, so a config-pinned study does not baseline the wrong GPU.
-
-    ``labels`` are the study's container ownership labels
-    (``container_lifecycle.generate_container_labels``), emitted as ``--label``
-    flags before the image exactly as the experiment path does. A baseline
-    container is short-lived but holds the GPU while it samples, so it must be
-    attributable to its study and reachable by the study-scoped cleanup and the
-    orphan reaper if the launching process dies mid-measurement.
-
-    Kept separate from ``run_baseline_container`` so tests can assert on the
-    command shape without mocking subprocess internals.
-    """
-    cuda_visible = ",".join(str(i) for i in gpu_indices) if gpu_indices else ""
-    spec_container_path = f"{CONTAINER_EXCHANGE_DIR}/{BASELINE_SPEC_FILENAME}"
-    cmd = [
-        "docker",
-        "run",
-        "--rm",
-        "--gpus",
-        docker_gpus_arg(config_gpu_indices),
-        "-v",
-        f"{exchange_dir}:{CONTAINER_EXCHANGE_DIR}",
-        "-e",
-        f"{ENV_BASELINE_SPEC_PATH}={spec_container_path}",
-        "-e",
-        f"CUDA_VISIBLE_DEVICES={cuda_visible}",
-    ]
-    # Forward host NCCL_* env vars so multi-GPU tuning/workaround settings
-    # (e.g. NCCL_P2P_DISABLE=1 on PCIe hosts without functional GPU P2P) reach
-    # the baseline process inside the container, matching the experiment path.
-    append_nccl_env(cmd)
-    # Mount the package + bootstrap and point --entrypoint at /llem-entry.sh,
-    # which makes the package importable and exec's the baseline entry module.
-    append_package_dispatch(cmd, engine=engine, entry_module=_BASELINE_ENTRY_MODULE)
-    # Ownership labels for lifecycle management (cleanup, reaper).
-    cmd += docker_label_args(labels)
-    cmd.append(image)
-    return cmd
 
 
 def parse_stage_line(line: str) -> tuple[str, dict[str, str]] | None:
@@ -198,7 +131,7 @@ def run_baseline_container(
             ``LLEM_DOCKER_GPUS`` behaviour.
         labels: Study container ownership labels, so the study-scoped cleanup
             and the orphan reaper see this container too (see
-            :func:`build_baseline_docker_cmd`).
+            :func:`~llenergymeasure.infra.docker.command.build_baseline_container_argv`).
 
     Returns:
         A ``BaselineCache`` with ``method=None`` on success (the caller sets
@@ -219,7 +152,7 @@ def run_baseline_container(
     }
     spec_path.write_text(json.dumps(spec_payload, indent=2), encoding="utf-8")
 
-    cmd = build_baseline_docker_cmd(
+    cmd = build_baseline_container_argv(
         image=image,
         exchange_dir=str(exchange_dir),
         gpu_indices=list(gpu_indices),

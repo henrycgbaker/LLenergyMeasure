@@ -11,7 +11,7 @@ Manages the full container lifecycle for Docker-isolated experiment execution. A
 | Module | Description |
 |--------|-------------|
 | `docker_runner.py` | `DockerRunner` facade - dispatches a single experiment to an ephemeral container; composes the `docker/` package |
-| `docker/command.py` | Pure `docker run` command builders (env, mounts, GPU/shm flags, image ref, package-dispatch bootstrap) |
+| `docker/command.py` | The single home for `docker run` argv: one shared core plus the three container shapes (offline experiment dispatch, idle baseline, engine server) as parameterisations of it |
 | `docker/lifecycle.py` | Container process execution: image ensure, `launch()`, block-until-exit `wait_to_completion()`, and the stdout-silence watchdog |
 | `docker/exchange.py` | Exchange-dir lifecycle, result read, and the artefact rescue sweep |
 | `docker/diagnostics.py` | Container failure classification (log tail, error payload, error mapping) |

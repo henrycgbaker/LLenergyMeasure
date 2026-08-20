@@ -288,8 +288,8 @@ def docker_hf_cache_dir() -> Path:
 #: In-container mount target for the HuggingFace cache (and the value ``HF_HOME``
 #: is set to). Fixed: only the host source is configurable (via
 #: ``LLEM_DOCKER_HF_CACHE`` / :func:`docker_hf_cache_dir`). Single-sourced here so
-#: the offline batch dispatch and the online-server launch cannot drift on where
-#: weights are cached.
+#: the two container shapes that load model weights - the offline batch dispatch
+#: and the online-server launch - cannot drift on where weights are cached.
 HF_CACHE_CONTAINER_PATH: Final = "/root/.cache/huggingface"
 
 
@@ -298,12 +298,12 @@ def hf_cache_mount_args() -> list[str]:
 
     ``["-v", "<host>:/root/.cache/huggingface", "-e",
     "HF_HOME=/root/.cache/huggingface"]`` where the host source is
-    :func:`docker_hf_cache_dir`. Both container shapes built in
-    ``infra/docker/command.py`` - the offline batch dispatch and the
-    online-server launch - build their HF mount here and share the in-container
-    target and ``HF_HOME`` value via :data:`HF_CACHE_CONTAINER_PATH`, so the two
-    cannot drift on where weights are cached. Without the mount a launched server
-    re-downloads the full model weights on every run.
+    :func:`docker_hf_cache_dir`. The two container shapes that load model weights
+    - the offline batch dispatch and the online-server launch, both built in
+    ``infra/docker/command.py`` - build their HF mount here and share the
+    in-container target and ``HF_HOME`` value via :data:`HF_CACHE_CONTAINER_PATH`,
+    so the two cannot drift on where weights are cached. Without the mount a
+    launched server re-downloads the full model weights on every run.
     """
     host = docker_hf_cache_dir()
     return ["-v", f"{host}:{HF_CACHE_CONTAINER_PATH}", "-e", f"HF_HOME={HF_CACHE_CONTAINER_PATH}"]

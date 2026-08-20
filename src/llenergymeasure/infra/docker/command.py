@@ -7,17 +7,32 @@ materialising the dispatch assets (entrypoint script + requirements list) to a
 host tempdir for bind-mounting, and ensuring the host deps cache exists - both
 process-cached and idempotent.
 
-This is the single home for ``docker run`` argv construction, so the container
-shapes cannot drift apart unnoticed: :func:`build_docker_cmd` builds the
-run-to-completion experiment dispatch and :func:`build_server_container_argv`
-builds the long-lived engine-server launch. Consumed by
-``DockerRunner._build_docker_cmd`` (the experiment dispatch), by
-``study.baseline_container`` (the baseline dispatch) - which share
-:func:`append_package_dispatch` and :func:`append_nccl_env` so the two setups
-cannot drift - and by each engine's server adapter, which passes the argv built
-here to the serving layer's launcher. :func:`docker_label_args` is shared by all
-three, so their emission of the study's container ownership labels cannot drift
-either.
+This is the single home for ``docker run`` argv construction. One core,
+:func:`build_container_argv`, assembles every container this framework launches;
+the three shapes are parameterisations of it:
+
+- :func:`build_docker_cmd` - the offline experiment dispatch. Runs to completion,
+  forwards the host LLEM_* environment, and carries the full mount set.
+- :func:`build_baseline_container_argv` - the idle-baseline measurement. Runs to
+  completion, shares the package-dispatch bootstrap with the experiment shape,
+  and is anonymous.
+- :func:`build_server_container_argv` - the long-lived engine server. Detached,
+  on the host network, and deliberately not auto-removed.
+
+Their divergences are real and each is stated where it is chosen, but nothing
+they have in common is written more than once, so the shapes cannot drift apart
+on the removal policy, the GPU selector, the ownership labels, or the rule that
+every flag precedes the image. Consumed by ``DockerRunner._build_docker_cmd``,
+``study.baseline_container``, and each engine's server adapter, which passes the
+argv it builds here to the serving layer's launcher.
+
+Scope: these are the shapes llenergymeasure runs a WORKLOAD in. The two one-shot
+diagnostic ``docker run`` probes elsewhere in ``infra`` (the engine-version probe
+in ``version_handshake``, the GPU-visibility probe in ``docker_preflight``) stay
+separate on purpose - neither carries a measurement, and neither can go through
+this core without changing what it does: the version probe requests NO GPU at all
+(so it still answers on a host without the NVIDIA container runtime) and the
+preflight probe runs a fixed CUDA base image rather than an engine image.
 """
 
 from __future__ import annotations
@@ -29,8 +44,9 @@ import importlib.resources
 import os
 import shutil
 import tempfile
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Final
+from typing import Any, Final, Literal
 
 import platformdirs
 
@@ -59,12 +75,36 @@ from llenergymeasure.utils.env_config import (
 from llenergymeasure.utils.exceptions import DockerPreFlightError
 
 __all__ = [
+    "BASELINE_SPEC_FILENAME",
+    "LIFETIME_DETACHED",
+    "LIFETIME_RUN_TO_COMPLETION",
+    "ContainerLifetime",
     "append_nccl_env",
     "append_package_dispatch",
+    "build_baseline_container_argv",
+    "build_container_argv",
     "build_docker_cmd",
     "build_server_container_argv",
     "docker_label_args",
 ]
+
+#: The container runs to completion and docker removes it on exit (``--rm``).
+LIFETIME_RUN_TO_COMPLETION: Final = "run_to_completion"
+#: The container is launched detached (``-d``) and deliberately NOT ``--rm``, so
+#: a crash-on-startup survives for its logs to be read. Removal is then the
+#: launcher's explicit responsibility.
+LIFETIME_DETACHED: Final = "detached"
+#: Which of the two removal policies a container shape wants.
+ContainerLifetime = Literal["run_to_completion", "detached"]
+
+#: Filename of the baseline spec inside the exchange dir. The host writes it and
+#: the container reads it back from the mounted exchange dir, so both sides name
+#: it from here.
+BASELINE_SPEC_FILENAME: Final = "baseline_spec.json"
+
+#: Entry module the baseline shape points the in-container entrypoint script at,
+#: instead of the experiment module the script defaults to.
+_BASELINE_ENTRY_MODULE: Final = "llenergymeasure.entrypoints.baseline_measure"
 
 # Reserved exchange env keys the docker command builders set deliberately
 # (via -e or --env-file). The blanket "forward every host LLEM_* var" loop
@@ -308,8 +348,8 @@ def append_package_dispatch(
     installs, no editable-detection, no llem dist-info in-container (the editable
     flow has always run without it, proving container-side code never needs it).
 
-    Shared by the experiment dispatch (``DockerRunner._build_docker_cmd``) and
-    the baseline dispatch (``study.baseline_container.build_baseline_docker_cmd``)
+    Shared by the experiment dispatch (:func:`build_docker_cmd`) and the baseline
+    dispatch (:func:`build_baseline_container_argv`)
     so the two package-import setups cannot drift.
 
     Args:
@@ -366,8 +406,8 @@ def append_nccl_env(cmd: list[str]) -> None:
     Uses explicit ``-e KEY=VALUE`` (matching the ``LLEM_*`` forwarding idiom in
     ``build_docker_cmd``) and iterates keys in sorted order so the built command
     is deterministic (tests assert on argv). Shared by the experiment dispatch
-    (``DockerRunner._build_docker_cmd``) and the baseline dispatch
-    (``study.baseline_container.build_baseline_docker_cmd``) so the two
+    (:func:`build_docker_cmd`) and the baseline dispatch
+    (:func:`build_baseline_container_argv`) so the two
     env-forwarding setups cannot drift.
 
     Args:
@@ -405,6 +445,73 @@ def docker_label_args(labels: dict[str, str] | None) -> list[str]:
     return argv
 
 
+def build_container_argv(
+    *,
+    image: str,
+    gpu_indices: list[int] | None,
+    lifetime: ContainerLifetime,
+    host_network: bool = False,
+    flags: Sequence[str] = (),
+    container_name: str | None = None,
+    labels: dict[str, str] | None = None,
+    identity_before_flags: bool = False,
+    command: Sequence[str] = (),
+) -> list[str]:
+    """Assemble one ``docker run`` argv. The single core the three shapes share.
+
+    Every container llenergymeasure launches is built here, so the invariants
+    none of the shapes may break are enforced in one place rather than repeated
+    three times: the argv opens with ``docker run``, the removal policy is a
+    named decision rather than a literal that can be silently "fixed", the GPU
+    selector always goes through :func:`docker_gpus_arg`, identity (name and
+    ownership labels) is always rendered by :func:`docker_label_args` and always
+    lands before the image, and the image itself comes after every flag with the
+    container command after it. ``docker run`` treats everything following the
+    image reference as the container's own command, so that last ordering rule is
+    not cosmetic.
+
+    What differs per shape is passed in, and every divergence is deliberate:
+
+    - ``lifetime`` picks the removal policy. ``"run_to_completion"`` emits
+      ``--rm``: the caller blocks until the container exits and docker reaps it.
+      ``"detached"`` emits ``-d`` and NO ``--rm``, because a detached server that
+      crashes during startup must SURVIVE for ``docker logs`` to recover the
+      diagnostic; ``--rm`` would destroy the exited container within about a
+      second and the logs with it. That makes removal the launcher's explicit
+      job, not docker's.
+    - ``host_network`` emits ``--network host``. Only the engine-server shape
+      wants it (client and server co-located on one host, the convention
+      genai-perf, vllm benchmark_serving and MLPerf vendor repros follow, because
+      docker bridge overhead is real and directional). Sharing the host network
+      namespace is also why that shape publishes no port with ``-p``: the server
+      binds the host port directly.
+    - ``flags`` are the shape's own flags: mounts, environment, resource limits,
+      and the package-dispatch bootstrap where the shape needs one. Passed
+      already assembled because their internal order is part of each shape's
+      contract.
+    - ``identity_before_flags`` places ``--name`` and the ownership labels ahead
+      of ``flags`` instead of after them. Docker parses every pre-image flag
+      order-independently, so this changes nothing about the container; it exists
+      only so each shape's emitted argv keeps the exact flag order its own tests
+      and reviewers read, and no shape has to hand-roll its identity to get it.
+    - ``command`` is appended after the image, for shapes that pass a command
+      rather than relying on the image entrypoint.
+    """
+    argv = ["docker", "run"]
+    argv.append("-d" if lifetime == LIFETIME_DETACHED else "--rm")
+    if host_network:
+        argv += ["--network", "host"]
+    argv += ["--gpus", docker_gpus_arg(gpu_indices)]
+    identity: list[str] = []
+    if container_name:
+        identity += ["--name", container_name]
+    identity += docker_label_args(labels)
+    argv += identity + list(flags) if identity_before_flags else list(flags) + identity
+    argv.append(image)
+    argv += list(command)
+    return argv
+
+
 def build_server_container_argv(
     *,
     image: str,
@@ -416,24 +523,15 @@ def build_server_container_argv(
 ) -> list[str]:
     """Build the ``docker run`` argv for a long-lived engine server container.
 
-    Detached (``-d``) so the launch returns immediately and readiness is polled.
-    Deliberately NO ``--rm``: a container that crashes during startup must
-    SURVIVE so ``docker logs`` can recover the startup diagnostic (the
-    failure-artefact hand-off the server handle's log reader promises). ``--rm``
-    destroys the exited container within ~1s of the crash and the logs with it, so
-    the diagnostic would be permanently lost. Leak-freeness is instead the
-    explicit responsibility of the serving layer that runs this argv: its
-    shutdown (``docker stop`` then ``docker rm -f``), its crashed-startup
-    fast-detection, and its failed-launch cleanup all force-remove.
+    The detached shape: ``-d`` so the launch returns immediately and readiness is
+    polled separately, no ``--rm`` so a crash-on-startup leaves its logs
+    recoverable, and ``--network host`` so a co-located client reaches the server
+    over loopback. The port is selected inside ``serve_args`` (e.g.
+    ``--port 8000``) rather than published with ``-p``, because the container
+    shares the host network namespace. See :func:`build_container_argv` for why
+    each of those is the right call for this shape.
 
-    ``--network host`` is UNCONDITIONAL (the peer convention: genai-perf, vllm
-    benchmark_serving and MLPerf vendor repros
-    co-locate client + server on one host; docker bridge overhead is real and
-    directional). Because the container shares the host network namespace, the
-    port is NOT published with ``-p`` - the server binds the host port directly,
-    which the port passed inside ``serve_args`` (e.g. ``--port 8000``) selects.
-
-    ``serve_args`` are the engine command appended after the image; for vLLM the
+    ``serve_args`` are the engine command appended after the image. For vLLM the
     upstream ``vllm/vllm-openai`` image's ``ENTRYPOINT`` is ``["vllm", "serve"]``,
     so the adapter passes ``[<model>, "--port", <port>]`` and the entrypoint
     supplies ``vllm serve``. TRT-LLM's NGC image is NOT entrypoint-baked with
@@ -445,32 +543,94 @@ def build_server_container_argv(
     with ``HF_HOME`` pointed at it (the SAME LLEM_DOCKER_HF_CACHE-driven mount the
     offline docker dispatch uses, via :func:`hf_cache_mount_args`), so a launched
     server reuses already-downloaded weights instead of re-downloading the full
-    model on every run.
+    model on every run. This shape accepts no user-supplied mounts, so it takes
+    the unconditional form rather than the offline shape's
+    do-not-clobber-the-user variant, and it is the ONLY mount it needs.
 
     ``labels`` are the study's container ownership labels (the same ones the
-    offline docker dispatch sets), rendered by :func:`docker_label_args`, so a
-    server container is attributable to its study and reachable by the
-    study-scoped cleanup and the orphan reaper. A server container that outlives
-    its launching process - the exact case shutdown cannot cover - is otherwise
-    invisible to them.
+    offline docker dispatch sets), so a server container is attributable to its
+    study and reachable by the study-scoped cleanup and the orphan reaper. A
+    server container that outlives its launching process - the exact case
+    shutdown cannot cover - is otherwise invisible to them.
     """
-    argv = [
-        "docker",
-        "run",
-        "-d",
-        "--network",
-        "host",
-        "--gpus",
-        docker_gpus_arg(gpu_indices),
+    return build_container_argv(
+        image=image,
+        gpu_indices=gpu_indices,
+        lifetime=LIFETIME_DETACHED,
+        host_network=True,
+        flags=["--shm-size", shm_size or docker_shm_size(), *hf_cache_mount_args()],
+        container_name=container_name,
+        labels=labels,
+        identity_before_flags=True,
+        command=serve_args,
+    )
+
+
+def build_baseline_container_argv(
+    *,
+    image: str,
+    exchange_dir: str,
+    gpu_indices: list[int],
+    engine: str,
+    config_gpu_indices: list[int] | None = None,
+    labels: dict[str, str] | None = None,
+) -> list[str]:
+    """Build the ``docker run`` argv for a short-lived baseline-only container.
+
+    A host-measured idle baseline underestimates the container's idle GPU power,
+    because the host has no CUDA context and no torch memory pool seeded. This
+    shape measures the baseline inside a container whose CUDA state matches the
+    experiment container's, which removes that bias.
+
+    Run-to-completion like the experiment shape (``--rm``, the caller blocks),
+    and it routes through :func:`append_package_dispatch` for the same reason:
+    upstream engine images do not ship the ``llenergymeasure`` package, so
+    without the bind-mounted source the baseline entry module would fail with
+    ``ModuleNotFoundError``. It differs from the experiment shape only in what it
+    needs: the baseline entry module instead of the experiment one, no
+    ``--shm-size`` (it allocates no shared-memory dataloader workers), no
+    LLEM_* forwarding, and no user-supplied mounts.
+
+    Two distinct GPU params: ``gpu_indices`` are the LOGICAL in-container
+    monitoring indices (``CUDA_VISIBLE_DEVICES``); ``config_gpu_indices`` are the
+    study's HOST ``--gpus`` selector (``study_execution.gpu_indices``, env>config
+    via ``docker_gpus_arg``; see ``utils.env_config.ENV_DOCKER_GPUS``). Threading
+    the latter scopes the baseline container to the same physical devices as the
+    experiment container, so a config-pinned study does not baseline the wrong GPU.
+
+    This shape is anonymous - it takes ``labels`` but no ``--name``. A baseline
+    container is short-lived, but it holds the GPU while it samples, so the
+    ownership labels are what make it attributable to its study and reachable by
+    the study-scoped cleanup and the orphan reaper if the launching process dies
+    mid-measurement.
+
+    Kept separate from the dispatch that runs it so tests can assert on the argv
+    without mocking subprocess internals.
+    """
+    cuda_visible = ",".join(str(i) for i in gpu_indices) if gpu_indices else ""
+    spec_container_path = f"{CONTAINER_EXCHANGE_DIR}/{BASELINE_SPEC_FILENAME}"
+    flags = [
+        "-v",
+        f"{exchange_dir}:{CONTAINER_EXCHANGE_DIR}",
+        "-e",
+        f"{ENV_BASELINE_SPEC_PATH}={spec_container_path}",
+        "-e",
+        f"CUDA_VISIBLE_DEVICES={cuda_visible}",
     ]
-    if container_name:
-        argv += ["--name", container_name]
-    argv += docker_label_args(labels)
-    argv += ["--shm-size", shm_size or docker_shm_size()]
-    argv += hf_cache_mount_args()
-    argv.append(image)
-    argv += list(serve_args)
-    return argv
+    # Forward host NCCL_* env vars so multi-GPU tuning/workaround settings
+    # (e.g. NCCL_P2P_DISABLE=1 on PCIe hosts without functional GPU P2P) reach
+    # the baseline process inside the container, matching the experiment path.
+    append_nccl_env(flags)
+    # Mount the package + bootstrap and point --entrypoint at /llem-entry.sh,
+    # which makes the package importable and exec's the baseline entry module.
+    append_package_dispatch(flags, engine=engine, entry_module=_BASELINE_ENTRY_MODULE)
+    return build_container_argv(
+        image=image,
+        gpu_indices=config_gpu_indices,
+        lifetime=LIFETIME_RUN_TO_COMPLETION,
+        flags=flags,
+        labels=labels,
+    )
 
 
 def _mount_if_absent(
@@ -545,12 +705,7 @@ def build_docker_cmd(
     Returns:
         List of strings suitable for ``subprocess.run``.
     """
-    cmd = [
-        "docker",
-        "run",
-        "--rm",
-        "--gpus",
-        docker_gpus_arg(gpu_indices),
+    flags = [
         "-v",
         f"{exchange_dir}:{CONTAINER_EXCHANGE_DIR}",
         "-e",
@@ -561,7 +716,7 @@ def build_docker_cmd(
 
     # Propagate secrets via --env-file (never as -e KEY=VALUE CLI args)
     if env_path is not None:
-        cmd.extend(["--env-file", str(env_path)])
+        flags.extend(["--env-file", str(env_path)])
 
     # TRT-LLM engine cache: persist compiled engines across ephemeral
     # containers. Also default LLEM_TRT_BUILD_CACHE_PATH to the mount target
@@ -571,7 +726,7 @@ def build_docker_cmd(
     # last-wins).
     if config.engine == Engine.TENSORRT:
         _mount_if_absent(
-            cmd,
+            flags,
             str(trt_build_cache_host_dir()),
             _TRT_BUILD_CACHE_CONTAINER_PATH,
             extra_mounts,
@@ -582,7 +737,7 @@ def build_docker_cmd(
     # ephemeral containers; otherwise each run re-downloads the full model.
     # The host source is configurable via LLEM_DOCKER_HF_CACHE.
     _mount_if_absent(
-        cmd,
+        flags,
         docker_hf_cache_dir(),
         _HF_CACHE_CONTAINER_PATH,
         extra_mounts,
@@ -593,7 +748,7 @@ def build_docker_cmd(
     # already-compiled per-arch attention kernels (cold compile is minutes).
     if config.engine == Engine.TENSORRT:
         _mount_if_absent(
-            cmd, Path.home() / ".cache" / "flashinfer", "/root/.cache/flashinfer", extra_mounts
+            flags, Path.home() / ".cache" / "flashinfer", "/root/.cache/flashinfer", extra_mounts
         )
 
     # Forward LLEM_* env vars into the container so framework defaults set
@@ -605,16 +760,16 @@ def build_docker_cmd(
     # value.
     for env_key, env_val in os.environ.items():
         if env_key.startswith("LLEM_") and env_val and env_key not in _RESERVED_EXCHANGE_ENV:
-            cmd.extend(["-e", f"{env_key}={env_val}"])
+            flags.extend(["-e", f"{env_key}={env_val}"])
 
     # Forward host NCCL_* env vars so multi-GPU tuning/workaround settings
     # (e.g. NCCL_P2P_DISABLE=1 on PCIe hosts without functional GPU P2P)
     # reach the engine process, which runs inside the container.
-    append_nccl_env(cmd)
+    append_nccl_env(flags)
 
     # Extra volume mounts (engine cache, model cache, etc.)
     for host_path, container_path in extra_mounts:
-        cmd.extend(["-v", f"{host_path}:{container_path}"])
+        flags.extend(["-v", f"{host_path}:{container_path}"])
 
     # All engines: bind-mount the host package source + bootstrap (so the
     # package is importable in images that don't ship it) and point
@@ -624,15 +779,17 @@ def build_docker_cmd(
     # (``llenergymeasure.entrypoints.container``), so entry_module stays None.
     # ``Engine`` is a (str, Enum) so ``f"{config.engine}"`` resolves to the
     # raw value via its ``__str__`` override.
-    append_package_dispatch(cmd, engine=f"{config.engine}")
+    append_package_dispatch(flags, engine=f"{config.engine}")
 
-    # Container name and labels for lifecycle management (cleanup, reaper).
-    if container_name:
-        cmd.extend(["--name", container_name])
-    cmd += docker_label_args(labels)
-
-    cmd.append(image)
-
-    # No post-image args - the entrypoint script invokes the framework
-    # module itself; config is passed via env vars (LLEM_CONFIG_PATH etc.).
-    return cmd
+    # No post-image command - the entrypoint script invokes the framework module
+    # itself; config is passed via env vars (LLEM_CONFIG_PATH etc.). The name and
+    # ownership labels for lifecycle management (cleanup, reaper) are emitted by
+    # the core, after these flags and before the image.
+    return build_container_argv(
+        image=image,
+        gpu_indices=gpu_indices,
+        lifetime=LIFETIME_RUN_TO_COMPLETION,
+        flags=flags,
+        container_name=container_name,
+        labels=labels,
+    )
