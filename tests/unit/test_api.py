@@ -32,7 +32,13 @@ from llenergymeasure import (
 )
 from llenergymeasure.domain.experiment import StudySummary
 from llenergymeasure.utils.exceptions import EngineError, PreFlightError
-from tests.conftest import make_config, make_result, make_study_result, make_user_config
+from tests.conftest import (
+    make_config,
+    make_resolved_study,
+    make_result,
+    make_study_result,
+    make_user_config,
+)
 
 # =============================================================================
 # Test 1: Public imports resolve
@@ -349,7 +355,7 @@ def test_run_calls_preflight_once_per_config(monkeypatch, tmp_path):
     )
 
     config1 = ExperimentConfig(task={"model": "gpt2"}, serving_mode="offline")
-    study = StudyConfig(experiments=[config1])
+    study = make_resolved_study([config1])
 
     api_module.orchestrate_study(study)
 
@@ -390,8 +396,8 @@ def test_run_preserves_runner_abort_status(monkeypatch, tmp_path, abort_status):
     )
 
     # Two experiments -> multi-experiment path -> dispatches via _run_via_runner.
-    study = StudyConfig(
-        experiments=[
+    study = make_resolved_study(
+        [
             ExperimentConfig(task={"model": "gpt2"}, serving_mode="offline"),
             ExperimentConfig(task={"model": "distilgpt2"}, serving_mode="offline"),
         ]
@@ -435,7 +441,7 @@ def test_run_skips_preflight_when_preresolved_supplied(monkeypatch, tmp_path):
     )
 
     config = ExperimentConfig(task={"model": "gpt2"}, engine="transformers", serving_mode="offline")
-    study = StudyConfig(experiments=[config])
+    study = make_resolved_study([config])
 
     preresolved: tuple[dict[str, RunnerSpec], dict[str, dict[str, str]]] = (
         {"transformers": RunnerSpec(mode="process", image=None, source="test")},
@@ -555,7 +561,7 @@ def test_run_preresolved_without_skip_preflight_raises():
     from llenergymeasure.config.runner_spec import RunnerSpec
 
     config = ExperimentConfig(task={"model": "gpt2"}, engine="transformers", serving_mode="offline")
-    study = StudyConfig(experiments=[config])
+    study = make_resolved_study([config])
 
     preresolved: tuple[dict[str, RunnerSpec], dict[str, dict[str, str]]] = (
         {"transformers": RunnerSpec(mode="process", image=None, source="test")},
@@ -599,7 +605,7 @@ def test_run_calls_get_engine_with_correct_name(monkeypatch, tmp_path):
     )
 
     config = ExperimentConfig(task={"model": "gpt2"}, engine="transformers", serving_mode="offline")
-    study = StudyConfig(experiments=[config])
+    study = make_resolved_study([config])
 
     api_module.orchestrate_study(study)
 
@@ -634,7 +640,7 @@ def test_run_returns_study_result(monkeypatch, tmp_path):
     )
 
     config = ExperimentConfig(task={"model": "gpt2"}, serving_mode="offline")
-    study = StudyConfig(experiments=[config], study_name="my-study")
+    study = make_resolved_study([config], study_name="my-study")
 
     study_result = api_module.orchestrate_study(study)
 
@@ -668,7 +674,7 @@ def test_run_propagates_preflight_error(monkeypatch, tmp_path):
     )
 
     config = ExperimentConfig(task={"model": "gpt2"}, serving_mode="offline")
-    study = StudyConfig(experiments=[config])
+    study = make_resolved_study([config])
 
     with pytest.raises(PreFlightError):
         api_module.orchestrate_study(study)
@@ -698,7 +704,7 @@ def test_run_propagates_engine_error(monkeypatch, tmp_path):
     )
 
     config = ExperimentConfig(task={"model": "gpt2"}, serving_mode="offline")
-    study = StudyConfig(experiments=[config])
+    study = make_resolved_study([config])
 
     with pytest.raises(EngineError, match="GPU out of memory"):
         api_module.orchestrate_study(study)
@@ -846,8 +852,8 @@ def test_run_dispatches_single_in_process(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(StudyRunner, "__init__", mock_runner_init)
 
-    study = StudyConfig(
-        experiments=[ExperimentConfig(task={"model": "gpt2"}, serving_mode="offline")],
+    study = make_resolved_study(
+        [ExperimentConfig(task={"model": "gpt2"}, serving_mode="offline")],
         study_execution={"n_cycles": 1, "experiment_order": "sequential"},
     )
     api_module.orchestrate_study(study)
@@ -932,8 +938,8 @@ def test_run_resolves_runners_and_passes_to_study_runner(monkeypatch, tmp_path):
 
     monkeypatch.setattr(StudyRunner, "run", lambda self: [mock_result])
 
-    study = StudyConfig(
-        experiments=[
+    study = make_resolved_study(
+        [
             ExperimentConfig(task={"model": "gpt2"}, engine="transformers", serving_mode="offline"),
             ExperimentConfig(
                 task={"model": "gpt2-medium"}, engine="transformers", serving_mode="offline"
@@ -984,9 +990,7 @@ def test_run_mixed_runner_warning_logged(monkeypatch, tmp_path, caplog):
         lambda result, output_dir, **kw: tmp_path / "result.json",
     )
 
-    study = StudyConfig(
-        experiments=[ExperimentConfig(task={"model": "gpt2"}, serving_mode="offline")]
-    )
+    study = make_resolved_study([ExperimentConfig(task={"model": "gpt2"}, serving_mode="offline")])
 
     with caplog.at_level(logging.WARNING, logger="llenergymeasure.study.orchestration"):
         api_module.orchestrate_study(study)
@@ -1005,7 +1009,7 @@ def test_run_mixed_runner_warning_logged(monkeypatch, tmp_path, caplog):
 def test_study_summary_total_experiments_no_double_multiply(monkeypatch, tmp_path):
     """total_experiments == len(study.experiments) - no double-multiply by n_cycles.
 
-    The study passed to _run() has experiments already cycle-expanded (as load_study_config
+    The study passed to _run() has experiments already cycle-expanded (as resolve_study
     does). With 2 unique configs and n_cycles=3, study.experiments has 6 entries.
     total_experiments must be 6, not 18 (the pre-fix bug: 6 * 3).
     unique_configurations must be 2 (6 / 3).
@@ -1041,21 +1045,17 @@ def test_study_summary_total_experiments_no_double_multiply(monkeypatch, tmp_pat
     )
     monkeypatch.setattr(api_module, "_run_via_runner", mock_run_via_runner)
 
-    # Simulate what load_study_config returns: experiments already cycle-expanded.
-    # 2 unique configs x 3 cycles = 6 entries, n_cycles=3 in execution config.
-    expanded_experiments = [
-        ExperimentConfig(task={"model": "gpt2"}, serving_mode="offline"),
-        ExperimentConfig(task={"model": "gpt2-medium"}, serving_mode="offline"),
-        ExperimentConfig(task={"model": "gpt2"}, serving_mode="offline"),
-        ExperimentConfig(task={"model": "gpt2-medium"}, serving_mode="offline"),
+    # resolve_study cycle-expands the declared configs, so hand it the 2 unique
+    # ones and let it produce the 6-entry execution sequence.
+    unique_experiments = [
         ExperimentConfig(task={"model": "gpt2"}, serving_mode="offline"),
         ExperimentConfig(task={"model": "gpt2-medium"}, serving_mode="offline"),
     ]
-    study = StudyConfig(
-        experiments=expanded_experiments,
+    study = make_resolved_study(
+        unique_experiments,
         study_execution={"n_cycles": 3, "experiment_order": "sequential"},
     )
-    # Verify our study fixture has exactly 6 experiments
+    # Resolution expanded the 2 unique configs into 6 cycle entries
     assert len(study.experiments) == 6
 
     study_result = api_module.orchestrate_study(study)
