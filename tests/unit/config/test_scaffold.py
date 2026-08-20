@@ -272,7 +272,7 @@ def test_bounds_round_trips_to_series_product(engine: str, tmp_path: Path) -> No
     sweep = _sweep_block(text)
     product = math.prod(len(v) for v in sweep.values())
     # The full grid = valid combos + combos a cross-field error rule prunes.
-    valid_grid, skipped_grid = expand_grid(yaml.safe_load(text))
+    valid_grid, skipped_grid, _swept = expand_grid(yaml.safe_load(text))
     study = _load_without_config_warnings(path)
     assert product > 1
     assert len(valid_grid) + len(skipped_grid) == product
@@ -304,7 +304,7 @@ def test_bounds_all_engines_round_trips_to_sum_of_products(tmp_path: Path) -> No
     product = sum(math.prod(lengths) for lengths in per_engine.values())
     # The full grid = valid combos + combos a cross-field error rule prunes
     # (tensorrt backend=pytorch + fast_build=true).
-    valid_grid, skipped_grid = expand_grid(yaml.safe_load(text))
+    valid_grid, skipped_grid, _swept = expand_grid(yaml.safe_load(text))
     study = _load_without_config_warnings(path)
     assert len(valid_grid) + len(skipped_grid) == product
     assert len(study.declared_resolved_config_hashes) == len(valid_grid)

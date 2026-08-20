@@ -511,3 +511,68 @@ def test_hermetic_resolution_leaves_gaps_unset() -> None:
 
     assert resolved.study_execution.experiment_gap_seconds is None
     assert resolved.study_execution.cycle_gap_seconds is None
+
+
+# ---------------------------------------------------------------------------
+# Per-experiment provenance is emitted by the merges, formatted at resolution
+# ---------------------------------------------------------------------------
+
+
+def test_provenance_logs_label_swept_and_overridden_fields(tmp_path, monkeypatch):
+    """The sidecar provenance labels come from the merges that resolved the study.
+
+    The sweep expansion emits the paths it varied and the CLI-override merge
+    records the paths it overlaid; resolve_study formats them into per-experiment
+    logs keyed by declared hash. No post-hoc diffing decides a label.
+    """
+    monkeypatch.setattr(
+        "llenergymeasure.config.user_config.load_user_config", lambda **_kw: UserConfig()
+    )
+    path = _write_study(
+        tmp_path,
+        {
+            "study_name": "prov",
+            "task": {"model": "gpt2"},
+            "engine": "transformers",
+            "serving_mode": "offline",
+            "sweep": {"transformers.llem_execution.batch_size": [1, 8]},
+        },
+    )
+    study = load_study(path, cli_overrides={"task": {"dataset": {"n_prompts": 7}}})
+
+    assert len(study.provenance_logs) == 2
+    for log in study.provenance_logs.values():
+        assert log["transformers.llem_execution.batch_size"]["source"] == "sweep"
+        assert log["task.dataset.n_prompts"]["source"] == "call_site"
+        assert log["task.dataset.n_prompts"]["effective"] == 7
+        assert log["task.model"]["source"] == "yaml"
+
+
+def test_provenance_logs_keyed_by_declared_hash(tmp_path, monkeypatch):
+    """Each unique declared config gets one log, keyed by its declared hash."""
+    from llenergymeasure.domain.experiment import compute_declared_config_hash
+
+    monkeypatch.setattr(
+        "llenergymeasure.config.user_config.load_user_config", lambda **_kw: UserConfig()
+    )
+    path = _write_study(
+        tmp_path,
+        {
+            "study_name": "prov-keys",
+            "task": {"model": "gpt2"},
+            "engine": "transformers",
+            "serving_mode": "offline",
+        },
+    )
+    study = load_study(path)
+
+    assert set(study.provenance_logs) == {
+        compute_declared_config_hash(exp) for exp in study.experiments
+    }
+
+
+def test_object_path_studies_get_yaml_labelled_provenance():
+    """A study built from objects has no sweep or CLI merges - fields label as yaml."""
+    resolved = resolve_study(_raw([_experiment()]))
+    (log,) = resolved.provenance_logs.values()
+    assert log["task.model"] == {"effective": "gpt2", "source": "yaml"}

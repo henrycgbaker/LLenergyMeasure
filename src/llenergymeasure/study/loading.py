@@ -74,7 +74,8 @@ def resolve_study(
       3. compute_study_design_hash() over the post-dedup configs - the hash
          identifies the *unique* measurement set, not duplicate declarations.
       4. apply_cycles() to produce the execution sequence.
-      5. Serialise pre-run equivalence groups for the sidecar writer.
+      5. Serialise pre-run equivalence groups and the per-experiment provenance
+         logs for the sidecar writers.
 
     Args:
         raw: Parsed + sweep-expanded study material.
@@ -166,6 +167,20 @@ def resolve_study(
     from llenergymeasure.domain.experiment import compute_declared_config_hash
 
     experiment_ids = [compute_declared_config_hash(exp) for exp in raw.valid_experiments]
+
+    # Per-experiment provenance for the config.json sidecars, keyed by declared
+    # hash. The labels were emitted by the merges that resolved the experiment
+    # (the CLI-override merge, the sweep expansion); this only formats them.
+    from llenergymeasure.config.provenance_log import format_experiment_provenance
+
+    provenance_logs: dict[str, dict[str, Any]] = {}
+    for exp, exp_id in zip(raw.valid_experiments, experiment_ids, strict=True):
+        if exp_id not in provenance_logs:
+            provenance_logs[exp_id] = format_experiment_provenance(
+                exp.model_dump(),
+                cli_override_paths=raw.cli_override_paths,
+                swept_paths=raw.swept_paths,
+            )
     pre_run_groups: list[dict[str, Any]] = [
         {
             "resolved_config_hash": g.resolved_config_hash,
@@ -190,6 +205,7 @@ def resolve_study(
         runners=settings.runners or None,
         images=settings.images or None,
         settings_provenance=settings.provenance,
+        provenance_logs=provenance_logs,
         study_design_hash=study_hash,
         skipped_configs=[s.to_dict() for s in raw.skipped],
         dedup_mode=dedup_mode,

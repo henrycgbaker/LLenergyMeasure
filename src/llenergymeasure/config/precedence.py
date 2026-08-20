@@ -37,7 +37,7 @@ Two resolvers are wired on top of the core:
   user-config leak). The overlay is applied during study resolution, before dedup,
   so dedup binds on the realised protocol.
 
-Not to be confused with :mod:`llenergymeasure.config.resolution`, which formats
+Not to be confused with :mod:`llenergymeasure.config.provenance_log`, which formats
 provenance for the per-experiment record - this module is the forward resolution
 that decides which value wins in the first place.
 

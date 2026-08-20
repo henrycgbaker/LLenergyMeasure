@@ -152,7 +152,7 @@ def _extract_rule_id(errors: list[dict[str, Any]]) -> str | None:
 def expand_grid(
     raw_study: dict[str, Any],
     study_yaml_path: Path | None = None,
-) -> tuple[list[ExperimentConfig], list[SkippedConfig]]:
+) -> tuple[list[ExperimentConfig], list[SkippedConfig], frozenset[str]]:
     """Expand sweep dimensions into a flat list of ExperimentConfig.
 
     Resolution order:
@@ -164,7 +164,9 @@ def expand_grid(
     4. Append explicit experiments: list entries
     5. Pydantic-validate each raw dict, collecting valid + skipped
 
-    Returns (valid_experiments, skipped_configs).
+    Returns (valid_experiments, skipped_configs, swept_paths) - swept_paths being
+    the dotted config paths the sweep expansion varied, emitted by the expansion
+    itself for provenance labelling.
     Raises ConfigError if all configs are invalid or no experiments produced.
     """
     # Step 1: Load base: inheritance
@@ -184,7 +186,9 @@ def expand_grid(
     # explicitly-empty key the same as an absent one rather than TypeError-ing
     # on the iteration below.
     explicit_entries = raw_study.get("experiments") or []
-    sweep_raw_configs = _expand_sweep(sweep, merged_fixed, synthesize_baseline=not explicit_entries)
+    sweep_raw_configs, swept_paths = _expand_sweep(
+        sweep, merged_fixed, synthesize_baseline=not explicit_entries
+    )
 
     # Step 4: Append explicit experiments: list entries
     # DEEP-merge each entry onto the fixed config, matching the sweep-axis path
@@ -295,7 +299,7 @@ def expand_grid(
     elif n_valid > 100:
         logger.info("Large study: %d experiments.", n_valid)
 
-    return valid, skipped
+    return valid, skipped, swept_paths
 
 
 def compute_study_design_hash(experiments: list[ExperimentConfig]) -> str:

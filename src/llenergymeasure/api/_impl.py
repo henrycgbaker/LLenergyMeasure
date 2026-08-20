@@ -262,9 +262,11 @@ def run_study(
         config_path: Original YAML config file path for copying to study artefacts.
             When config is a StudyConfig object, callers should pass the original
             path separately so the YAML is preserved for reproducibility.
-        cli_overrides: Flat dict of CLI flag overrides (e.g. {"model": "gpt2"}).
-            Used to build the per-experiment config.json ``provenance`` section
-            showing which fields were overridden by CLI flags vs YAML vs sweep.
+        cli_overrides: Overrides applied on top of the study file when ``config``
+            is a path (forwarded to :func:`load_study` as its call-site layer, so
+            they win over what the file declares and are recorded as ``call_site``
+            in the provenance). Ignored for a StudyConfig input, which the caller
+            has already built.
         preresolved: Optional ``(runner_specs, system_overrides)`` already
             computed by a prior ``run_study_preflight`` call (e.g. the CLI runs
             preflight to render the panel). When supplied, the orchestrator reuses
@@ -293,7 +295,7 @@ def run_study(
 
     if isinstance(config, (str, Path)):
         config_path = config_path or Path(config).resolve()
-        study = load_study(config_path, overrides=overrides)
+        study = load_study(config_path, cli_overrides=cli_overrides, overrides=overrides)
     elif isinstance(config, StudyConfig):
         # config_path may have been passed by caller (e.g. CLI pre-loads config)
         study = _resolve_objects(config, overrides=overrides)
@@ -332,7 +334,6 @@ def run_study(
         skip_set=skip_set,
         no_lock=no_lock,
         config_path=config_path,
-        cli_overrides=cli_overrides,
         preresolved=preresolved,
     )
 

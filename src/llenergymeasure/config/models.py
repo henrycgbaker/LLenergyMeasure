@@ -1696,6 +1696,15 @@ class StudyConfig(BaseModel):
             "taken as resolved and dispatched as-is."
         ),
     )
+    provenance_logs: dict[str, dict[str, Any]] = Field(
+        default_factory=dict,
+        description=(
+            "Per-experiment provenance for the config.json sidecars, keyed by "
+            "declared-config hash. Each entry maps dotted field paths to "
+            "{'effective', 'source', 'default'}, with sources from the merges that "
+            "resolved the experiment ('call_site' / 'sweep' / 'yaml')."
+        ),
+    )
     settings_provenance: dict[str, str] = Field(
         default_factory=dict,
         description=(

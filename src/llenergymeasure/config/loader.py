@@ -120,6 +120,12 @@ class LoadedStudyRaw:
         execution: Parsed execution block (cycles, ordering, dedup toggle).
         runners: Per-engine runner config, or None.
         images: Per-engine Docker image overrides, or None.
+        swept_paths: Dotted config paths the sweep expansion varied, emitted by
+            the expansion itself. Provenance labels a field as swept from these,
+            not by diffing the expanded experiments afterwards.
+        cli_override_paths: Dotted paths of the caller's ``cli_overrides``,
+            recorded at the merge that applied them. Provenance labels a field
+            as a call-site override from these.
     """
 
     valid_experiments: list[ExperimentConfig]
@@ -129,6 +135,8 @@ class LoadedStudyRaw:
     execution: ExecutionConfig
     runners: dict[str, str] | None
     images: dict[str, str] | None
+    swept_paths: frozenset[str] = frozenset()
+    cli_override_paths: frozenset[str] = frozenset()
 
 
 def load_study_config(
@@ -173,9 +181,13 @@ def load_study_config(
     path = Path(path)
     raw = _load_file(path)  # reuse existing _load_file - raises ConfigError on missing/parse error
 
-    # Apply CLI overrides (highest priority, deep-merged onto the parsed file)
+    # Apply CLI overrides (highest priority, deep-merged onto the parsed file),
+    # recording the paths the overlay set so provenance can label them without
+    # re-deriving the merge afterwards.
+    cli_override_paths: frozenset[str] = frozenset()
     if cli_overrides:
         raw = deep_merge(raw, cli_overrides)
+        cli_override_paths = frozenset(_dotted_leaf_paths(cli_overrides))
 
     # Strip version key (same as experiment loader)
     raw.pop("version", None)
@@ -197,7 +209,7 @@ def load_study_config(
 
     # Expand sweep → list[ExperimentConfig], collect skipped
     # Sweep resolution at YAML parse time, before Pydantic
-    valid_experiments, skipped = expand_grid(raw, study_yaml_path=path)
+    valid_experiments, skipped, swept_paths = expand_grid(raw, study_yaml_path=path)
 
     # Guard: empty study - expand_grid already raises if all_raw_configs is empty,
     # but we also need to handle the degenerate case where expand_grid itself
@@ -223,12 +235,30 @@ def load_study_config(
         execution=execution,
         runners=runners,
         images=images,
+        swept_paths=swept_paths,
+        cli_override_paths=cli_override_paths,
     )
 
 
 # =============================================================================
 # Private helpers
 # =============================================================================
+
+
+def _dotted_leaf_paths(data: dict[str, Any], prefix: str = "") -> list[str]:
+    """Dotted paths of every leaf in a (possibly dotted-keyed) override dict.
+
+    CLI overrides arrive either nested (``{"task": {"model": "m"}}``) or with
+    dotted keys (``{"task.model": "m"}``); both normalise to the same paths.
+    """
+    paths: list[str] = []
+    for key, value in data.items():
+        path = f"{prefix}{key}"
+        if isinstance(value, dict) and value:
+            paths.extend(_dotted_leaf_paths(value, f"{path}."))
+        else:
+            paths.append(path)
+    return paths
 
 
 def _load_file(path: Path | str) -> dict[str, Any]:

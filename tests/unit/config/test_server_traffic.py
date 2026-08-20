@@ -340,7 +340,7 @@ class TestModeScopedSweep:
             "server": {"traffic": {"rate": 2, "window_seconds": 60}},
             "sweep": {"server.traffic.rate": [2, 10]},
         }
-        valid, skipped = expand_grid(raw_study)
+        valid, skipped, _swept = expand_grid(raw_study)
         assert not skipped, skipped
         assert len(valid) == 2
         rates = sorted(c.server.traffic.rate for c in valid)

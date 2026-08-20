@@ -194,8 +194,14 @@ def _expand_sweep(
     sweep: dict[str, Any],
     fixed: dict[str, Any],
     synthesize_baseline: bool = True,
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], frozenset[str]]:
     """Expand a sweep: block into a flat list of raw experiment config dicts.
+
+    Returns ``(configs, swept_paths)``. ``swept_paths`` are the dotted config
+    paths the expansion itself varied - the independent axes, the keys inside
+    group variants, and ``engine`` when the expansion fans out across engines.
+    They are emitted here, by the machinery that does the varying, so provenance
+    can label a swept field without diffing the expanded experiments afterwards.
 
     Supports two entry types under ``sweep:``:
 
@@ -220,13 +226,13 @@ def _expand_sweep(
     """
     if not sweep:
         if not synthesize_baseline:
-            return []
+            return [], frozenset()
         task = fixed.get("task")
         has_model = isinstance(task, dict) and task.get("model")
         if has_model:
             engine = fixed.get("engine", "transformers")
-            return [_strip_other_engine_sections(dict(fixed), engine)]
-        return []
+            return [_strip_other_engine_sections(dict(fixed), engine)], frozenset()
+        return [], frozenset()
 
     # ── Step 1: Partition sweep into axes and groups ──
     universal_dims: dict[str, list[Any]] = {}
@@ -290,6 +296,14 @@ def _expand_sweep(
     else:
         engines = [fixed_engine]
 
+    # The paths this expansion varies: every axis key (universal and engine-scoped
+    # alike are already dotted config paths), every key a group variant sets, and
+    # engine itself when the expansion fans out across engines.
+    swept_paths: set[str] = set(axis_keys)
+    for variants in groups.values():
+        for variant in variants:
+            swept_paths.update(variant.keys())
+
     # ── Step 4: Per-engine expansion ──
     results: list[dict[str, Any]] = []
 
@@ -343,4 +357,6 @@ def _expand_sweep(
 
                 results.append(config_dict)
 
-    return results
+    if len(engines) > 1:
+        swept_paths.add("engine")
+    return results, frozenset(swept_paths)

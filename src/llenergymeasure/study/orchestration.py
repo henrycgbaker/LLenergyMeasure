@@ -73,7 +73,6 @@ def orchestrate_study(
     skip_set: set[tuple[str, int]] | None = None,
     no_lock: bool = False,
     config_path: Path | None = None,
-    cli_overrides: dict[str, Any] | None = None,
     preresolved: tuple[dict[str, RunnerSpec], dict[str, dict[str, str]]] | None = None,
 ) -> StudyResult:
     """Dispatcher: single experiment runs in-process; multi-experiment uses StudyRunner.
@@ -131,8 +130,6 @@ def orchestrate_study(
 
     _write_study_artefacts(study, artefacts_dir, system_overrides, config_path)
 
-    resolution_logs = _build_resolution_logs(study, cli_overrides)
-
     wall_start = time.monotonic()
     # Server experiments always route through StudyRunner (the single server call
     # site is StudyRunner._run_one -> ServerSession); the in-process single path
@@ -145,7 +142,7 @@ def orchestrate_study(
 
     if is_single:
         result_files, experiment_results, warnings = _run_single_experiment_dispatch(
-            study, manifest, study_dir, runner_specs, progress, resolution_logs
+            study, manifest, study_dir, runner_specs, progress, study.provenance_logs
         )
     else:
         result_files, experiment_results, warnings = _run_via_runner(
@@ -156,7 +153,7 @@ def orchestrate_study(
             progress=progress,
             skip_set=skip_set,
             no_lock=no_lock,
-            resolution_logs=resolution_logs,
+            resolution_logs=study.provenance_logs,
         )
 
     wall_time = time.monotonic() - wall_start
@@ -357,37 +354,6 @@ def _write_study_artefacts(
         logger.info("Study-level system snapshot written to %s", env_path)
     except Exception as exc:
         logger.warning("Failed to write study-level system.json: %s", exc)
-
-
-def _build_resolution_logs(
-    study: StudyConfig, cli_overrides: dict[str, Any] | None
-) -> dict[str, dict[str, Any]]:
-    """Build per-experiment resolution logs keyed by declared-config hash.
-
-    Computed once here so runners don't need to know about resolution logic.
-    Best-effort: returns whatever was built before any failure.
-    """
-    resolution_logs: dict[str, dict[str, Any]] = {}
-    try:
-        from llenergymeasure.config.introspection import get_swept_field_paths
-        from llenergymeasure.config.resolution import build_resolution_log
-        from llenergymeasure.domain.experiment import compute_declared_config_hash
-
-        swept_fields = get_swept_field_paths(study.experiments)
-        seen_hashes: set[str] = set()
-        for exp in study.experiments:
-            h = compute_declared_config_hash(exp)
-            if h in seen_hashes:
-                continue
-            seen_hashes.add(h)
-            resolution_logs[h] = build_resolution_log(
-                exp.model_dump(),
-                cli_overrides=cli_overrides,
-                swept_fields=swept_fields,
-            )
-    except Exception as exc:
-        logger.debug("Failed to build resolution logs: %s", exc)
-    return resolution_logs
 
 
 def _run_single_experiment_dispatch(
