@@ -3,12 +3,14 @@
 This module is internal (underscore prefix). Import via llenergymeasure.__init__ only.
 
 It is a thin adapter over the study-layer orchestrator
-(:func:`llenergymeasure.study.orchestration.orchestrate_study`): it loads and
-validates config, translates the public call forms and the overloaded public
-``output_dir`` argument into the orchestrator's explicit internal parameters, and
-delegates. The public API surface (``load_study`` / ``run_experiment`` /
-``run_study`` signatures and behaviour, and ``api.__all__``) is frozen; the
-orchestration itself lives in the study layer.
+(:func:`llenergymeasure.study.orchestration.orchestrate_study`): it routes every
+call form through the single study-resolution entry point
+(:func:`llenergymeasure.study.loading.resolve_study`), translates the overloaded
+public ``output_dir`` argument into the orchestrator's explicit internal
+parameters, and delegates. A YAML path and the equivalent objects therefore
+produce the same resolved study. The public API surface (``load_study`` /
+``run_experiment`` / ``run_study`` signatures and behaviour, and ``api.__all__``)
+is frozen; the orchestration itself lives in the study layer.
 """
 
 from __future__ import annotations
@@ -180,6 +182,7 @@ def run_experiment(
     )
     if output_dir is not None:
         study.output = study.output.model_copy(update={"results_dir": str(output_dir)})
+    study = _resolve_objects(study)
     study_result = orchestrate_study(study, skip_preflight=skip_preflight, progress=progress)
     if not study_result.experiments:
         from llenergymeasure.utils.exceptions import ExperimentError
@@ -216,8 +219,14 @@ def run_study(
 
     Always writes manifest.json to disk (documented side-effect).
 
+    A StudyConfig built in memory is resolved here exactly as a YAML study is:
+    equivalent configs are deduplicated, the ``study_design_hash`` is computed,
+    ``n_cycles`` is expanded into the execution sequence, and the equivalence
+    groups are recorded. An already-resolved StudyConfig (from ``load_study``)
+    passes through unchanged.
+
     Args:
-        config: YAML file path or resolved StudyConfig.
+        config: YAML file path or a StudyConfig.
         skip_preflight: Skip Docker pre-flight checks (GPU visibility, CUDA/driver compat).
             CLI --skip-preflight flag and YAML execution.skip_preflight: true also bypass.
         progress: Optional StudyProgressCallback for live per-experiment display.
@@ -264,7 +273,7 @@ def run_study(
         study = load_study(config_path)
     elif isinstance(config, StudyConfig):
         # config_path may have been passed by caller (e.g. CLI pre-loads config)
-        study = config
+        study = _resolve_objects(config)
     else:
         raise ConfigError(f"Expected str, Path, or StudyConfig; got {type(config).__name__}")
 
@@ -321,6 +330,45 @@ def run_study(
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+
+def _resolve_objects(study: StudyConfig) -> StudyConfig:
+    """Route a caller-built StudyConfig through the single resolution entry point.
+
+    A StudyConfig assembled in memory - by ``run_study(StudyConfig(...))``, by
+    ``run_experiment``, or by any programmatic caller - has had none of the
+    resolution the YAML path performs: no dedup, no ``study_design_hash``, no
+    cycle expansion, no equivalence groups. Wrapping its parts back into a
+    ``LoadedStudyRaw`` and calling ``resolve_study`` gives it exactly the
+    resolution a YAML study gets, with no file touched (#886).
+
+    An already-resolved study (one that carries a ``study_design_hash``, i.e. it
+    came from ``load_study``) is returned untouched: its experiment list is
+    already cycle-expanded, so resolving twice would re-expand it.
+    """
+    if study.study_design_hash is not None:
+        return study
+
+    from llenergymeasure.config.loader import LoadedStudyRaw
+    from llenergymeasure.config.user_config import load_user_config
+    from llenergymeasure.study.loading import resolve_study
+
+    raw = LoadedStudyRaw(
+        valid_experiments=list(study.experiments),
+        # Skipped grid points only arise from YAML sweep expansion. A caller that
+        # recorded some on the StudyConfig keeps them (they are already dicts, the
+        # shape resolve_study emits), so nothing is silently dropped.
+        skipped=[],
+        study_name=study.study_name,
+        output=study.output,
+        execution=study.study_execution,
+        runners=study.runners,
+        images=study.images,
+    )
+    resolved = resolve_study(raw, user_config=load_user_config())
+    if study.skipped_configs:
+        resolved = resolved.model_copy(update={"skipped_configs": study.skipped_configs})
+    return resolved
 
 
 def _to_study_config(
