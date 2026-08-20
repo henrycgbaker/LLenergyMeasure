@@ -36,7 +36,7 @@ from llenergymeasure.domain.experiment import compute_declared_config_hash
 from llenergymeasure.domain.hashing import hash_config
 from llenergymeasure.study.hashing import build_resolved_view
 from llenergymeasure.study.library_resolution import resolve_library_effective
-from llenergymeasure.study.loading import finalise_study
+from llenergymeasure.study.loading import resolve_study
 
 _TRAFFIC = {"rate": 10, "window_seconds": 60}
 
@@ -234,7 +234,7 @@ def test_dedup_machinery_treats_different_overlays_as_distinct() -> None:
 
 
 # ---------------------------------------------------------------------------
-# (a/c/d) End-to-end through finalise_study (the study composition point)
+# (a/c/d) End-to-end through resolve_study (the single resolution entry point)
 # ---------------------------------------------------------------------------
 
 
@@ -251,39 +251,37 @@ def _server_study(tmp_path: Path):
     return load_study_config(path)
 
 
-def test_finalise_study_binds_dedup_on_the_overlay(tmp_path: Path) -> None:
-    """Pin (a), end-to-end: two finalise_study runs of one study YAML under two
+def test_resolve_study_binds_dedup_on_the_overlay(tmp_path: Path) -> None:
+    """Pin (a), end-to-end: two resolve_study runs of one study YAML under two
     user configs share declared identity but differ in the resolved family that
     dedup binds on."""
     raw_a = _server_study(tmp_path)
     raw_b = _server_study(tmp_path)
 
-    finalised_a = finalise_study(raw_a, user_config=_user(mode="fixed", duration_seconds=100))
-    finalised_b = finalise_study(raw_b, user_config=_user(mode="fixed", duration_seconds=200))
+    resolved_a = resolve_study(raw_a, user_config=_user(mode="fixed", duration_seconds=100))
+    resolved_b = resolve_study(raw_b, user_config=_user(mode="fixed", duration_seconds=200))
 
     # Declared identity (experiment_id) is byte-identical across the two runs.
-    exp_a, exp_b = finalised_a.experiments[0], finalised_b.experiments[0]
+    exp_a, exp_b = resolved_a.experiments[0], resolved_b.experiments[0]
     assert _declared(exp_a) == _declared(exp_b)
     # The resolved-config-hash family (what dedup binds on) differs.
-    assert (
-        finalised_a.declared_resolved_config_hashes != finalised_b.declared_resolved_config_hashes
-    )
+    assert resolved_a.declared_resolved_config_hashes != resolved_b.declared_resolved_config_hashes
 
 
-def test_finalise_study_without_user_config_is_todays_behaviour(tmp_path: Path) -> None:
+def test_resolve_study_without_user_config_is_todays_behaviour(tmp_path: Path) -> None:
     """Pin (c), end-to-end: no user_config -> resolved family byte-identical."""
     raw_none = _server_study(tmp_path)
     raw_empty = _server_study(tmp_path)
 
-    finalised_none = finalise_study(raw_none)  # user_config defaults to None
-    finalised_empty = finalise_study(raw_empty, user_config=UserConfig())
+    resolved_none = resolve_study(raw_none)  # user_config defaults to None
+    resolved_empty = resolve_study(raw_empty, user_config=UserConfig())
 
     assert (
-        finalised_none.declared_resolved_config_hashes
-        == finalised_empty.declared_resolved_config_hashes
+        resolved_none.declared_resolved_config_hashes
+        == resolved_empty.declared_resolved_config_hashes
     )
     # And the config carries no overlay side-channel.
-    assert finalised_none.experiments[0]._resolved_server_warmup is None
+    assert resolved_none.experiments[0]._resolved_server_warmup is None
 
 
 # ---------------------------------------------------------------------------

@@ -130,11 +130,11 @@ def load_experiment_config(
 
 @dataclass(frozen=True)
 class LoadedStudyRaw:
-    """Parsed + sweep-expanded study material, before dedup/hash/cycle finalisation.
+    """Parsed + sweep-expanded study material, before dedup/hash/cycle resolution.
 
-    Output of :func:`load_study_config`. Carries everything the study-layer
-    finalisation step (``llenergymeasure.study.loading.finalise_study``) needs to
-    build a resolved :class:`~llenergymeasure.config.models.StudyConfig`, without
+    Output of :func:`load_study_config`. Carries everything the single
+    study-resolution entry point (``llenergymeasure.study.loading.resolve_study``)
+    needs to build a resolved :class:`~llenergymeasure.config.models.StudyConfig`, without
     the config layer reaching upward into ``study`` for the library-resolution /
     dedup mechanism.
 
@@ -177,7 +177,7 @@ def load_study_config(
     Dedup, study_design_hash, cycle ordering, and equivalence-group serialisation
     are deliberately NOT done here - they require the study-layer
     library-resolution mechanism, and the config layer must not import upward.
-    Those steps live in ``llenergymeasure.study.loading.finalise_study``, which
+    Those steps live in ``llenergymeasure.study.loading.resolve_study``, which
     consumes the :class:`LoadedStudyRaw` returned here and produces the resolved
     :class:`~llenergymeasure.config.models.StudyConfig`. Use
     ``llenergymeasure.api.load_study`` to run both steps in one call.

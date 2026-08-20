@@ -1,4 +1,4 @@
-"""Study-layer finalisation of a parsed study config.
+"""The single study-resolution entry point.
 
 The config layer (:mod:`llenergymeasure.config.loader`) does pure
 parse + sweep-expansion and returns a
@@ -7,13 +7,19 @@ study_design_hash / cycle-ordering / equivalence-group steps need the
 study-layer library-resolution mechanism, so they live here - keeping the
 config layer free of any upward import into ``study``.
 
-:func:`finalise_study` is the single composition point. The public entry that
-parses *and* finalises in one call is ``llenergymeasure.api.load_study``.
+:func:`resolve_study` is the ONE entry every study passes through, whether it
+arrived as a YAML file or as objects a caller built in memory (#886). A study
+that reaches the orchestrator without it is unresolved - no dedup, no identity
+hash, no cycle expansion - so the orchestrator rejects it rather than running it.
+``llenergymeasure.api.load_study`` is the YAML front door (parse, then resolve);
+``run_study`` and ``run_experiment`` build a ``LoadedStudyRaw`` from the objects
+they were handed and call the same entry, touching no file.
 """
 
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from dataclasses import asdict
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -23,48 +29,68 @@ from llenergymeasure.config.grid import (
     compute_study_design_hash,
 )
 from llenergymeasure.config.loader import LoadedStudyRaw
-from llenergymeasure.config.models import ExperimentConfig, StudyConfig
+from llenergymeasure.config.models import ExecutionConfig, ExperimentConfig, StudyConfig
 from llenergymeasure.study.library_resolution import resolve_library_effective
 
 if TYPE_CHECKING:
     from llenergymeasure.config.user_config import UserConfig
 
-__all__ = ["finalise_study"]
+__all__ = ["resolve_study"]
 
 logger = logging.getLogger(__name__)
 
 
-def finalise_study(raw: LoadedStudyRaw, *, user_config: UserConfig | None = None) -> StudyConfig:
-    """Apply library-resolution dedup, design hash, and cycle ordering.
+def resolve_study(
+    raw: LoadedStudyRaw,
+    *,
+    user_config: UserConfig | None = None,
+    execution_defaults: Mapping[str, Any] | None = None,
+) -> StudyConfig:
+    """Resolve parsed study material into the StudyConfig the runner executes.
 
-    Consumes the :class:`~llenergymeasure.config.loader.LoadedStudyRaw` produced
-    by :func:`llenergymeasure.config.loader.load_study_config` and produces the
-    resolved :class:`~llenergymeasure.config.models.StudyConfig` that the runner
-    iterates over.
+    Consumes a :class:`~llenergymeasure.config.loader.LoadedStudyRaw` - from
+    :func:`llenergymeasure.config.loader.load_study_config` on the YAML path, or
+    built directly from objects on the programmatic path - and produces the
+    resolved :class:`~llenergymeasure.config.models.StudyConfig`. Both routes
+    resolve identically, down to the ``study_design_hash``.
 
-    Steps:
-      0. Overlay the tool-wide user-config server warmup onto each declared server
+    Steps, in this order:
+      0. Resolve the execution block: caller-supplied effective defaults beneath
+         the study file, then the machine-local thermal gaps for gaps the study
+         left unset.
+      1. Overlay the tool-wide user-config server warmup onto each declared server
          config, BEFORE dedup, so the resolved-config hash binds on the
          realised warmup protocol.
-      1. Library-resolution mechanism + resolved-config-hash dedup of the
+      2. Library-resolution mechanism + resolved-config-hash dedup of the
          declared configs.
-      2. compute_study_design_hash() over the post-dedup configs - the hash
+      3. compute_study_design_hash() over the post-dedup configs - the hash
          identifies the *unique* measurement set, not duplicate declarations.
-      3. apply_cycles() to produce the execution sequence.
-      4. Serialise pre-run equivalence groups for the sidecar writer.
+      4. apply_cycles() to produce the execution sequence.
+      5. Serialise pre-run equivalence groups for the sidecar writer.
 
     Args:
         raw: Parsed + sweep-expanded study material.
-        user_config: Tool-wide user config whose ``server.warmup`` defaults are
-            overlaid onto each declared server config. ``None`` (the default)
-            applies NO overlay - callers hand in a config only at the production
-            edge (``api.load_study``), keeping the finalise step hermetic for the
-            unit tests that construct one directly.
+        user_config: Tool-wide user config supplying the ``server.warmup``
+            overlay and the machine-local thermal gap defaults. ``None`` (the
+            default) applies NEITHER - callers hand in a config at the production
+            edge, keeping the resolution step hermetic for the unit tests that
+            construct one directly.
+        execution_defaults: Execution-block defaults that sit BENEATH the study
+            file: a field the file wrote always wins, a field it left unset takes
+            this value instead of the conservative built-in default. This is how
+            the CLI applies its research-appropriate defaults (3 cycles, shuffle)
+            without re-reading the study file to find out what it declared.
 
     Returns:
         Resolved StudyConfig with ordered experiments, study_design_hash, dedup
         mode, and pre-run equivalence groups.
     """
+    execution = _resolve_execution(
+        raw.execution,
+        user_config=user_config,
+        execution_defaults=execution_defaults,
+    )
+
     # Overlay the tool-wide user-config server warmup onto each declared
     # server config BEFORE dedup, so the resolved-config hash - and hence dedup -
     # binds on the realised warmup protocol. Declared hashes are untouched (the
@@ -81,8 +107,6 @@ def finalise_study(raw: LoadedStudyRaw, *, user_config: UserConfig | None = None
 
         for exp in raw.valid_experiments:
             apply_server_warmup_overlay(exp, user_config)
-
-    execution = raw.execution
 
     # Apply library-resolution mechanism + resolved-config-hash dedup to the declared configs
     # before running cycles. This collapses measurement-equivalent
@@ -150,6 +174,51 @@ def finalise_study(raw: LoadedStudyRaw, *, user_config: UserConfig | None = None
         declared_resolved_config_hashes=list(dedup.declared_resolved_hashes),
         dormant_observations=[asdict(obs) for obs in dedup.dormant_observations],
     )
+
+
+def _resolve_execution(
+    declared: ExecutionConfig,
+    *,
+    user_config: UserConfig | None,
+    execution_defaults: Mapping[str, Any] | None,
+) -> ExecutionConfig:
+    """Resolve the study execution block through the precedence layers.
+
+    Two resolutions happen here, both of which the runner would otherwise have to
+    guess at:
+
+    - ``execution_defaults`` sit BENEATH the study file. Only the fields the file
+      actually wrote (``model_fields_set``) enter the winning layer, so a caller
+      default fills a field the file omitted and never overrides one it declared.
+    - ``experiment_gap_seconds`` / ``cycle_gap_seconds`` are documented as
+      "None = use machine default from user config", and this is where that
+      default is applied. Leaving them None made the runner read them as zero, so
+      experiments ran back-to-back and thermal state bled between measurements
+      for anyone relying on their machine defaults (#886).
+    """
+    execution = declared
+
+    if execution_defaults:
+        from llenergymeasure.config.precedence import fields_set_layer, resolve_layers
+
+        execution = ExecutionConfig.model_validate(
+            resolve_layers(
+                ExecutionConfig().model_dump(mode="python"),
+                dict(execution_defaults),
+                fields_set_layer(declared),
+            )
+        )
+
+    if user_config is not None:
+        gaps: dict[str, Any] = {}
+        if execution.experiment_gap_seconds is None:
+            gaps["experiment_gap_seconds"] = user_config.execution.experiment_gap_seconds
+        if execution.cycle_gap_seconds is None:
+            gaps["cycle_gap_seconds"] = user_config.execution.cycle_gap_seconds
+        if gaps:
+            execution = execution.model_copy(update=gaps)
+
+    return execution
 
 
 def _maybe_hint_sequential_server_singletons(

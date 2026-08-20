@@ -14,7 +14,7 @@ from pydantic import ValidationError
 
 from llenergymeasure.config.loader import deep_merge, load_experiment_config, load_study_config
 from llenergymeasure.config.models import ExperimentConfig, StudyConfig
-from llenergymeasure.study.loading import finalise_study
+from llenergymeasure.study.loading import resolve_study
 from llenergymeasure.utils.exceptions import ConfigError
 
 # ---------------------------------------------------------------------------
@@ -30,14 +30,14 @@ def _write_yaml(tmp_path: Path, content: str, name: str = "config.yaml") -> Path
 
 
 def _load_study(path: Path, cli_overrides: dict | None = None) -> StudyConfig:
-    """Parse + finalise a study YAML into a resolved StudyConfig.
+    """Parse + resolve a study YAML into a runnable StudyConfig.
 
-    The config loader now returns a LoadedStudyRaw (pure parse/expand); the
-    study-layer finalise step adds dedup, study_design_hash, cycles, and
-    equivalence groups. These tests assert on the finalised StudyConfig, so
+    The config loader returns a LoadedStudyRaw (pure parse/expand); the
+    study-layer resolution step adds dedup, study_design_hash, cycles, and
+    equivalence groups. These tests assert on the resolved StudyConfig, so
     compose both steps here.
     """
-    return finalise_study(load_study_config(path, cli_overrides=cli_overrides))
+    return resolve_study(load_study_config(path, cli_overrides=cli_overrides))
 
 
 # ---------------------------------------------------------------------------

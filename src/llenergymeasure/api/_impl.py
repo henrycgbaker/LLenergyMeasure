@@ -38,34 +38,41 @@ _TASK_FIELDS: frozenset[str] = frozenset(TaskConfig.model_fields) - {"model", "d
 _MEASUREMENT_FIELDS: frozenset[str] = frozenset(MeasurementConfig.model_fields)
 
 # ---------------------------------------------------------------------------
-# load_study - parse + finalise composition
+# load_study - the YAML front door onto the single resolution entry point
 # ---------------------------------------------------------------------------
 
 
 def load_study(
     path: str | Path,
     cli_overrides: dict[str, Any] | None = None,
+    *,
+    execution_defaults: dict[str, Any] | None = None,
 ) -> StudyConfig:
-    """Load a study YAML and finalise it into a resolved StudyConfig.
+    """Load a study YAML and resolve it into a runnable StudyConfig.
 
     Composes the config-layer parse/expand step
-    (:func:`llenergymeasure.config.loader.load_study_config`) with the
-    study-layer finalisation
-    (:func:`llenergymeasure.study.loading.finalise_study`). This is the single
-    public entry both the CLI and ``run_study`` use, so the config layer never
-    imports upward into ``study`` and the CLI never imports ``study`` directly.
+    (:func:`llenergymeasure.config.loader.load_study_config`) with the single
+    study-resolution entry point
+    (:func:`llenergymeasure.study.loading.resolve_study`). This is the YAML front
+    door both the CLI and ``run_study`` use, so the config layer never imports
+    upward into ``study`` and the CLI never imports ``study`` directly.
 
-    It also loads the tool-wide user config and hands it to ``finalise_study``,
-    which overlays its ``server.warmup`` defaults onto each declared server config.
-    The overlay shapes the resolved-config hash (which dedup binds on) but
-    never the declared hash, so a shared study file keeps its declared identity
-    across machines. Resume and drift-detection remain declared-hash-only, so they
-    are blind to a user-config warmup change between an original run and a resume.
+    It also loads the tool-wide user config and hands it to ``resolve_study``,
+    which overlays its ``server.warmup`` defaults onto each declared server config
+    and fills in the machine-local thermal gaps the study left unset. The warmup
+    overlay shapes the resolved-config hash (which dedup binds on) but never the
+    declared hash, so a shared study file keeps its declared identity across
+    machines. Resume and drift-detection remain declared-hash-only, so they are
+    blind to a user-config warmup change between an original run and a resume.
 
     Args:
         path: Path to study YAML file.
-        cli_overrides: Optional dict of CLI flag overrides for the execution
-            block (e.g. {"study_execution": {"n_cycles": 5}}).
+        cli_overrides: Optional dict of overrides applied ON TOP of the study file
+            (e.g. {"study_execution": {"n_cycles": 5}}) - they win over what the
+            file declares.
+        execution_defaults: Optional execution-block defaults applied BENEATH the
+            study file: a field the file wrote wins, a field it omitted takes this
+            value (e.g. {"n_cycles": 3}).
 
     Returns:
         Resolved StudyConfig with ordered experiments, study_design_hash, dedup
@@ -77,14 +84,13 @@ def load_study(
     """
     from llenergymeasure.config.loader import load_study_config
     from llenergymeasure.config.user_config import load_user_config
-    from llenergymeasure.study.loading import finalise_study
+    from llenergymeasure.study.loading import resolve_study
 
     # The production edge that folds the tool-wide user config into the study.
-    # finalise_study overlays its server.warmup defaults onto each declared server
-    # config, so the resolved-config hash binds on the realised warmup protocol.
-    return finalise_study(
+    return resolve_study(
         load_study_config(path, cli_overrides=cli_overrides),
         user_config=load_user_config(),
+        execution_defaults=execution_defaults,
     )
 
 

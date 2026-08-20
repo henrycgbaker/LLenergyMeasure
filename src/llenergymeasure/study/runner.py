@@ -315,13 +315,13 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
         the manifest status before returning.
 
         Note: study.experiments is already the fully-ordered execution sequence produced
-        by apply_cycles() in load_study_config(). The runner must not call apply_cycles()
+        by apply_cycles() in resolve_study(). The runner must not call apply_cycles()
         again - doing so would multiply the count by n_cycles a second time.
         """
         from llenergymeasure.domain.experiment import compute_declared_config_hash
         from llenergymeasure.study.circuit_breaker import CircuitBreaker
 
-        # study.experiments is already cycled by load_study_config(); use as-is.
+        # study.experiments is already cycled by resolve_study(); use as-is.
         ordered = self.study.experiments
 
         # n_unique: count of distinct configs (for cycle-gap detection).

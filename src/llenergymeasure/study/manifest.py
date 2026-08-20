@@ -394,7 +394,7 @@ class ManifestWriter:
         """Build one pending entry per (config_hash, occurrence) in the ordered list.
 
         study.experiments is the fully-cycled execution list from apply_cycles()
-        in finalise_study(). The runner assigns each occurrence of a declared
+        in resolve_study(). The runner assigns each occurrence of a declared
         config_hash a cycle number by counting occurrences in that list (1st ->
         cycle 1, 2nd -> cycle 2, ...). Manifest entries must mirror that exactly:
         one entry per (config_hash, occurrence).
