@@ -574,7 +574,7 @@ def _run_study_impl(
     # The study's results_dir is already resolved (-o over the study file over the
     # user config over the built-in default), so the panel and the dry-run preview
     # show the directory the run will actually write to - one chain, one answer.
-    study_dir_preview = Path(study_config.output.results_dir or "") / study_dir_name(
+    study_dir_preview = Path(study_config.output.results_dir or ".") / study_dir_name(
         study_config.study_name
     )
 

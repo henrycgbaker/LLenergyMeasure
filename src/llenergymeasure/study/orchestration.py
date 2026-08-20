@@ -122,7 +122,13 @@ def orchestrate_study(
         loaded_manifest, _ = load_resume_state(study_dir)
         manifest = ManifestWriter.from_existing(study_dir, loaded_manifest)
     else:
-        study_dir = create_study_dir(study.study_name, Path(study.output.results_dir or ""))
+        # A resolved study always carries a results_dir; the fallback only guards a
+        # hand-assembled study that bypassed resolution with a hand-written hash.
+        from llenergymeasure.config.precedence import DEFAULT_RESULTS_DIR
+
+        study_dir = create_study_dir(
+            study.study_name, Path(study.output.results_dir or DEFAULT_RESULTS_DIR)
+        )
         manifest = ManifestWriter(study, study_dir)
 
     # Create _study-artefacts/ once for config copy, skipped log, and study-level env.
