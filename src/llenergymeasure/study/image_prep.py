@@ -4,10 +4,12 @@
 ``StudyRunner``: it checks (or pulls) each Docker engine's image once at study
 start, parses display metadata, and verifies the image's schema fingerprint
 against the host before any experiments run. Locally cached images are
-inspected inline; images missing from the cache are pulled concurrently (one
-``docker pull`` per thread). Free functions (``_sanitize_image_for_filename``,
-``_parse_image_metadata``, ``_classify_pull_failure``,
-``_aggregate_image_errors``) sit alongside the mixin.
+inspected inline; images missing from the cache are pulled concurrently by
+``infra.docker.lifecycle.ensure_images``, which owns the docker calls - what
+lives here is the study's reading of each outcome: per-engine failure
+classification, fingerprint verification, and the progress rows. Free functions
+(``_sanitize_image_for_filename``, ``_parse_image_metadata``,
+``_classify_pull_failure``, ``_aggregate_image_errors``) sit alongside the mixin.
 
 These methods read ``self._runner_specs`` and ``self._progress`` and set
 ``self._images_prepared``, all initialised in ``StudyRunner.__init__``.
@@ -17,19 +19,14 @@ from __future__ import annotations
 
 import json
 import logging
-import subprocess
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from llenergymeasure._version import __version__ as _HOST_PKG_VERSION
-from llenergymeasure.config.ssot import (
-    DOCKER_PULL_TIMEOUT,
-    RUNNER_CONTAINER,
-    TIMEOUT_DOCKER_INSPECT,
-)
+from llenergymeasure.config.ssot import RUNNER_CONTAINER, TIMEOUT_DOCKER_INSPECT
+from llenergymeasure.infra.docker.lifecycle import PullOutcome, ensure_images
 from llenergymeasure.infra.docker_errors import DockerImagePullError
 from llenergymeasure.infra.image_registry import inspect_image
 from llenergymeasure.infra.version_handshake import (
@@ -54,12 +51,6 @@ if TYPE_CHECKING:
     from llenergymeasure.domain.progress import StudyProgressCallback
 
 logger = logging.getLogger(__name__)
-
-# Upper bound on simultaneous ``docker pull`` threads. A study rarely spans
-# more than three engines, and the daemon serialises layer writes anyway, so a
-# small cap keeps memory/disk pressure bounded without throttling the common
-# case.
-_MAX_CONCURRENT_PULLS = 3
 
 # Substrings in ``docker pull`` stderr that point to a connectivity problem
 # rather than a genuinely absent image. Matched case-insensitively. Kept
@@ -205,9 +196,9 @@ class _ImageMixin:
         Runs once at the start of the study. Every image is inspected locally
         first (cheap), so a cached image never triggers a remote call; cached
         images are finalised inline. Images missing from the local cache are
-        pulled concurrently (one ``docker pull`` per thread, capped at
-        ``_MAX_CONCURRENT_PULLS``) so a multi-engine study on a fresh box does
-        not serialise several multi-GB pulls.
+        pulled concurrently (one ``docker pull`` per thread, capped by
+        ``infra.docker.lifecycle.MAX_CONCURRENT_PULLS``) so a multi-engine study
+        on a fresh box does not serialise several multi-GB pulls.
 
         Failures do not cancel their siblings: every pull runs to completion
         and any failures (plus post-pull fingerprint mismatches) are raised
@@ -268,10 +259,17 @@ class _ImageMixin:
     def _pull_missing_images(self, missing: list[tuple[str, str]]) -> list[Exception]:
         """Pull *missing* ``(engine, image)`` pairs concurrently and finalise each.
 
-        One ``docker pull`` per thread, capped at ``_MAX_CONCURRENT_PULLS``.
-        Pulls are subprocess calls and thread-safe. Progress callbacks are
-        serialised under a lock so each image's (possibly multi-line) output
-        stays coherent and never interleaves with a sibling's.
+        The pulling itself belongs to the container layer and happens there, via
+        ``infra.docker.lifecycle.ensure_images``. What stays here is the study's
+        own reading of each outcome: classifying a failure into something
+        actionable per engine, verifying the pulled image's schema fingerprint,
+        and rendering the engine's row.
+
+        That per-image follow-up runs in the pulling thread, so the fingerprint
+        verification (potentially a cold docker-run probe) of one image overlaps
+        the pull of another. Only the progress emission is serialised, under
+        ``progress_lock``, so each image's possibly-multi-line output stays
+        coherent instead of interleaving with a sibling's.
 
         Returns the list of errors (pull failures + post-pull fingerprint
         mismatches); an empty list means every image was pulled and verified.
@@ -279,75 +277,40 @@ class _ImageMixin:
         completion before the aggregate is returned.
         """
         progress_lock = threading.Lock()
-        results_lock = threading.Lock()
-        errors: list[Exception] = []
+        engine_of = {image: engine_name for engine_name, image in missing}
 
-        def _pull_one(engine_name: str, image: str) -> None:
-            t0 = time.monotonic()
-            logger.info("Image %s not found locally, pulling...", image)
-            try:
-                pull = subprocess.run(
-                    ["docker", "pull", image],
-                    capture_output=True,
-                    timeout=DOCKER_PULL_TIMEOUT,
-                )
-            except subprocess.TimeoutExpired:
-                error = DockerImagePullError(
-                    message=f"Image pull timed out: {image}",
+        def _finalise(outcome: PullOutcome) -> Exception | None:
+            engine_name = engine_of[outcome.image]
+
+            if outcome.timed_out:
+                with progress_lock:
+                    if self._progress:
+                        self._progress.image_failed(
+                            engine_name, outcome.image, "pull timed out (30min)"
+                        )
+                return DockerImagePullError(
+                    message=f"Image pull timed out: {outcome.image}",
                     fix_suggestion=f"docker compose build {engine_name}",
                 )
+
+            if not outcome.ok:
+                reason, error = _classify_pull_failure(engine_name, outcome.image, outcome.stderr)
                 with progress_lock:
                     if self._progress:
-                        self._progress.image_failed(engine_name, image, "pull timed out (30min)")
-                with results_lock:
-                    errors.append(error)
-                return
+                        self._progress.image_failed(engine_name, outcome.image, reason)
+                return error
 
-            if pull.returncode != 0:
-                reason, error = _classify_pull_failure(
-                    engine_name, image, pull.stderr.decode("utf-8", "replace")
-                )
-                with progress_lock:
-                    if self._progress:
-                        self._progress.image_failed(engine_name, image, reason)
-                with results_lock:
-                    errors.append(error)
-                return
-
-            elapsed = time.monotonic() - t0
-            try:
-                inspect = subprocess.run(
-                    ["docker", "image", "inspect", image],
-                    capture_output=True,
-                    timeout=TIMEOUT_DOCKER_INSPECT,
-                )
-                inspect_stdout = inspect.stdout if inspect.returncode == 0 else b""
-            except Exception:
-                inspect_stdout = b""
-
-            mismatch_error = self._finalise_image(
+            return self._finalise_image(
                 engine_name,
-                image,
-                inspect_stdout,
+                outcome.image,
+                outcome.inspect_stdout,
                 cached=False,
-                elapsed=elapsed,
+                elapsed=outcome.elapsed,
                 progress_lock=progress_lock,
             )
-            if mismatch_error is not None:
-                with results_lock:
-                    errors.append(mismatch_error)
 
-        max_workers = min(len(missing), _MAX_CONCURRENT_PULLS)
-        with ThreadPoolExecutor(
-            max_workers=max_workers, thread_name_prefix="image-pull"
-        ) as executor:
-            futures = [
-                executor.submit(_pull_one, engine_name, image) for engine_name, image in missing
-            ]
-            for future in futures:
-                future.result()  # surface any unexpected worker exception
-
-        return errors
+        results = ensure_images([image for _, image in missing], on_outcome=_finalise)
+        return [error for error in results if error is not None]
 
     def _finalise_image(
         self,
