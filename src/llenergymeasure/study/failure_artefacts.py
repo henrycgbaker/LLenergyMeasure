@@ -20,18 +20,25 @@ from __future__ import annotations
 import logging
 import shutil
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Final
 
 if TYPE_CHECKING:
     from llenergymeasure.utils.exceptions import DockerError
 
 __all__ = [
+    "FAILED_RUNS_DIRNAME",
     "copy_artefact",
     "persist_failure_artefacts",
     "persist_failure_traceback",
 ]
 
 logger = logging.getLogger(__name__)
+
+#: Subdirectory of the study dir that holds everything a failure left behind.
+#: Named here because it is this module's convention, and read by the study
+#: runner when it tells the container-ownership net where to put the log tail of
+#: a container abandoned at exit.
+FAILED_RUNS_DIRNAME: Final = "failed-runs"
 
 
 def copy_artefact(src: Path, dest: Path) -> str | None:
@@ -58,11 +65,11 @@ def _ensure_failed_runs_dir(
     created - failure persistence is best-effort and must never mask the
     original error.
     """
-    failed_runs_dir = study_dir / "failed-runs"
+    failed_runs_dir = study_dir / FAILED_RUNS_DIRNAME
     try:
         failed_runs_dir.mkdir(parents=True, exist_ok=True)
     except OSError as mkdir_exc:
-        logger.warning("Failed to create failed-runs/: %s", mkdir_exc)
+        logger.warning("Failed to create %s/: %s", FAILED_RUNS_DIRNAME, mkdir_exc)
         return None
     return failed_runs_dir, f"{config_hash}_cycle{cycle}"
 
@@ -96,7 +103,7 @@ def persist_failure_artefacts(
         failed_runs_dir / f"{prefix}_container.log",
     )
     if log_file:
-        result["log_file"] = f"failed-runs/{log_file}"
+        result["log_file"] = f"{FAILED_RUNS_DIRNAME}/{log_file}"
 
     # Copy error JSON (structured traceback from container entrypoint).
     # The error JSON uses the Docker config hash (output_dir=/run/llem),
@@ -143,4 +150,4 @@ def persist_failure_traceback(
         logger.warning("Failed to persist traceback to %s: %s", dest, write_exc)
         return
 
-    result["log_file"] = f"failed-runs/{dest.name}"
+    result["log_file"] = f"{FAILED_RUNS_DIRNAME}/{dest.name}"

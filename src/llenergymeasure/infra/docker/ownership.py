@@ -10,7 +10,8 @@ Layered strategy to prevent container leaks on abort:
 
 1. Named containers: deterministic ``llem-{hash8}-{index:04d}`` names.
 2. Labels: ``llem.study_id``, ``llem.parent_pid``, ``llem.started_at`` for targeted cleanup.
-3. atexit handler: stops containers with matching study_id label on exit.
+3. atexit handler: stops containers with matching study_id label on exit, keeps
+   their log tails, and then removes them.
 4. SIGTERM bridge: converts SIGTERM to sys.exit(0) so atexit handlers fire.
 5. Startup reaper: stops orphaned containers whose parent PID is dead.
 
@@ -34,7 +35,8 @@ import signal
 import subprocess
 import sys
 from datetime import datetime, timezone
-from typing import Any
+from pathlib import Path
+from typing import Any, Final
 
 from llenergymeasure.config.ssot import TIMEOUT_DOCKER_CLI, TIMEOUT_DOCKER_STOP
 from llenergymeasure.utils.exceptions import StudyError
@@ -50,6 +52,15 @@ __all__ = [
 ]
 
 logger = logging.getLogger(__name__)
+
+# How much of an abandoned container's output to keep. Long enough to hold an
+# engine's startup log plus whatever killed it, short enough that a study
+# aborting with several containers up does not write out tens of megabytes.
+_ABANDONED_LOG_TAIL_LINES: Final = 500
+
+# Filename stem for a persisted log tail, so the files are obviously grouped and
+# obviously not per-experiment failure artefacts.
+_ABANDONED_LOG_PREFIX: Final = "abandoned-container-"
 
 
 def require_study_id(study_design_hash: str | None) -> str:
@@ -136,21 +147,119 @@ def generate_container_labels(study_id: str | None) -> dict[str, str]:
     }
 
 
-def cleanup_study_containers(study_id: str) -> None:
-    """Stop any running containers with this study's label.
+def _docker_quiet(argv: list[str], *, timeout: float) -> bool:
+    """Run a docker command best-effort; return whether it exited zero.
 
-    Intended as an atexit handler. Uses ``docker ps --filter`` to list
-    containers with the matching ``llem.study_id`` label, then sends a
-    graceful ``docker stop -t 5`` to each.
+    Never raises: this whole path runs at interpreter exit, where an exception
+    would garble the output and could mask the error that ended the study.
+    """
+    try:
+        result = subprocess.run(argv, capture_output=True, timeout=timeout)
+    except Exception:
+        return False
+    return result.returncode == 0
 
-    This function must never raise - atexit handlers that raise produce
-    confusing output and may mask the original exception. An empty study_id is
-    therefore refused silently rather than loudly: the loud refusal belongs at
-    registration time (:func:`register_container_cleanup`), and an unscoped
-    filter here could reach containers this study does not own.
+
+def _read_container_log_tail(container_id: str) -> str | None:
+    """Return the container's log tail, or ``None`` if it could not be read.
+
+    ``None`` covers both a docker call that failed and a container that is no
+    longer there; the caller distinguishes those, because they mean opposite
+    things about whether anything is left to lose.
+    """
+    try:
+        result = subprocess.run(
+            ["docker", "logs", "--tail", str(_ABANDONED_LOG_TAIL_LINES), container_id],
+            capture_output=True,
+            text=True,
+            timeout=TIMEOUT_DOCKER_CLI,
+        )
+    except Exception:
+        return None
+    if result.returncode != 0:
+        return None
+    # docker logs replays the container's stdout on stdout and its stderr on
+    # stderr; engines log to both, so the record needs both.
+    return result.stdout + result.stderr
+
+
+def _persist_container_log_tail(container_id: str, log_dir: Path, log_tail: str) -> bool:
+    """Write *log_tail* into *log_dir*; return whether it landed on disk."""
+    dest = log_dir / f"{_ABANDONED_LOG_PREFIX}{container_id}.log"
+    try:
+        log_dir.mkdir(parents=True, exist_ok=True)
+        dest.write_text(log_tail or "(container produced no output)", encoding="utf-8")
+    except OSError as exc:
+        logger.warning(
+            "Container %s left in place: its log tail could not be written to %s (%s)",
+            container_id,
+            dest,
+            exc,
+        )
+        return False
+    logger.info("Container %s stopped at exit; its log tail is at %s", container_id, dest)
+    return True
+
+
+def _stop_and_reclaim(container_id: str, log_dir: Path) -> None:
+    """Stop one container, keep its log tail, then remove it.
+
+    Removal is conditional on the log tail being safely on disk. Reclaiming disk
+    space is worth having; destroying the only surviving record of what a
+    container did is not worth having, so a failure to persist leaves the
+    container exactly where it is and says so.
+    """
+    _docker_quiet(["docker", "stop", "-t", "5", container_id], timeout=TIMEOUT_DOCKER_STOP)
+
+    log_tail = _read_container_log_tail(container_id)
+    if log_tail is None:
+        if _docker_quiet(
+            ["docker", "container", "inspect", container_id], timeout=TIMEOUT_DOCKER_CLI
+        ):
+            logger.warning(
+                "Container %s left in place: its logs could not be read, and removing "
+                "it would destroy the only record of what it did",
+                container_id,
+            )
+        # Otherwise the container is simply gone: the run-to-completion shapes are
+        # launched with ``--rm``, so docker reaps them the moment they stop and
+        # there is nothing left to persist or reclaim.
+        return
+
+    if not _persist_container_log_tail(container_id, log_dir, log_tail):
+        return  # already warned; the container stays put
+
+    _docker_quiet(["docker", "rm", container_id], timeout=TIMEOUT_DOCKER_STOP)
+
+
+def cleanup_study_containers(study_id: str, log_dir: Path) -> None:
+    """Stop this study's containers, keep their logs, then remove them.
+
+    Intended as an atexit handler. ``docker ps --filter`` lists the containers
+    wearing this study's ``llem.study_id`` label and each is stopped gracefully
+    with ``docker stop -t 5``.
+
+    Stopping alone is not enough. The run-to-completion shapes are launched with
+    ``--rm``, so docker reaps them as soon as they stop and nothing is left
+    behind. The engine-server shape deliberately is NOT ``--rm`` - a
+    crash-on-startup has to survive for its logs to be recoverable - so a stop
+    leaves it sitting on the host as an exited container that no code will ever
+    look at again. It is removed here, but only once its log tail is safely
+    written into *log_dir*. If that write cannot happen the container is LEFT IN
+    PLACE and a warning names it: a stray container is untidy and fixable by
+    hand, whereas discarding the last record of why a study died is not.
+
+    Never raises. An atexit handler that raises garbles the shutdown output and
+    can mask the original exception. An empty study_id is refused silently for
+    the same reason - the loud refusal belongs at registration time
+    (:func:`register_container_cleanup`), and an unscoped filter here could reach
+    containers this study does not own.
 
     Args:
         study_id: Study design hash used as the label filter value.
+        log_dir:  Directory the log tails are written into. Chosen by the caller,
+            so the study's on-disk layout stays owned by the layer that owns the
+            study's output directory.
     """
     if not (study_id or "").strip():
         logger.warning("Container cleanup skipped: no study identity to scope it to")
@@ -164,28 +273,25 @@ def cleanup_study_containers(study_id: str) -> None:
         )
         for cid in result.stdout.strip().splitlines():
             if cid.strip():
-                subprocess.run(
-                    ["docker", "stop", "-t", "5", cid.strip()],
-                    capture_output=True,
-                    timeout=TIMEOUT_DOCKER_STOP,
-                )
+                _stop_and_reclaim(cid.strip(), log_dir)
     except Exception:
         pass  # Best-effort; atexit handlers must never raise
 
 
-def register_container_cleanup(study_id: str) -> None:
-    """Register an atexit handler that stops containers for this study.
+def register_container_cleanup(study_id: str, log_dir: Path) -> None:
+    """Register an atexit handler that reclaims this study's containers.
 
     Calling this multiple times with the same study_id is safe - Python's
     atexit module allows multiple registrations and runs them LIFO.
 
     Args:
         study_id: Study design hash passed to cleanup_study_containers.
+        log_dir:  Directory abandoned containers' log tails are written into.
 
     Raises:
         StudyError: If study_id is empty - see :func:`require_study_id`.
     """
-    atexit.register(cleanup_study_containers, require_study_id(study_id))
+    atexit.register(cleanup_study_containers, require_study_id(study_id), log_dir)
 
 
 def install_sigterm_bridge() -> Any:
@@ -222,6 +328,12 @@ def reap_orphaned_containers() -> int:
 
     Containers whose parent is dead are stopped with ``docker stop -t 5``.
     Containers whose parent is alive (or owned by another user) are skipped.
+
+    Reaped containers are stopped but NOT removed, unlike
+    :func:`cleanup_study_containers`. This reaper is host-wide: the orphans it
+    finds belong to somebody else's abandoned study, so their evidence is not
+    ours to destroy, and we have no output directory of theirs to preserve it in.
+    Freeing the GPU is the whole job here.
 
     This function never raises - errors are swallowed so they cannot block
     study start.

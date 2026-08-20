@@ -543,9 +543,12 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
                 reap_orphaned_containers,
                 register_container_cleanup,
             )
+            from llenergymeasure.study.failure_artefacts import FAILED_RUNS_DIRNAME
 
             reap_orphaned_containers()
-            register_container_cleanup(study_id)
+            # The net needs somewhere to keep the log tail of a container it has
+            # to abandon; the study owns its output layout, so it picks the spot.
+            register_container_cleanup(study_id, self.study_dir / FAILED_RUNS_DIRNAME)
             original_sigterm = install_sigterm_bridge()
 
         return original_sigint, original_sigterm, gpu_locks
