@@ -344,15 +344,21 @@ PR checks tab.
 ## Cancel-in-progress policy
 
 - **`cancel-in-progress: true`** for read-only / stateless workflows:
-  `engine-rules-check.yml` and `docs.yml` set it unconditionally. `ci.yml` sets
-  it to `${{ github.event_name == 'pull_request' }}` - cancel superseded PR
-  runs, but let merge-queue / push runs on `main` finish.
+  `engine-rules-check.yml` sets it unconditionally, as does the `build` job of
+  `docs.yml`. `ci.yml` sets it to `${{ github.event_name == 'pull_request' }}` -
+  cancel superseded PR runs, but let merge-queue / push runs on `main` finish.
 - **`cancel-in-progress: false`** for workflows that mutate a registry, open
   or update PRs, or run long-cached builds: `publish-engine-image.yml` (grouped
   per commit SHA), `ghcr-prune.yml` (a single in-flight sweep; a cancelled prune
   pass leaves the registry half-pruned), and `renovate.yml` (a single in-flight
   Renovate run; a cancelled run can strand a half-updated dependency dashboard
   or PR).
+- **Per-job concurrency** on `docs.yml`, the only workflow whose two jobs need
+  opposite policies: `build` uses a ref-keyed cancellable group
+  (`docs-build-${{ github.ref }}`) so one branch's docs build never cancels
+  another's, while `deploy` uses a single global `pages` group with
+  `cancel-in-progress: false` so Pages publishes stay serialised and are never
+  cancelled mid-flight.
 - **`cancel-in-progress: ${{ github.event_name == 'pull_request' }}`** on
   `gpu-ci.yml`: like `ci.yml`, supersede a superseded PR push (the PR path is
   read-only), but let dispatch / release-call / main runs finish (those write
