@@ -9,8 +9,10 @@ call form through the single study-resolution entry point
 public ``output_dir`` argument into the orchestrator's explicit internal
 parameters, and delegates. A YAML path and the equivalent objects therefore
 produce the same resolved study. The public API surface (``load_study`` /
-``run_experiment`` / ``run_study`` signatures and behaviour, and ``api.__all__``)
-is frozen; the orchestration itself lives in the study layer.
+``run_experiment`` / ``run_study`` and ``api.__all__``) is stable: call forms and
+their meaning do not change, and it grows only by addition (an optional keyword),
+never by removing or repurposing what callers already pass. The orchestration
+itself lives in the study layer.
 """
 
 from __future__ import annotations
@@ -225,6 +227,12 @@ def run_study(
     ``n_cycles`` is expanded into the execution sequence, and the equivalence
     groups are recorded. An already-resolved StudyConfig (from ``load_study``)
     passes through unchanged.
+
+    Resolving a caller-built StudyConfig is not free of side effects on its
+    argument: for a server-mode experiment, the resolved warmup protocol is
+    attached to the caller's OWN ExperimentConfig objects (as side-channel state,
+    not a declared field), so those objects carry it after the call. The declared
+    fields are never rewritten - the configs that actually run are copies.
 
     Args:
         config: YAML file path or a StudyConfig.

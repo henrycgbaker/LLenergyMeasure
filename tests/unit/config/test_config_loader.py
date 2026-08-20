@@ -539,9 +539,9 @@ def test_load_study_config_design_hash_is_stable(tmp_path):
 
     The hash is persisted in study manifests and used for resume drift
     detection, so its VALUE is a stable contract. This pin guards against any
-    accidental change to the resolve -> dedup -> hash pipeline (e.g. the
-    finalisation moving out of the config loader). If this assertion fails, a
-    behaviour change has slipped in - it is not safe to "just update the value".
+    accidental change to the resolve -> dedup -> hash pipeline (e.g. resolution
+    moving out of the config loader). If this assertion fails, a behaviour change
+    has slipped in - it is not safe to "just update the value".
     """
     study_yaml = tmp_path / "study.yaml"
     study_yaml.write_text(

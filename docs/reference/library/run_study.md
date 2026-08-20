@@ -29,6 +29,19 @@ per measurement window.
 both a resumption checkpoint (if the study is interrupted) and an audit trail linking each result
 file to its config hash.
 
+Whichever way you pass the study - a YAML path or a
+[`StudyConfig`](./StudyConfig) you built yourself - it is resolved the same way before it
+runs: equivalent configurations are deduplicated, `n_cycles` is expanded into the execution
+sequence, the study gets its `study_design_hash` identity, and thermal gaps the study left
+unset take your machine defaults. The two routes produce identical resolved studies.
+
+:::note `n_cycles` differs between `run_study` and `llem run`
+`run_study` uses the library default of one cycle when the study file does not set
+`n_cycles`. The `llem run` and `llem study plan` commands apply a research default of three
+cycles with `shuffle` ordering instead. Set `n_cycles` (and `experiment_order`) explicitly
+in the study file if you want the same protocol from both.
+:::
+
 ---
 
 ## Simple usage

@@ -99,7 +99,7 @@ study = StudyConfig(
 |-------|------|---------|-------------|
 | `experiments` | `list[ExperimentConfig]` | _(required)_ | Resolved list of experiments to run. Minimum length 1. |
 | `study_name` | `str \| None` | `None` | Study name used in output directory naming (e.g. `gpt2-sweep_2026-05-07T14-00-00`). |
-| `study_design_hash` | `str \| None` | `None` | 16-char SHA-256 hex of the resolved experiment list (execution block excluded). Set by study finalisation after dedup; `None` when constructed programmatically. |
+| `study_design_hash` | `str \| None` | `None` | 16-char SHA-256 hex of the resolved experiment list (execution block excluded). Written by study resolution after dedup, for a YAML study and a programmatically built one alike; `None` until the study is resolved. Never set it yourself (see the caution above). |
 
 ### `output` block (`OutputConfig`)
 
@@ -116,7 +116,7 @@ Controls sequencing, cycles, and failure handling:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `n_cycles` | `int` | `1` | Number of times to repeat the full experiment list. |
+| `n_cycles` | `int` | `1` | Number of times to repeat the full experiment list. `1` is the library default, so `run_study("study.yaml")` runs one cycle unless the file says otherwise; the `llem run` and `llem study plan` commands apply their own research default of `3` (and `shuffle` ordering) for a file that leaves them unset. Set it in the study file to get the same count from both. |
 | `experiment_order` | `"sequential" \| "interleave" \| "shuffle" \| "reverse" \| "latin_square"` | `"sequential"` | Ordering across cycles. `"interleave"` runs A,B,A,B; `"shuffle"` randomises per-cycle. |
 | `experiment_gap_seconds` | `float \| None` | `None` | Seconds to wait between individual experiments. `None` resolves to the machine default from the user config (60s unless you change it). |
 | `cycle_gap_seconds` | `float \| None` | `None` | Longer thermal-equalisation pause at cycle boundaries (only when `n_cycles >= 2`). Boundary depends on `experiment_order`: for `sequential` it fires between the per-config repetition blocks (`[A,A,A\|B,B,B]`); for `interleave`/`reverse`/`shuffle`/`latin_square` it fires between full passes over the configs. `None` resolves to the machine default from the user config (300s unless you change it). |
@@ -136,9 +136,10 @@ Controls sequencing, cycles, and failure handling:
 | `runners` | `dict[str, str] \| None` | `None` | Per-engine runner: `{"transformers": "process", "vllm": "container"}` (the legacy `local`/`docker` vocabulary was renamed in v0.7 and is rejected with a migration error). `None` = use user config or auto-detection. |
 | `images` | `dict[str, str] \| None` | `None` | Per-engine Docker image overrides: `{"vllm": "ghcr.io/org/img:tag"}`. `None` = smart default (local build then registry fallback). |
 
-### Finalisation-populated metadata fields
+### Resolution-populated metadata fields
 
-These are written by study finalisation and the study runner; you rarely set them manually:
+These are written by study resolution and the study runner. Read them; do not write them
+(see the caution above):
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|

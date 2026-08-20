@@ -2,7 +2,7 @@
 
 Exercises the full load path: a study YAML with measurement-equivalent
 sweep configs goes through the config-loader parse step plus the study-layer
-finalisation, and the resulting ``StudyConfig`` records the pre-run
+resolution step, and the resulting ``StudyConfig`` records the pre-run
 equivalence groups + deduplicated canonical configs.
 
 Run time: < 1s - no GPU involved, all operations are on Pydantic models
