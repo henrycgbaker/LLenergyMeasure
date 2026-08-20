@@ -594,20 +594,24 @@ class StudyRunner(_BaselineMixin, _ImageMixin):
         boundaries track the active experiment_order (they differ between
         sequential and pass-structured orders, and never include index 0).
 
+        Both gaps are already resolved: resolve_study fills an unset gap from the
+        user config's machine-local default, so the value read here is the one the
+        study actually asked for. A zero (or absent) gap means no wait.
+
         Returns True if an interrupt arrived during a gap (caller should break).
         """
         # Config gap: between every consecutive experiment pair
         if index > 0:
-            gap_secs = float(self.study.study_execution.experiment_gap_seconds or 0)
-            if gap_secs > 0:
+            gap_secs = self.study.study_execution.experiment_gap_seconds
+            if gap_secs:
                 self._run_gap(gap_secs, "Experiment gap")
                 if self._interrupt_event.is_set():
                     return True
 
         # Cycle gap: at the cycle boundaries for the active experiment_order
         if index in cycle_gap_indices:
-            cycle_gap_secs = float(self.study.study_execution.cycle_gap_seconds or 0)
-            if cycle_gap_secs > 0:
+            cycle_gap_secs = self.study.study_execution.cycle_gap_seconds
+            if cycle_gap_secs:
                 self._run_gap(cycle_gap_secs, "Cycle gap")
                 if self._interrupt_event.is_set():
                     return True
