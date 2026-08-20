@@ -40,8 +40,9 @@ class RequestShape:
 
     Deliberately opaque here: the transport only needs an index and an optional
     payload to put on the wire, and the issuer above only needs to carry it. The
-    per-engine request encoding (prompt, token budget, sampling params) is owned
-    by later work and rides ``payload``.
+    per-engine request encoding (prompt, token budget, sampling params) is not
+    this type's concern - it rides inside ``payload``, built by whoever supplies
+    the shape source.
     """
 
     index: int
