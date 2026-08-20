@@ -38,15 +38,21 @@ permissions:
   pages: write
   id-token: write
 
-concurrency:
-  # Read-only / stateless - safe to cancel in-flight runs.
-  group: pages
-  cancel-in-progress: true
+# Concurrency is declared per job, not workflow-wide: the two jobs need
+# opposite policies. A single workflow-level `pages` group would make any
+# ref's docs run cancel any other ref's in-flight run, so concurrent
+# pushes showed up as spurious cancelled checks on unrelated PRs.
 
 jobs:
   build:
     name: Build docs site
     runs-on: ubuntu-latest
+    concurrency:
+      # Read-only / stateless - safe to cancel in-flight runs, but keyed on
+      # the ref so a build only ever supersedes an older build of the same
+      # branch or PR.
+      group: docs-build-${{ github.ref }}
+      cancel-in-progress: true
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -92,6 +98,11 @@ jobs:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     needs: build
     runs-on: ubuntu-latest
+    concurrency:
+      # One Pages deployment at a time, globally across every ref; never
+      # cancel a publish mid-flight (it can leave the site half-updated).
+      group: pages
+      cancel-in-progress: false
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
