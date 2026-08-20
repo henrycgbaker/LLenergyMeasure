@@ -19,7 +19,7 @@ Measurement lifecycle orchestration for any inference engine. Layer 3 in the six
 | `extended_metrics.py` | `compute_extended_metrics()` - derived efficiency metrics |
 | `timeseries.py` | `write_timeseries_parquet()` - power/thermal timeseries sidecar |
 | `measurement_warnings.py` | `collect_measurement_warnings()` - quality flag generation |
-| `traffic.py` | `TrafficSource` seam + `OpenLoopPoissonSource` - open-loop Poisson/gamma issuer for server-mode load (schedule-anchored, MLPerf-aligned); `HttpxTransport` behind the `server` extra |
+| `traffic.py` | `TrafficSource` seam + `OpenLoopPoissonSource` - open-loop Poisson/gamma issuer for server-mode load (schedule-anchored, MLPerf-aligned); the `Transport` seam it drives, whose HTTP implementation lives in `serving/transport.py` |
 
 ## MeasurementHarness
 

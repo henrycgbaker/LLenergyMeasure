@@ -76,7 +76,7 @@ from llenergymeasure.harness.server_warmup import (
     build_probe_request,
     describe_server_warmup_protocol,
 )
-from llenergymeasure.harness.traffic import CompletionResult, OpenLoopPoissonSource, RequestShape
+from llenergymeasure.harness.traffic import OpenLoopPoissonSource
 from llenergymeasure.harness.window_manager import (
     ABORTED_LEVEL_ATTR,
     ATTRIBUTION_STEADY_STATE_SPAN,
@@ -97,6 +97,7 @@ from llenergymeasure.results.request_log import (
     RequestLogRow,
 )
 from llenergymeasure.results.server_metrics import SloBounds, derive_server_window_metrics
+from llenergymeasure.serving.transport import CompletionResult, RequestShape
 
 if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig, TrafficConfig
@@ -1677,7 +1678,7 @@ class ServerSession:
         return _CompletionsShapeSource(prompts, model=self.config.task.model, max_tokens=max_tokens)
 
     def _make_transport(self, base_url: str) -> Transport:
-        from llenergymeasure.harness.traffic import HttpxTransport
+        from llenergymeasure.serving.transport import HttpxTransport
 
         return HttpxTransport(base_url=base_url, path=SERVING_COMPLETIONS_PATH)
 

@@ -28,7 +28,7 @@ from llenergymeasure.harness.server_warmup import (
     build_probe_request,
     describe_server_warmup_protocol,
 )
-from llenergymeasure.harness.traffic import IssuerReport, RequestShape
+from llenergymeasure.harness.traffic import IssuerReport
 from llenergymeasure.harness.window_manager import (
     LevelPlan,
     WarmupContext,
@@ -38,6 +38,7 @@ from llenergymeasure.harness.window_manager import (
     WindowStartEvent,
     WindowStopEvent,
 )
+from llenergymeasure.serving.transport import RequestShape
 
 # ---------------------------------------------------------------------------
 # Fakes

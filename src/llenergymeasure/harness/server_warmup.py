@@ -59,8 +59,9 @@ from llenergymeasure.utils.exceptions import LLEMError
 if TYPE_CHECKING:
     from llenergymeasure.config.models import ServerWarmupConfig
     from llenergymeasure.device.power_thermal import PowerThermalSample
-    from llenergymeasure.harness.traffic import RequestShape, ShapeSource, TrafficSource, Transport
+    from llenergymeasure.harness.traffic import ShapeSource, TrafficSource, Transport
     from llenergymeasure.harness.window_manager import WarmupContext
+    from llenergymeasure.serving.transport import RequestShape
     from llenergymeasure.serving.types import ProbeRequest
 
 

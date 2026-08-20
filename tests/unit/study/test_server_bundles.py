@@ -38,13 +38,9 @@ from llenergymeasure.domain.environment import (
 )
 from llenergymeasure.domain.experiment import compute_declared_config_hash
 from llenergymeasure.harness.server_warmup import ServerWarmupResult
-from llenergymeasure.harness.traffic import (
-    CompletionResult,
-    IssuerReport,
-    RequestRecord,
-    RequestShape,
-)
+from llenergymeasure.harness.traffic import IssuerReport, RequestRecord
 from llenergymeasure.harness.window_manager import LevelPlan, WindowSpec, WindowStopEvent
+from llenergymeasure.serving.transport import CompletionResult, RequestShape
 from llenergymeasure.study.manifest import ManifestWriter
 from llenergymeasure.study.server_session import (
     ServerCell,
