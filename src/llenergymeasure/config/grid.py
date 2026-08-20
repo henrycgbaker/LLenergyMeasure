@@ -265,35 +265,32 @@ def expand_grid(
         for s in skipped:
             logger.warning("  Skipped (%s): %s", s.short_label, s.display_reason[:200])
 
-    # Combinatorial explosion warnings (tiered)
+    # Combinatorial explosion warnings (tiered). Counts only: this runs during
+    # parse, before the execution block is resolved, so the thermal gaps and the
+    # effective cycle count are not known here and any runtime figure would be
+    # guesswork. ``llem study plan`` reports the gap-only wall-clock lower bound
+    # from the RESOLVED study instead.
     n_valid = len(valid)
     exec_cfg = raw_study.get("study_execution", {})
     n_cycles = exec_cfg.get("n_cycles", 1) if isinstance(exec_cfg, dict) else 1
     total_runs = n_valid * n_cycles
-    gap_seconds = (
-        exec_cfg.get("experiment_gap_seconds", 0) if isinstance(exec_cfg, dict) else 0
-    ) or 0
 
     if n_valid > 2000:
-        min_hours = total_runs * gap_seconds / 3600
         logger.warning(
             "Extremely large study: %d experiments (%d total runs). "
-            "Minimum runtime: ~%.0fh (gap time only). "
-            "Consider reducing sweep dimensions or groups.",
+            "Consider reducing sweep dimensions or groups. "
+            "Run `llem study plan <file>` for the wall-clock lower bound.",
             n_valid,
             total_runs,
-            min_hours,
         )
     elif n_valid > 500:
-        min_hours = total_runs * gap_seconds / 3600
         logger.warning(
             "Very large study: %d experiments (%d total runs with %d cycles). "
-            "Minimum runtime: ~%.0fh (gap time only). "
-            "Consider reducing sweep dimensions or groups.",
+            "Consider reducing sweep dimensions or groups. "
+            "Run `llem study plan <file>` for the wall-clock lower bound.",
             n_valid,
             total_runs,
             n_cycles,
-            min_hours,
         )
     elif n_valid > 100:
         logger.info("Large study: %d experiments.", n_valid)

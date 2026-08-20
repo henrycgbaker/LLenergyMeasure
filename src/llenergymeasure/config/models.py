@@ -1054,7 +1054,7 @@ class ExperimentConfig(BaseModel):
         Deliberately not a field: the declared-config hash must keep naming user
         intent (the study config), so the overlay output stays out of the wholesale
         ``model_dump``. Set by :func:`llenergymeasure.config.precedence.apply_server_warmup_overlay`
-        at study finalisation, before dedup runs.
+        during study resolution, before dedup runs.
         """
         self._resolved_server_warmup = warmup
 
@@ -1487,8 +1487,13 @@ class ExecutionConfig(BaseModel):
     between configs and cycles for thermal stabilisation, and an explicit shuffle
     seed override (default: derived from study_design_hash for reproducibility).
 
-    Pydantic defaults are conservative (1 cycle, sequential, no gaps). The CLI
-    will apply research-appropriate effective defaults (e.g. 3 cycles, shuffle).
+    Pydantic defaults are conservative (1 cycle, sequential, gaps unset). Two
+    things fill them in. Study resolution
+    (:func:`llenergymeasure.study.loading.resolve_study`) resolves an unset thermal
+    gap to the machine-local default from the user config, for EVERY caller, so a
+    run never silently skips its thermal gaps. On top of that the CLI supplies
+    research-appropriate execution defaults (3 cycles, shuffle) for anything the
+    study file leaves unset.
     """
 
     model_config = {"extra": "forbid"}
@@ -1632,10 +1637,17 @@ class ExecutionConfig(BaseModel):
 class StudyConfig(BaseModel):
     """Thin resolved container for a study (list of experiments + execution config).
 
-    Populated by the study loader after sweep expansion. The experiments list
-    contains fully-validated ExperimentConfig objects ready for execution.
+    Populated by :func:`llenergymeasure.study.loading.resolve_study`, the single
+    entry point every study passes through. The experiments list contains
+    fully-validated ExperimentConfig objects ready for execution.
     skipped_configs records any grid points that failed Pydantic validation so
     they can be displayed to the researcher in pre-flight output.
+
+    Constructing one directly is supported (for programmatic and pipeline use):
+    ``run_study`` and ``run_experiment`` resolve it before running it. The
+    resolution outputs - ``study_design_hash``, ``dedup_mode``,
+    ``pre_run_equivalence_groups``, ``declared_resolved_config_hashes`` - are
+    resolution's to write, not a caller's.
     """
 
     model_config = {"extra": "forbid"}
@@ -1679,7 +1691,9 @@ class StudyConfig(BaseModel):
         default=None,
         description=(
             "16-char SHA-256 hex of the resolved experiment list (execution block excluded). "
-            "Set by the loader after expansion; None before expansion."
+            "Written by study resolution for every study it resolves, whichever route it "
+            "arrived by; None until then. Never set this by hand - a study carrying it is "
+            "taken as resolved and dispatched as-is."
         ),
     )
     skipped_configs: list[dict[str, Any]] = Field(

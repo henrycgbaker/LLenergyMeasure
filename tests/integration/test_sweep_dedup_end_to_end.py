@@ -2,7 +2,7 @@
 
 Exercises the full load path: a study YAML with measurement-equivalent
 sweep configs goes through the config-loader parse step plus the study-layer
-finalisation, and the resulting ``StudyConfig`` records the pre-run
+resolution step, and the resulting ``StudyConfig`` records the pre-run
 equivalence groups + deduplicated canonical configs.
 
 Run time: < 1s - no GPU involved, all operations are on Pydantic models
@@ -17,7 +17,7 @@ import yaml
 
 from llenergymeasure.config.loader import load_study_config
 from llenergymeasure.config.models import StudyConfig
-from llenergymeasure.study.loading import finalise_study
+from llenergymeasure.study.loading import resolve_study
 
 
 def _write_study(tmp_path: Path, raw: dict) -> Path:
@@ -28,9 +28,9 @@ def _write_study(tmp_path: Path, raw: dict) -> Path:
     return path
 
 
-def load_study_config_finalised(path: Path, **kwargs) -> StudyConfig:
-    """Parse + finalise a study YAML into a resolved StudyConfig."""
-    return finalise_study(load_study_config(path, **kwargs))
+def load_study_config_resolved(path: Path, **kwargs) -> StudyConfig:
+    """Parse + resolve a study YAML into a runnable StudyConfig."""
+    return resolve_study(load_study_config(path, **kwargs))
 
 
 def test_greedy_temperature_sweep_collapses(tmp_path: Path) -> None:
@@ -45,7 +45,7 @@ def test_greedy_temperature_sweep_collapses(tmp_path: Path) -> None:
         },
     }
     path = _write_study(tmp_path, study)
-    study_config = load_study_config_finalised(path)
+    study_config = load_study_config_resolved(path)
 
     # Dedup mode default is resolved.
     assert study_config.dedup_mode == "resolved"
@@ -82,7 +82,7 @@ def test_no_dedup_preserves_all_configs(tmp_path: Path) -> None:
         "study_execution": {"deduplicate_equivalent": False},
     }
     path = _write_study(tmp_path, study)
-    study_config = load_study_config_finalised(path)
+    study_config = load_study_config_resolved(path)
 
     assert study_config.dedup_mode == "off"
     # All 6 declared configs run - library-resolution mechanism still populated the groups.
@@ -103,7 +103,7 @@ def test_cli_override_no_dedup(tmp_path: Path) -> None:
         },
     }
     path = _write_study(tmp_path, study)
-    study_config = load_study_config_finalised(
+    study_config = load_study_config_resolved(
         path,
         cli_overrides={"study_execution": {"deduplicate_equivalent": False}},
     )
@@ -125,7 +125,7 @@ def test_n_cycles_multiplies_unique_set(tmp_path: Path) -> None:
         "study_execution": {"n_cycles": 3},
     }
     path = _write_study(tmp_path, study)
-    study_config = load_study_config_finalised(path)
+    study_config = load_study_config_resolved(path)
 
     # 4 declared -> 3 unique (greedy-0.5 + greedy-0.7 collapse to greedy-1.0,
     # plus 2 sampling variants). 3 unique x 3 cycles = 9 runs.
@@ -147,7 +147,7 @@ def test_single_config_sweep_no_dedup(tmp_path: Path) -> None:
         },
     }
     path = _write_study(tmp_path, study)
-    study_config = load_study_config_finalised(path)
+    study_config = load_study_config_resolved(path)
 
     # Sampling is default-true; three temps should stay distinct.
     assert len(study_config.experiments) == 3
@@ -177,7 +177,7 @@ def test_llem_execution_batch_size_sweep_not_deduped(tmp_path: Path) -> None:
         "sweep": {"transformers.llem_execution.batch_size": [1, 4, 8, 16]},
     }
     path = _write_study(tmp_path, study)
-    study_config = load_study_config_finalised(path)
+    study_config = load_study_config_resolved(path)
 
     assert study_config.dedup_mode == "resolved"
     # Four distinct batch sizes are four distinct runs (was 1 before the fix).
@@ -201,7 +201,7 @@ def test_measurement_warmup_sweep_not_deduped(tmp_path: Path) -> None:
         "sweep": {"offline.warmup.n_prompts": [5, 10, 20]},
     }
     path = _write_study(tmp_path, study)
-    study_config = load_study_config_finalised(path)
+    study_config = load_study_config_resolved(path)
 
     assert len(study_config.experiments) == 3
     assert len(set(study_config.declared_resolved_config_hashes)) == 3
@@ -232,7 +232,7 @@ def test_no_dedup_repeated_config_runs_without_keyerror(tmp_path: Path) -> None:
         "study_execution": {"deduplicate_equivalent": False, "n_cycles": 1},
     }
     path = _write_study(tmp_path, study)
-    study_config = load_study_config_finalised(path)
+    study_config = load_study_config_resolved(path)
 
     # Precondition: at least one declared hash repeats in the ordered list
     # (the greedy family canonicalises to a single config).

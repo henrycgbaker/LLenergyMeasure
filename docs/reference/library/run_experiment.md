@@ -139,12 +139,29 @@ See [`ExperimentResult`](./ExperimentResult) for the full field list.
 
 ### Override a single field from a YAML file
 
+The `model=` and other keyword fields belong to the keyword call form only; they are
+ignored when a config file or object is passed. To swap one field of a file, load it and
+edit the object:
+
 ```python
-# Use YAML for everything except model - quick model swap
-result = run_experiment("base_config.yaml", model="meta-llama/Llama-3.1-8B")
+from llenergymeasure import run_experiment
+from llenergymeasure.config.loader import load_experiment_config
+
+config = load_experiment_config("base_config.yaml")
+config = config.model_copy(
+    update={"task": config.task.model_copy(update={"model": "meta-llama/Llama-3.1-8B"})}
+)
+result = run_experiment(config)
 ```
 
 ### Pass an ExperimentConfig object directly
+
+The config you pass is resolved before it runs, exactly as a study file is: any field the
+engine is known to ignore for this configuration is normalised away first, and it is that
+normalised form that is dispatched and named in the results. So the experiment id recorded
+for a config carrying an engine-ignored field is the id of the normalised config, not of
+the config as you wrote it - `llem study plan` lists any such normalisation up front. Your
+own object is not modified; the run works on a copy.
 
 ```python
 from llenergymeasure import run_experiment, ExperimentConfig

@@ -3,12 +3,16 @@
 This module is internal (underscore prefix). Import via llenergymeasure.__init__ only.
 
 It is a thin adapter over the study-layer orchestrator
-(:func:`llenergymeasure.study.orchestration.orchestrate_study`): it loads and
-validates config, translates the public call forms and the overloaded public
-``output_dir`` argument into the orchestrator's explicit internal parameters, and
-delegates. The public API surface (``load_study`` / ``run_experiment`` /
-``run_study`` signatures and behaviour, and ``api.__all__``) is frozen; the
-orchestration itself lives in the study layer.
+(:func:`llenergymeasure.study.orchestration.orchestrate_study`): it routes every
+call form through the single study-resolution entry point
+(:func:`llenergymeasure.study.loading.resolve_study`), translates the overloaded
+public ``output_dir`` argument into the orchestrator's explicit internal
+parameters, and delegates. A YAML path and the equivalent objects therefore
+produce the same resolved study. The public API surface (``load_study`` /
+``run_experiment`` / ``run_study`` and ``api.__all__``) is stable: call forms and
+their meaning do not change, and it grows only by addition (an optional keyword),
+never by removing or repurposing what callers already pass. The orchestration
+itself lives in the study layer.
 """
 
 from __future__ import annotations
@@ -38,53 +42,60 @@ _TASK_FIELDS: frozenset[str] = frozenset(TaskConfig.model_fields) - {"model", "d
 _MEASUREMENT_FIELDS: frozenset[str] = frozenset(MeasurementConfig.model_fields)
 
 # ---------------------------------------------------------------------------
-# load_study - parse + finalise composition
+# load_study - the YAML front door onto the single resolution entry point
 # ---------------------------------------------------------------------------
 
 
 def load_study(
     path: str | Path,
     cli_overrides: dict[str, Any] | None = None,
+    *,
+    execution_defaults: dict[str, Any] | None = None,
 ) -> StudyConfig:
-    """Load a study YAML and finalise it into a resolved StudyConfig.
+    """Load a study YAML and resolve it into a runnable StudyConfig.
 
     Composes the config-layer parse/expand step
-    (:func:`llenergymeasure.config.loader.load_study_config`) with the
-    study-layer finalisation
-    (:func:`llenergymeasure.study.loading.finalise_study`). This is the single
-    public entry both the CLI and ``run_study`` use, so the config layer never
-    imports upward into ``study`` and the CLI never imports ``study`` directly.
+    (:func:`llenergymeasure.config.loader.load_study_config`) with the single
+    study-resolution entry point
+    (:func:`llenergymeasure.study.loading.resolve_study`). This is the YAML front
+    door both the CLI and ``run_study`` use, so the config layer never imports
+    upward into ``study`` and the CLI never imports ``study`` directly.
 
-    It also loads the tool-wide user config and hands it to ``finalise_study``,
-    which overlays its ``server.warmup`` defaults onto each declared server config.
-    The overlay shapes the resolved-config hash (which dedup binds on) but
-    never the declared hash, so a shared study file keeps its declared identity
-    across machines. Resume and drift-detection remain declared-hash-only, so they
-    are blind to a user-config warmup change between an original run and a resume.
+    It also loads the tool-wide user config and hands it to ``resolve_study``,
+    which overlays its ``server.warmup`` defaults onto each declared server config
+    and fills in the machine-local thermal gaps the study left unset. The warmup
+    overlay shapes the resolved-config hash (which dedup binds on) but never the
+    declared hash, so a shared study file keeps its declared identity across
+    machines. Resume and drift-detection remain declared-hash-only, so they are
+    blind to a user-config warmup change between an original run and a resume.
 
     Args:
         path: Path to study YAML file.
-        cli_overrides: Optional dict of CLI flag overrides for the execution
-            block (e.g. {"study_execution": {"n_cycles": 5}}).
+        cli_overrides: Optional dict of overrides applied ON TOP of the study file
+            (e.g. {"study_execution": {"n_cycles": 5}}) - they win over what the
+            file declares.
+        execution_defaults: Optional execution-block defaults applied BENEATH the
+            study file: a field the file wrote wins, a field it omitted takes this
+            value (e.g. {"n_cycles": 3}).
 
     Returns:
         Resolved StudyConfig with ordered experiments, study_design_hash, dedup
         mode, and pre-run equivalence groups.
 
     Raises:
-        ConfigError: File not found, parse error, all configs invalid, empty study.
+        ConfigError: File not found, parse error, all configs invalid, empty study,
+            a study mixing serving_mode values, or invalid ``execution_defaults``.
         ValidationError: Pydantic structural errors pass through unchanged.
     """
     from llenergymeasure.config.loader import load_study_config
     from llenergymeasure.config.user_config import load_user_config
-    from llenergymeasure.study.loading import finalise_study
+    from llenergymeasure.study.loading import resolve_study
 
     # The production edge that folds the tool-wide user config into the study.
-    # finalise_study overlays its server.warmup defaults onto each declared server
-    # config, so the resolved-config hash binds on the realised warmup protocol.
-    return finalise_study(
+    return resolve_study(
         load_study_config(path, cli_overrides=cli_overrides),
         user_config=load_user_config(),
+        execution_defaults=execution_defaults,
     )
 
 
@@ -174,6 +185,7 @@ def run_experiment(
     )
     if output_dir is not None:
         study.output = study.output.model_copy(update={"results_dir": str(output_dir)})
+    study = _resolve_objects(study)
     study_result = orchestrate_study(study, skip_preflight=skip_preflight, progress=progress)
     if not study_result.experiments:
         from llenergymeasure.utils.exceptions import ExperimentError
@@ -210,8 +222,20 @@ def run_study(
 
     Always writes manifest.json to disk (documented side-effect).
 
+    A StudyConfig built in memory is resolved here exactly as a YAML study is:
+    equivalent configs are deduplicated, the ``study_design_hash`` is computed,
+    ``n_cycles`` is expanded into the execution sequence, and the equivalence
+    groups are recorded. An already-resolved StudyConfig (from ``load_study``)
+    passes through unchanged.
+
+    Resolving a caller-built StudyConfig is not free of side effects on its
+    argument: for a server-mode experiment, the resolved warmup protocol is
+    attached to the caller's OWN ExperimentConfig objects (as side-channel state,
+    not a declared field), so those objects carry it after the call. The declared
+    fields are never rewritten - the configs that actually run are copies.
+
     Args:
-        config: YAML file path or resolved StudyConfig.
+        config: YAML file path or a StudyConfig.
         skip_preflight: Skip Docker pre-flight checks (GPU visibility, CUDA/driver compat).
             CLI --skip-preflight flag and YAML execution.skip_preflight: true also bypass.
         progress: Optional StudyProgressCallback for live per-experiment display.
@@ -258,7 +282,7 @@ def run_study(
         study = load_study(config_path)
     elif isinstance(config, StudyConfig):
         # config_path may have been passed by caller (e.g. CLI pre-loads config)
-        study = config
+        study = _resolve_objects(config)
     else:
         raise ConfigError(f"Expected str, Path, or StudyConfig; got {type(config).__name__}")
 
@@ -315,6 +339,32 @@ def run_study(
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+
+def _resolve_objects(study: StudyConfig) -> StudyConfig:
+    """Route a caller-built StudyConfig through the single resolution entry point.
+
+    A StudyConfig assembled in memory - by ``run_study(StudyConfig(...))``, by
+    ``run_experiment``, or by any programmatic caller - has had none of the
+    resolution the YAML path performs: no dedup, no ``study_design_hash``, no
+    cycle expansion, no equivalence groups.
+    :func:`llenergymeasure.study.loading.resolve_study_objects` gives it exactly
+    the resolution a YAML study gets, with no file touched (#886).
+
+    An already-resolved study (one that carries a ``study_design_hash``, i.e. it
+    came from ``load_study``) is returned untouched, before the user config is
+    even read: its experiment list is already cycle-expanded, so resolving twice
+    would re-expand it. A study whose hash was written by hand rather than by
+    resolution is therefore NOT quietly resolved here - the orchestrator refuses
+    it, which is the louder outcome.
+    """
+    if study.study_design_hash is not None:
+        return study
+
+    from llenergymeasure.config.user_config import load_user_config
+    from llenergymeasure.study.loading import resolve_study_objects
+
+    return resolve_study_objects(study, user_config=load_user_config())
 
 
 def _to_study_config(

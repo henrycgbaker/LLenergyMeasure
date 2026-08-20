@@ -1,12 +1,14 @@
-"""YAML/JSON configuration loader for experiment configs (v2.0).
+"""YAML/JSON configuration loader for experiment and study configs.
 
-Implements the v2.0 loading contract:
+Implements the loading contract:
 - Collect ALL errors before raising (not one-at-a-time)
 - ConfigError with file path + did-you-mean for unknown fields
-- CLI override merging at highest priority
 - Native YAML anchor support via yaml.safe_load
 
-Priority (highest wins): cli_overrides > path YAML > user_config_defaults
+This layer parses; it does not resolve. Layering settings from the tool-wide user
+config, the environment and the call site belongs to
+``llenergymeasure.study.loading.resolve_study``, the single entry point every
+study passes through (#886).
 """
 
 from __future__ import annotations
@@ -19,7 +21,7 @@ from typing import Any
 import yaml
 from pydantic import ValidationError
 
-from llenergymeasure.config._dict_utils import _unflatten, deep_merge
+from llenergymeasure.config._dict_utils import deep_merge
 from llenergymeasure.config.grid import SkippedConfig, expand_grid
 from llenergymeasure.config.models import (
     RETIRED_HARNESS_KEY_MSG,
@@ -43,21 +45,14 @@ __all__ = [
 # =============================================================================
 
 
-def load_experiment_config(
-    path: Path | str | None = None,
-    cli_overrides: dict[str, Any] | None = None,
-    user_config_defaults: dict[str, Any] | None = None,
-) -> ExperimentConfig:
-    """Load and validate experiment configuration.
+def load_experiment_config(path: Path | str) -> ExperimentConfig:
+    """Load and validate a single-experiment configuration file.
 
-    Priority (highest wins): cli_overrides > path YAML > user_config_defaults
+    A pure parse of one file: experiment semantics live in the YAML, not in
+    layered overrides.
 
     Args:
-        path: Path to YAML or JSON config file. None = only CLI/defaults.
-        cli_overrides: Dict of CLI flag overrides (e.g. {"model": "gpt2", "engine": "transformers"}).
-            Keys match ExperimentConfig field names. None values are ignored (unset flags).
-        user_config_defaults: Dict of user config defaults to apply as lowest priority.
-            Only fields valid on ExperimentConfig (e.g. energy_sampler, engine defaults).
+        path: Path to YAML or JSON config file.
 
     Returns:
         Validated ExperimentConfig.
@@ -68,24 +63,7 @@ def load_experiment_config(
         ValidationError: Pydantic field-level validation errors pass through unchanged.
             (Bad values like n=-1 are Pydantic's domain; unknown keys become ConfigError.)
     """
-    # Start with user config defaults (lowest priority)
-    merged: dict[str, Any] = {}
-    if user_config_defaults:
-        merged = deep_merge(
-            merged, {k: v for k, v in user_config_defaults.items() if v is not None}
-        )
-
-    # Load and apply YAML/JSON file
-    if path is not None:
-        file_dict = _load_file(path)  # raises ConfigError on missing/parse error
-        merged = deep_merge(merged, file_dict)
-
-    # Apply CLI overrides (highest priority, skip None values)
-    if cli_overrides:
-        overrides = {k: v for k, v in cli_overrides.items() if v is not None}
-        merged = deep_merge(
-            merged, _unflatten(overrides)
-        )  # handle "transformers.batch_size" dotted keys
+    merged = _load_file(path)  # raises ConfigError on missing/parse error
 
     # Strip optional version field - not an ExperimentConfig field
     merged.pop("version", None)
@@ -93,15 +71,13 @@ def load_experiment_config(
     # Retired top-level ``harness:`` key: fail with the migration message naming
     # the new location, before the generic unknown-field did-you-mean fires.
     if "harness" in merged:
-        context = f" (in {path})" if path else ""
-        raise ConfigError(RETIRED_HARNESS_KEY_MSG + context)
+        raise ConfigError(f"{RETIRED_HARNESS_KEY_MSG} (in {path})")
 
     # Required serving_mode (no default): fail with the friendly migration message
     # naming both modes, with file context, rather than Pydantic's bare
     # "Field required".
     if "serving_mode" not in merged:
-        context = f" (in {path})" if path else ""
-        raise ConfigError(SERVING_MODE_REQUIRED_MSG + context)
+        raise ConfigError(f"{SERVING_MODE_REQUIRED_MSG} (in {path})")
 
     # Collect unknown field errors before handing to Pydantic
     known_fields = set(ExperimentConfig.model_fields.keys())
@@ -113,9 +89,7 @@ def load_experiment_config(
             msg = f"Unknown field '{key}'"
             if suggestion:
                 msg += f" - did you mean '{suggestion}'?"
-            if path:
-                msg += f" (in {path})"
-            errors.append(msg)
+            errors.append(f"{msg} (in {path})")
         raise ConfigError("\n".join(errors))
 
     # Construct ExperimentConfig - let ValidationError pass through unchanged
@@ -124,17 +98,16 @@ def load_experiment_config(
     except ValidationError:
         raise  # Pydantic field-level errors are not our domain to wrap
     except Exception as e:
-        context = f" (in {path})" if path else ""
-        raise ConfigError(f"Config construction failed{context}: {e}") from e
+        raise ConfigError(f"Config construction failed (in {path}): {e}") from e
 
 
 @dataclass(frozen=True)
 class LoadedStudyRaw:
-    """Parsed + sweep-expanded study material, before dedup/hash/cycle finalisation.
+    """Parsed + sweep-expanded study material, before dedup/hash/cycle resolution.
 
-    Output of :func:`load_study_config`. Carries everything the study-layer
-    finalisation step (``llenergymeasure.study.loading.finalise_study``) needs to
-    build a resolved :class:`~llenergymeasure.config.models.StudyConfig`, without
+    Output of :func:`load_study_config`. Carries everything the single
+    study-resolution entry point (``llenergymeasure.study.loading.resolve_study``)
+    needs to build a resolved :class:`~llenergymeasure.config.models.StudyConfig`, without
     the config layer reaching upward into ``study`` for the library-resolution /
     dedup mechanism.
 
@@ -177,31 +150,30 @@ def load_study_config(
     Dedup, study_design_hash, cycle ordering, and equivalence-group serialisation
     are deliberately NOT done here - they require the study-layer
     library-resolution mechanism, and the config layer must not import upward.
-    Those steps live in ``llenergymeasure.study.loading.finalise_study``, which
+    Those steps live in ``llenergymeasure.study.loading.resolve_study``, which
     consumes the :class:`LoadedStudyRaw` returned here and produces the resolved
     :class:`~llenergymeasure.config.models.StudyConfig`. Use
     ``llenergymeasure.api.load_study`` to run both steps in one call.
 
     Args:
         path: Path to study YAML file.
-        cli_overrides: Optional dict of CLI flag overrides for execution block
-            (e.g. {"study_execution": {"n_cycles": 5}}). The CLI translates
-            --cycles/--order/--no-gaps flags into this dict.
+        cli_overrides: Optional dict of overrides deep-merged onto the parsed
+            file, at the highest priority (e.g. {"study_execution":
+            {"n_cycles": 5}}).
 
     Returns:
         :class:`LoadedStudyRaw` - sweep-expanded experiments plus the parsed
-        metadata the study-layer finalisation needs.
+        metadata the study-layer resolution step needs.
 
     Raises:
         ConfigError: File not found, parse error, base file missing, ALL configs invalid,
-            empty study (no sweep and no experiments), or a study that mixes
-            serving_mode values (a v0.7 staging restriction).
+            or empty study (no sweep and no experiments).
         ValidationError: Pydantic structural errors on ExecutionConfig pass through.
     """
     path = Path(path)
     raw = _load_file(path)  # reuse existing _load_file - raises ConfigError on missing/parse error
 
-    # Apply CLI overrides (--cycles etc. translated into this dict)
+    # Apply CLI overrides (highest priority, deep-merged onto the parsed file)
     if cli_overrides:
         raw = deep_merge(raw, cli_overrides)
 
@@ -243,12 +215,6 @@ def load_study_config(
             "Nothing to run. Check sweep dimensions against engine constraints.\n" + skip_details
         )
 
-    # v0.7 staging restriction (deliberately deletable): a YAML/CLI-loaded study
-    # must not mix serving_mode values. This is the SINGLE gate; deleting the
-    # function plus this one call re-admits mixed-mode studies with no other
-    # change. See _validate_homogeneous_serving_mode.
-    _validate_homogeneous_serving_mode(valid_experiments)
-
     return LoadedStudyRaw(
         valid_experiments=valid_experiments,
         skipped=skipped,
@@ -263,35 +229,6 @@ def load_study_config(
 # =============================================================================
 # Private helpers
 # =============================================================================
-
-
-def _validate_homogeneous_serving_mode(experiments: list[ExperimentConfig]) -> None:
-    """Reject a YAML/CLI-loaded study that mixes serving_mode values (v0.7 staging).
-
-    DELIBERATELY DELETABLE: this function plus its single call site in
-    ``load_study_config`` are the ONLY thing restricting mixed serving_mode
-    studies at v0.7. A later release that admits the engine x serving_mode grid
-    crossing deletes both and nothing else changes. This restriction lives here
-    at the study-config loading edge (shared identically by the CLI and the
-    YAML-driven API paths), NOT as a model_validator: the data model stays
-    mixed-legal, so direct ``StudyConfig(experiments=[...])`` construction with
-    mixed modes is unaffected.
-
-    Args:
-        experiments: The fully-expanded, already-validated experiment list.
-
-    Raises:
-        ConfigError: When the experiments span more than one serving_mode.
-    """
-    modes = sorted({exp.serving_mode for exp in experiments})
-    if len(modes) > 1:
-        raise ConfigError(
-            f"This study mixes serving_mode values ({', '.join(modes)}), but a "
-            "single study must use exactly one serving_mode at this release. "
-            "Mixed-mode studies (a study spanning both offline and server) arrive "
-            "in a later release. Split the study so every experiment shares one "
-            "serving_mode: run one study per serving_mode."
-        )
 
 
 def _load_file(path: Path | str) -> dict[str, Any]:

@@ -14,7 +14,7 @@ from pathlib import Path
 import yaml
 
 from llenergymeasure.api import load_study
-from llenergymeasure.cli._study_defaults import study_cli_overrides_for_file
+from llenergymeasure.cli._study_defaults import STUDY_EXECUTION_DEFAULTS
 from llenergymeasure.cli._study_plan import (
     build_funnel,
     dormant_observation_lines,
@@ -58,11 +58,12 @@ def _load_with_cli_defaults(tmp_path: Path, text: str) -> object:
     """Load exactly as ``llem run``/``llem study plan`` do - CLI defaults applied.
 
     Mirrors the command path: the CLI-layer effective defaults (n_cycles=3,
-    shuffle) are injected before ``load_study`` unless the file sets them.
+    shuffle) are handed to ``load_study``, which applies them to whatever the
+    file leaves unset.
     """
     path = tmp_path / "study.yaml"
     path.write_text(text)
-    return load_study(path, cli_overrides=study_cli_overrides_for_file(path))
+    return load_study(path, execution_defaults=STUDY_EXECUTION_DEFAULTS)
 
 
 def test_funnel_arithmetic_full(tmp_path: Path) -> None:

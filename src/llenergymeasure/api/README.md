@@ -89,7 +89,14 @@ run_experiment(...)
   └─ _to_study_config()       # normalise all input forms to StudyConfig
 run_study(...)
   └─ (adapter: map output_dir -> results_dir_override / resume search base)
+     ├─ study.loading.resolve_study(...)               # the ONE resolution entry:
+     │                                                 # dedup, design hash, cycles,
+     │                                                 # equivalence groups, gaps.
+     │                                                 # YAML studies pass through it
+     │                                                 # inside load_study; a caller-built
+     │                                                 # StudyConfig passes through it here.
      └─ study.orchestration.orchestrate_study(study)   # study-layer dispatcher
+                                                       # (asserts the study is resolved)
            ├─ run_study_preflight()
            ├─ resolve_study_runners()
            ├─ create_study_dir() + ManifestWriter
