@@ -21,7 +21,7 @@ llenergymeasure/
 ├── infra/              # Docker runner, image registry, runner resolution
 ├── results/            # Results persistence, aggregation, extended metrics
 ├── search/             # Reserved: candidate enumeration and search policy
-├── serving/            # Reserved: engine-server lifecycle vocabulary
+├── serving/            # Engine-server lifecycle: launch, readiness, transport
 ├── study/              # Study (sweep) runner, grid expansion, preflight
 └── utils/              # Shared exceptions, constants, security
 ```
@@ -29,13 +29,14 @@ llenergymeasure/
 ## Layer Architecture
 
 ```
-Layer 10: cli/                - Typer CLI (llem run, llem doctor)
-Layer  9: api/                - Public Python API (run_experiment, run_study)
-Layer  8: study/              - Study runner, grid expansion, manifest, study preflight
-Layer  7: entrypoints/        - In-container process entry points
-Layer  6: harness/            - MeasurementHarness, experiment preflight, env snapshot
-Layer  5: results/            - Results persistence, aggregation, extended metrics
-Layer  4: engines/ | energy/ | datasets/  - Engine plugins, energy samplers, prompt loading
+Layer 11: cli/                - Typer CLI (llem run, llem doctor)
+Layer 10: api/                - Public Python API (run_experiment, run_study)
+Layer  9: study/              - Study runner, grid expansion, manifest, study preflight
+Layer  8: entrypoints/        - In-container process entry points
+Layer  7: harness/            - MeasurementHarness, experiment preflight, env snapshot
+Layer  6: results/            - Results persistence, aggregation, extended metrics
+Layer  5: engines/ | energy/ | datasets/  - Engine plugins, energy samplers, prompt loading
+Layer  4: serving/            - Engine-server lifecycle: placement, launch, readiness, transport
 Layer  3: infra/              - Docker runner, image registry, runner resolution
 Layer  2: device/             - GPU info, NVML, power/thermal, gpu_indices, env metadata collection
 Layer  1: config/ | domain/   - Config models, domain result models (pure Pydantic)
@@ -47,10 +48,9 @@ Layer rules are enforced in CI by `import-linter` (see `[tool.importlinter]` in 
 Upper layers may import lower layers but not vice versa. Packages joined by `|` on one
 line are siblings at the same level and must not import each other.
 
-`search/` and `serving/` are reserved placeholders: they carry no code yet, but the
-boundary contracts already name them, so the first module landed in either one starts out
-inside the rules. `search/` will take the level above `study/`; `serving/` will take the
-level above `infra/`.
+`search/` is a reserved placeholder: it carries no code yet, but the boundary contracts
+already name it, so the first module landed there starts out inside the rules. It will take
+the level above `study/`.
 
 ## Key Files
 
@@ -66,11 +66,12 @@ Modular Typer CLI:
 - `llem doctor [--check] [--json]` - environment health check (GPU, engines, energy, Docker, config, image schema)
 - Uses `_version.py` directly for version string (not the package root)
 
-### entrypoints/ (Layer 7)
+### entrypoints/ (Layer 8)
 - `container.py` - Docker container entry point
 - `baseline_measure.py` - in-container idle-baseline measurement entry point
-- Imports from `harness/`, `results/`, `engines/`, `infra/`, `device/`, `config/`, `domain/`,
-  `utils/` - all valid downward imports. Reaching `study/` or `api/` from here is forbidden
+- Imports from `harness/`, `results/`, `engines/`, `serving/`, `infra/`, `device/`, `config/`,
+  `domain/`, `utils/` - all valid downward imports. Reaching `study/` or `api/` from here is
+  forbidden
 
 ### utils/exceptions.py
 Exception hierarchy rooted at `LLEMError`:
@@ -102,33 +103,33 @@ Security utilities:
 | `infra/`        | Docker runner, image registry, runner resolution                 |
 | `results/`      | Results persistence, aggregation, extended efficiency metrics    |
 | `search/`       | Reserved: candidate enumeration policy and search driver         |
-| `serving/`      | Reserved: engine-server lifecycle vocabulary                     |
+| `serving/`      | Engine-server lifecycle: launch, readiness, HTTP transport        |
 | `study/`        | Study runner, grid expansion, manifest, study preflight          |
 | `utils/`        | Shared exceptions, constants, security utilities                 |
 
 ## Layer-by-Layer Notes
 
-### `cli/` (Layer 10)
+### `cli/` (Layer 11)
 - `cli/` imports only from `api/`. Must not import harness, engines, energy, infra, study, or
   results directly.
 - `cli/__init__.py` imports version from `_version.py` directly (not the package root), avoiding
   the heavy `__init__.py` import chain.
 
-### `entrypoints/` (Layer 7)
+### `entrypoints/` (Layer 8)
 - `entrypoints/container.py` is the Docker-side entry point, started by the container runner
   with one already-resolved experiment. It may import from any lower layer, but not from
   `study/` or `api/`: re-entering orchestration from inside a measurement container would
   nest one run inside another.
 
-### `api/` (Layer 9)
+### `api/` (Layer 10)
 - `_impl.py` - implementation of `run_experiment` / `run_study`
 - `__init__.py` - re-exports `run_experiment`, `run_study`, and `save_result`
 
-### `study/` (Layer 8)
+### `study/` (Layer 9)
 - `runner.py` - orchestrates multi-experiment sweeps
 - `preflight.py` - study-level pre-flight validation (multi-engine Docker requirements)
 
-### `harness/` (Layer 6) and `results/` (Layer 5)
+### `harness/` (Layer 7) and `results/` (Layer 6)
 - `harness/measurement.py` - `MeasurementHarness` measurement lifecycle (re-exported via `harness/__init__.py`)
 - `harness/preflight.py` - experiment-level pre-flight checks (CUDA, engine, model)
 - `harness/environment.py` - environment snapshot collection
@@ -137,16 +138,22 @@ Security utilities:
 - `results/extended_metrics.py` - efficiency metrics computation (tokens/joule, joules/token, etc.)
 - Harness owns the NVML measurement window; engine compilation must never occur inside it
 
-### `engines/` (Layer 4)
+### `engines/` (Layer 5)
 - `protocol.py` - `EnginePlugin` protocol
 - `transformers.py`, `vllm.py`, `tensorrt.py` - engine implementations
 - `_observed.py` - observed-runtime-data extraction (effective params, per-request metrics)
 - `_cuda.py` - CUDA memory and warmup helpers
 - `_errors.py` - OOM and import error helpers
 
-### `energy/` (Layer 4)
+### `energy/` (Layer 5)
 - `base.py` - `EnergySampler` base class
 - `nvml.py`, `zeus.py`, `codecarbon.py` - energy sampler implementations
+
+### `serving/` (Layer 4)
+- `types.py` - `ServerPlacement`, `ServerHandle`, `ProbeRequest` and the lifecycle errors
+- `lifecycle.py` - port allocation, container/process launch, readiness wait, shutdown
+- `transport.py` - streaming HTTP transport for the issuer's `Transport` seam
+- Owns nothing engine-specific: each engine's serve command stays in its own adapter
 
 ### `infra/` (Layer 3)
 - `docker_runner.py` - Docker dispatch (DockerRunner)

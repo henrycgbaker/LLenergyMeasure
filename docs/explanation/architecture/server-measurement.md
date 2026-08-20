@@ -137,13 +137,13 @@ count of failures rather than one.
 ## The server lifecycle underneath
 
 The session composes the container and process primitives in
-[`src/llenergymeasure/infra/server_lifecycle.py`](https://github.com/henrycgbaker/llenergymeasure/blob/main/src/llenergymeasure/infra/server_lifecycle.py).
+[`src/llenergymeasure/serving/lifecycle.py`](https://github.com/henrycgbaker/llenergymeasure/blob/main/src/llenergymeasure/serving/lifecycle.py).
 Launch allocates a free loopback port and runs the image detached; readiness
 (`await_ready`,
-[`server_lifecycle.py:417`](https://github.com/henrycgbaker/llenergymeasure/blob/main/src/llenergymeasure/infra/server_lifecycle.py#L417))
+[`lifecycle.py:224`](https://github.com/henrycgbaker/llenergymeasure/blob/main/src/llenergymeasure/serving/lifecycle.py#L224))
 runs a liveness health poll and then a real inference request through the
 serving path, and is satisfied only when that request returns HTTP 200; shutdown
-([`server_lifecycle.py:630`](https://github.com/henrycgbaker/llenergymeasure/blob/main/src/llenergymeasure/infra/server_lifecycle.py#L630))
+([`lifecycle.py:437`](https://github.com/henrycgbaker/llenergymeasure/blob/main/src/llenergymeasure/serving/lifecycle.py#L437))
 stops and force-removes the container so nothing leaks even if the stop failed.
 
 ## Why this matters
