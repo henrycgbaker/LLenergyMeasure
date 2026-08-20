@@ -205,6 +205,19 @@ def test_orchestration_refuses_an_unresolved_study() -> None:
         orchestrate_study(StudyConfig(experiments=[_experiment()]))
 
 
+def test_a_hand_set_design_hash_does_not_pass_for_resolution() -> None:
+    """Writing study_design_hash by hand buys no free pass through the gate.
+
+    A study carrying only the hash has none of resolution's other outputs - no
+    equivalence records, no cycle expansion, no resolved thermal gaps - so
+    accepting it would run a study whose recorded identity describes nothing that
+    was actually resolved. run_study must refuse it rather than run it.
+    """
+    forged = StudyConfig(experiments=[_experiment()], study_design_hash="deadbeefdeadbeef")
+    with pytest.raises(ValueError, match="requires a resolved study"):
+        run_study(forged)
+
+
 # ---------------------------------------------------------------------------
 # Execution defaults sit beneath the study file
 # ---------------------------------------------------------------------------

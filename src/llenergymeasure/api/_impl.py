@@ -344,7 +344,9 @@ def _resolve_objects(study: StudyConfig) -> StudyConfig:
 
     An already-resolved study (one that carries a ``study_design_hash``, i.e. it
     came from ``load_study``) is returned untouched: its experiment list is
-    already cycle-expanded, so resolving twice would re-expand it.
+    already cycle-expanded, so resolving twice would re-expand it. A study whose
+    hash was written by hand rather than by resolution is therefore NOT quietly
+    resolved here - the orchestrator refuses it, which is the louder outcome.
     """
     if study.study_design_hash is not None:
         return study

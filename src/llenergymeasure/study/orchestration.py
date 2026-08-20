@@ -287,17 +287,28 @@ def _resolve_runner_specs(
 def _require_resolved(study: StudyConfig) -> None:
     """Reject a study that has not been through the resolution entry point.
 
-    ``study_design_hash`` is set by
-    :func:`llenergymeasure.study.loading.resolve_study` and by nothing else, so it
-    is the marker for "this study has been resolved". Running an unresolved study
-    would run it undeduped, unhashed and uncycled - silently ignoring
-    ``n_cycles`` and producing results with no study identity. Fail loudly instead.
+    Running an unresolved study would run it undeduplicated, unhashed and
+    uncycled - silently ignoring ``n_cycles``, skipping the thermal gaps, and
+    producing results with no study identity and an empty equivalence-group
+    sidecar. Fail loudly instead.
+
+    ``study_design_hash`` and ``declared_resolved_config_hashes`` are the markers:
+    :func:`llenergymeasure.study.loading.resolve_study` populates both for every
+    study it resolves, and they are what the run's identity and equivalence
+    records are built from. They are TRUSTED markers, not a proof: both are
+    ordinary settable fields, so a caller who writes them by hand can get an
+    unresolved study past this check. Doing so is unsupported misuse - the
+    supported way to obtain a resolved study is ``api.load_study`` for a YAML
+    study, or handing the StudyConfig to ``run_study`` / ``run_experiment``, which
+    resolve it. Verifying the hash by recomputing it is deliberately not done: it
+    would re-run resolution on every dispatch to catch only deliberate forgery.
     """
-    if study.study_design_hash is None:
+    if study.study_design_hash is None or not study.declared_resolved_config_hashes:
         raise ValueError(
-            "orchestrate_study requires a resolved study (study_design_hash is unset). "
+            "orchestrate_study requires a resolved study (no resolution markers found). "
             "Build it with llenergymeasure.api.load_study for a YAML study, or pass the "
-            "StudyConfig to run_study/run_experiment, which resolve it for you."
+            "StudyConfig to run_study/run_experiment, which resolve it for you. Do not set "
+            "study_design_hash by hand."
         )
 
 

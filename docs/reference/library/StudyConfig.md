@@ -32,6 +32,17 @@ resolved exactly the same way: `run_study` and `run_experiment` route it through
 entry point before running it, without touching a file. A study that has not been resolved
 is refused rather than run undeduplicated and unhashed.
 
+:::caution Never set `study_design_hash` by hand
+`study_design_hash` and `declared_resolved_config_hashes` are resolution's output and its
+markers: `run_study` treats a study that already carries the hash as resolved and passes it
+straight to the runner. Writing them yourself is unsupported - the study is dispatched
+without deduplication, without cycle expansion, without resolved thermal gaps and with an
+empty equivalence-group record, under an identity that describes none of that. Mutating a
+resolved study afterwards (appending to `experiments`, editing `study_execution`) is
+unsupported for the same reason and is not detected. Build the study you want and let
+`run_study` resolve it.
+:::
+
 `StudyConfig` is rarely constructed directly in userland. The normal path is to pass a YAML
 path to [`run_study`](./run_study) and let it load and resolve the config. Direct
 construction is useful for programmatic test generation or pipeline integration.
