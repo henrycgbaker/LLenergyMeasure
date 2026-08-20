@@ -74,7 +74,11 @@ RUNNER_CONTAINER: Final = "container"
 CONTAINER_EXCHANGE_DIR: Final = "/run/llem"
 """Mount point inside Docker containers for config/result exchange."""
 
-# RunnerSpec.source tags - which layer of the precedence chain produced a runner.
+# Provenance tags - which layer of the precedence chain produced a value. Shared by
+# RunnerSpec.source and by every value the precedence chain resolves
+# (llenergymeasure.config.precedence), so one vocabulary names one layer everywhere.
+SOURCE_CALL_SITE: Final = "call_site"
+"""Provenance tag for a value pinned by the caller (a CLI flag, an API argument)."""
 SOURCE_ENV: Final = "env"
 SOURCE_YAML: Final = "yaml"
 SOURCE_USER_CONFIG: Final = "user_config"
@@ -399,6 +403,7 @@ __all__ = [
     "RUNNER_PROCESS",
     "SAMPLING_PRESETS",
     "SOURCE_AUTO_DETECTED",
+    "SOURCE_CALL_SITE",
     "SOURCE_DEFAULT",
     "SOURCE_ENV",
     "SOURCE_IMPLICIT",
