@@ -57,24 +57,28 @@ def _resolve_from_objects(study: StudyConfig, user_config: UserConfig) -> StudyC
     return resolve_study(raw, user_config=user_config)
 
 
-def test_overlay_applies_to_server_leaves_offline_untouched() -> None:
-    server, offline = _server_exp(), _offline_exp()
-    # Sequential order keeps the resolved list in declared order.
+def test_overlay_applies_to_a_server_study() -> None:
+    """A server study built from objects resolves the overlaid warmup protocol."""
     study = StudyConfig(
-        experiments=[server, offline],
+        experiments=[_server_exp()],
         study_execution=ExecutionConfig(experiment_order="sequential"),
     )
-    offline_declared_before = compute_declared_config_hash(offline)
-
     resolved_study = _resolve_from_objects(study, _user("fixed"))
-    resolved_server, resolved_offline = resolved_study.experiments
 
-    # Server experiment now resolves the overlaid (fixed) protocol...
-    resolved = resolved_server.resolved_server_warmup()
+    resolved = resolved_study.experiments[0].resolved_server_warmup()
     assert resolved is not None and resolved.mode == "fixed"
-    # ...while the offline experiment is untouched (no server warmup, hash stable).
+
+
+def test_overlay_leaves_an_offline_study_untouched() -> None:
+    """An offline study gets no warmup overlay, and its declared identity holds."""
+    offline = _offline_exp()
+    declared_before = compute_declared_config_hash(offline)
+
+    resolved_study = _resolve_from_objects(StudyConfig(experiments=[offline]), _user("fixed"))
+    resolved_offline = resolved_study.experiments[0]
+
     assert resolved_offline.resolved_server_warmup() is None
-    assert compute_declared_config_hash(resolved_offline) == offline_declared_before
+    assert compute_declared_config_hash(resolved_offline) == declared_before
 
 
 def test_resolution_is_stable_across_repeated_calls() -> None:

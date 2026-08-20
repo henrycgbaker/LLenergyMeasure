@@ -55,9 +55,10 @@ def resolve_study(
     resolve identically, down to the ``study_design_hash``.
 
     Steps, in this order:
-      0. Resolve the execution block: caller-supplied effective defaults beneath
-         the study file, then the machine-local thermal gaps for gaps the study
-         left unset.
+      0. Reject a study that mixes serving_mode values (a staging restriction of
+         this release), then resolve the execution block: caller-supplied
+         effective defaults beneath the study file, then the machine-local
+         thermal gaps for gaps the study left unset.
       1. Overlay the tool-wide user-config server warmup onto each declared server
          config, BEFORE dedup, so the resolved-config hash binds on the
          realised warmup protocol.
@@ -84,7 +85,12 @@ def resolve_study(
     Returns:
         Resolved StudyConfig with ordered experiments, study_design_hash, dedup
         mode, and pre-run equivalence groups.
+
+    Raises:
+        ConfigError: The study mixes serving_mode values.
     """
+    _validate_homogeneous_serving_mode(raw.valid_experiments)
+
     execution = _resolve_execution(
         raw.execution,
         user_config=user_config,
@@ -174,6 +180,38 @@ def resolve_study(
         declared_resolved_config_hashes=list(dedup.declared_resolved_hashes),
         dormant_observations=[asdict(obs) for obs in dedup.dormant_observations],
     )
+
+
+def _validate_homogeneous_serving_mode(experiments: list[ExperimentConfig]) -> None:
+    """Reject a study that mixes serving_mode values (a staging restriction).
+
+    DELIBERATELY DELETABLE: this function plus its single call site in
+    :func:`resolve_study` are the ONLY thing restricting mixed serving_mode
+    studies. A later release that admits the engine x serving_mode grid crossing
+    deletes both and nothing else changes.
+
+    It lives at the resolution entry point, not as a model_validator: the data
+    model stays mixed-legal, so building a mixed ``StudyConfig`` in memory or
+    inspecting one is unaffected, while every route that actually RUNS a study
+    (the study file and the programmatic entry points alike) is gated identically.
+
+    Args:
+        experiments: The fully-expanded, already-validated experiment list.
+
+    Raises:
+        ConfigError: When the experiments span more than one serving_mode.
+    """
+    modes = sorted({exp.serving_mode for exp in experiments})
+    if len(modes) > 1:
+        from llenergymeasure.utils.exceptions import ConfigError
+
+        raise ConfigError(
+            f"This study mixes serving_mode values ({', '.join(modes)}), but a "
+            "single study must use exactly one serving_mode at this release. "
+            "Mixed-mode studies (a study spanning both offline and server) arrive "
+            "in a later release. Split the study so every experiment shares one "
+            "serving_mode: run one study per serving_mode."
+        )
 
 
 def _resolve_execution(

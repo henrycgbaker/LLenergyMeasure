@@ -11,7 +11,9 @@ Every study - loaded from YAML or built from objects - passes through
   rather than collapsing to zero, and the runner waits for the resolved value;
 - a study file's own gap values, including an explicit zero, win over them;
 - caller-supplied execution defaults fill only what the file left unset;
-- an unresolved study is refused by the orchestrator rather than run.
+- both routes reject a study that mixes serving_mode values, with one message;
+- an unresolved study, or one carrying a hand-written identity hash, is refused
+  rather than run.
 """
 
 from __future__ import annotations
@@ -33,6 +35,7 @@ from llenergymeasure.config.models import (
 from llenergymeasure.config.user_config import UserConfig, UserExecutionConfig
 from llenergymeasure.study.loading import resolve_study
 from llenergymeasure.study.orchestration import orchestrate_study
+from llenergymeasure.utils.exceptions import ConfigError
 from tests.conftest import make_study_result
 
 # The built-in machine-local thermal defaults an unset gap must fall back to.
@@ -203,6 +206,45 @@ def test_orchestration_refuses_an_unresolved_study() -> None:
     """A study that skipped resolution is rejected, not run undeduped."""
     with pytest.raises(ValueError, match="requires a resolved study"):
         orchestrate_study(StudyConfig(experiments=[_experiment()]))
+
+
+def test_both_routes_reject_a_mixed_serving_mode_study(tmp_path: Path, monkeypatch) -> None:
+    """The mixed-serving_mode gate fires identically on the file and object routes."""
+    _capture_orchestrated(monkeypatch)
+
+    mixed_yaml = _write_study(
+        tmp_path,
+        {
+            "engine": "vllm",
+            "experiments": [
+                {"task": {"model": "gpt2"}, "serving_mode": "offline"},
+                {
+                    "task": {"model": "gpt2"},
+                    "serving_mode": "server",
+                    "server": {"traffic": {"rate": 5, "window_seconds": 60}},
+                },
+            ],
+        },
+    )
+    mixed_objects = StudyConfig(
+        experiments=[
+            ExperimentConfig(task={"model": "gpt2"}, engine="vllm", serving_mode="offline"),
+            ExperimentConfig(
+                task={"model": "gpt2"},
+                engine="vllm",
+                serving_mode="server",
+                server={"traffic": {"rate": 5, "window_seconds": 60}},
+            ),
+        ]
+    )
+
+    with pytest.raises(ConfigError) as from_yaml:
+        run_study(mixed_yaml)
+    with pytest.raises(ConfigError) as from_objects:
+        run_study(mixed_objects)
+
+    assert str(from_yaml.value) == str(from_objects.value)
+    assert "mixes serving_mode values" in str(from_objects.value)
 
 
 def test_a_hand_set_design_hash_does_not_pass_for_resolution() -> None:

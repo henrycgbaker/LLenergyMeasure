@@ -399,11 +399,12 @@ def test_load_study_config_empty_study_raises(tmp_path):
         load_study_config(study_yaml)
 
 
-def test_load_study_config_mixed_serving_mode_explicit_raises(tmp_path):
-    """A study whose explicit experiments mix serving_mode is rejected (v0.7 staging).
+def test_mixed_serving_mode_explicit_raises_at_resolution(tmp_path):
+    """A study whose explicit experiments mix serving_mode is rejected.
 
-    The error names both modes found, points at the field by name, and tells the
-    user to split the study.
+    The gate lives at the resolution entry point, so parsing the file succeeds and
+    resolving it is what rejects the study. The error names both modes found,
+    points at the field by name, and tells the user to split the study.
     """
     study_yaml = tmp_path / "study.yaml"
     study_yaml.write_text(
@@ -421,8 +422,9 @@ def test_load_study_config_mixed_serving_mode_explicit_raises(tmp_path):
             }
         )
     )
+    assert len(load_study_config(study_yaml).valid_experiments) == 2  # parses fine
     with pytest.raises(ConfigError) as exc:
-        load_study_config(study_yaml)
+        _load_study(study_yaml)
     msg = str(exc.value)
     assert "offline" in msg
     assert "server" in msg
@@ -430,7 +432,7 @@ def test_load_study_config_mixed_serving_mode_explicit_raises(tmp_path):
     assert "split" in msg.lower()
 
 
-def test_load_study_config_mixed_serving_mode_sweep_raises(tmp_path):
+def test_mixed_serving_mode_sweep_raises_at_resolution(tmp_path):
     """A serving_mode sweep spanning both modes funnels through the SAME validator.
 
     A flat ``serving_mode: [offline, server]`` axis cannot produce two valid arms
@@ -455,7 +457,7 @@ def test_load_study_config_mixed_serving_mode_sweep_raises(tmp_path):
         )
     )
     with pytest.raises(ConfigError) as exc:
-        load_study_config(study_yaml)
+        _load_study(study_yaml)
     msg = str(exc.value)
     assert "offline" in msg
     assert "server" in msg
