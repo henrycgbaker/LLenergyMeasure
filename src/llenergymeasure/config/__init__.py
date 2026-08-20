@@ -2,7 +2,7 @@
 
 Public API:
 - ExperimentConfig: Main experiment configuration model
-- load_experiment_config: Load from YAML/JSON with CLI override support
+- load_experiment_config: Load and validate a single-experiment YAML/JSON file
 - load_user_config: Load user preferences from XDG config dir
 - get_user_config_path: Return the XDG user config path
 - SchemaLoader / DiscoveredSchema: Access discovered engine parameter schemas

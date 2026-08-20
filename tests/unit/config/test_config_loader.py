@@ -163,54 +163,6 @@ def test_pydantic_validation_error_not_wrapped_in_config_error(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# CLI override merging
-# ---------------------------------------------------------------------------
-
-
-def test_cli_overrides_merged(tmp_path):
-    """cli_overrides override YAML values at highest priority."""
-    path = _write_yaml(
-        tmp_path, "task:\n  model: gpt2\nengine: transformers\nserving_mode: offline\n"
-    )
-    config = load_experiment_config(path, cli_overrides={"task.model": "bert-base"})
-    assert config.task.model == "bert-base"
-
-
-def test_cli_overrides_none_values_ignored(tmp_path):
-    """None values in cli_overrides are ignored (unset CLI flags)."""
-    path = _write_yaml(
-        tmp_path, "task:\n  model: gpt2\nengine: transformers\nserving_mode: offline\n"
-    )
-    config = load_experiment_config(
-        path, cli_overrides={"task.model": None, "transformers.engine_params.dtype": None}
-    )
-    assert config.task.model == "gpt2"  # file value retained
-
-
-def test_cli_overrides_without_file():
-    """load_experiment_config with cli_overrides and no file works."""
-    config = load_experiment_config(
-        path=None,
-        cli_overrides={"task.model": "gpt2", "engine": "transformers", "serving_mode": "offline"},
-    )
-    assert config.task.model == "gpt2"
-    assert config.engine == "transformers"
-
-
-def test_cli_override_dotted_key(tmp_path):
-    """Dotted CLI override keys are unflattened into nested dicts."""
-    path = _write_yaml(
-        tmp_path, "task:\n  model: gpt2\nengine: transformers\nserving_mode: offline\n"
-    )
-    config = load_experiment_config(
-        path,
-        cli_overrides={"transformers.engine_params.num_beams": 8},
-    )
-    assert config.transformers is not None
-    assert config.transformers.engine_params.num_beams == 8
-
-
-# ---------------------------------------------------------------------------
 # deep_merge
 # ---------------------------------------------------------------------------
 
