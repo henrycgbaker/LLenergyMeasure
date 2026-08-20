@@ -33,12 +33,7 @@ from llenergymeasure.config.models import ExperimentConfig, ServerWarmupConfig
 from llenergymeasure.config.user_config import UserConfig, UserServerConfig
 from llenergymeasure.device.power_thermal import PowerThermalSample
 from llenergymeasure.harness.server_warmup import ServerWarmupResult, WarmupTrafficError
-from llenergymeasure.harness.traffic import (
-    CompletionResult,
-    IssuerReport,
-    RequestRecord,
-    RequestShape,
-)
+from llenergymeasure.harness.traffic import IssuerReport, RequestRecord
 from llenergymeasure.harness.window_manager import (
     ABORTED_LEVEL_ATTR,
     ATTRIBUTION_STEADY_STATE_SPAN,
@@ -50,6 +45,7 @@ from llenergymeasure.harness.window_manager import (
     WindowRecord,
     WindowSpec,
 )
+from llenergymeasure.serving.transport import CompletionResult, RequestShape
 from llenergymeasure.study import server_session as ss
 from llenergymeasure.study.server_session import (
     ServerSession,

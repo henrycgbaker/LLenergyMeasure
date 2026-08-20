@@ -76,7 +76,7 @@ from llenergymeasure.harness.server_warmup import (
     build_probe_request,
     describe_server_warmup_protocol,
 )
-from llenergymeasure.harness.traffic import CompletionResult, OpenLoopPoissonSource, RequestShape
+from llenergymeasure.harness.traffic import OpenLoopPoissonSource
 from llenergymeasure.harness.window_manager import (
     ABORTED_LEVEL_ATTR,
     ATTRIBUTION_STEADY_STATE_SPAN,
@@ -97,6 +97,7 @@ from llenergymeasure.results.request_log import (
     RequestLogRow,
 )
 from llenergymeasure.results.server_metrics import SloBounds, derive_server_window_metrics
+from llenergymeasure.serving.transport import CompletionResult, RequestShape
 
 if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig, TrafficConfig
@@ -107,8 +108,8 @@ if TYPE_CHECKING:
     from llenergymeasure.engines.protocol import ServerCapable
     from llenergymeasure.harness.bracket import MeasuredWindowCore, MeasurementBracket
     from llenergymeasure.harness.traffic import RequestRecord, ShapeSource, TrafficSource, Transport
-    from llenergymeasure.infra.server_lifecycle import ServerHandle, ServerPlacement
     from llenergymeasure.results.bundle import BundleWriter
+    from llenergymeasure.serving.types import ServerHandle, ServerPlacement
     from llenergymeasure.study.runner import StudyRunner
 
 logger = logging.getLogger(__name__)
@@ -1677,7 +1678,7 @@ class ServerSession:
         return _CompletionsShapeSource(prompts, model=self.config.task.model, max_tokens=max_tokens)
 
     def _make_transport(self, base_url: str) -> Transport:
-        from llenergymeasure.harness.traffic import HttpxTransport
+        from llenergymeasure.serving.transport import HttpxTransport
 
         return HttpxTransport(base_url=base_url, path=SERVING_COMPLETIONS_PATH)
 
@@ -1756,7 +1757,7 @@ class ServerSession:
 
     def _make_placement(self) -> ServerPlacement:
         from llenergymeasure.config.ssot import RUNNER_CONTAINER, RUNNER_PROCESS
-        from llenergymeasure.infra.server_lifecycle import ServerPlacement
+        from llenergymeasure.serving.types import ServerPlacement
 
         mode = self.spec.mode if self.spec is not None else RUNNER_PROCESS
         image = self.spec.image if self.spec is not None else None
@@ -1917,11 +1918,11 @@ class ServerSession:
                 writer.finalize()
 
     def _shutdown_handle(self, handle: ServerHandle) -> None:
-        """Reap the launched server via the engine protocol (falls back to infra)."""
+        """Reap the launched server via the engine protocol (falls back to serving)."""
         if self._engine is not None:
             self._engine.shutdown(handle)
             return
-        from llenergymeasure.infra.server_lifecycle import shutdown
+        from llenergymeasure.serving.lifecycle import shutdown
 
         shutdown(handle)
 

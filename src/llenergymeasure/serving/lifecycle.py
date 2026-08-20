@@ -1,13 +1,16 @@
 """Engine-agnostic server lifecycle mechanics for online-serving measurement.
 
-This is the infra-altitude plumbing behind the ``ServerCapable`` engine-plugin
-extension (see :mod:`llenergymeasure.engines.protocol`). It owns the concerns
-that are identical for every OpenAI-compatible inference server - port
-allocation, launching the server (a detached sibling container OR a host
+The mechanism half of the serving layer, behind the ``ServerCapable``
+engine-plugin extension (see :mod:`llenergymeasure.engines.protocol`). It owns
+the concerns that are identical for every OpenAI-compatible inference server -
+port allocation, launching the server (a detached sibling container OR a host
 subprocess in its own process group), the readiness wait, and leak-free
 shutdown with kill escalation. Per-engine knowledge (the ``vllm serve`` command,
 the health path, the probe request shape) lives in the engine adapters, which
-compose these primitives.
+compose these primitives. The value types the signatures here are written in
+live in :mod:`llenergymeasure.serving.types`; the container leg's ``docker run``
+argv is built in :mod:`llenergymeasure.infra.docker.command`, beside the other
+container shapes, and handed to :func:`launch_container_server` by the caller.
 
 Design constraints this module enforces:
 
@@ -53,7 +56,6 @@ import time
 import urllib.error
 import urllib.request
 import uuid
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -63,22 +65,20 @@ from llenergymeasure.config.ssot import (
     TIMEOUT_SIGTERM_GRACE,
     RunnerMode,
 )
-from llenergymeasure.utils.exceptions import LLEMError
+from llenergymeasure.serving.types import (
+    ProbeRequest,
+    ServerHandle,
+    ServerLaunchError,
+    ServerReadinessError,
+    ServerTopologyError,
+)
 
 logger = logging.getLogger(__name__)
 
 __all__ = [
     "DEFAULT_HEALTH_PATH",
-    "ProbeRequest",
-    "ServerHandle",
-    "ServerLaunchError",
-    "ServerLifecycleError",
-    "ServerPlacement",
-    "ServerReadinessError",
-    "ServerTopologyError",
     "allocate_free_port",
     "await_ready",
-    "build_server_container_argv",
     "default_server_log_path",
     "launch_container_server",
     "launch_process_server",
@@ -98,143 +98,6 @@ _LOCALHOST = "127.0.0.1"
 
 #: Recent-log tail length (characters) attached to launch/readiness errors.
 _LOG_TAIL_CHARS = 2000
-
-
-# ---------------------------------------------------------------------------
-# Exceptions
-# ---------------------------------------------------------------------------
-
-
-class ServerLifecycleError(LLEMError):
-    """Base class for server lifecycle failures (launch / readiness / topology)."""
-
-
-class ServerLaunchError(ServerLifecycleError):
-    """The server process/container could not be launched, or exited during startup."""
-
-
-class ServerReadinessError(ServerLifecycleError):
-    """The server did not become ready (liveness + real probe) within the timeout."""
-
-
-class ServerTopologyError(ServerLifecycleError):
-    """The server is unreachable because of a docker-outside-of-docker network topology.
-
-    Raised (instead of a generic readiness timeout) when llenergymeasure runs
-    inside a container with a mounted Docker socket and dispatched a sibling
-    server container: the sibling's ``--network host`` binds the real host
-    network, which llenergymeasure's own container cannot reach via localhost
-    unless it too runs ``--network host``. The message is actionable.
-    """
-
-
-# ---------------------------------------------------------------------------
-# Value types (the ServerCapable protocol surface references these)
-# ---------------------------------------------------------------------------
-
-
-@dataclass
-class ProbeRequest:
-    """The readiness probe's request shape.
-
-    This lifecycle layer owns the probe MECHANICS (drive this request through the
-    serving path); the server warmup protocol owns the request SHAPE (drawn from
-    the measured traffic distribution - warm the path you measure), supplied here
-    as a parameter. ``payload`` is the JSON
-    body (``None`` for a bodyless request); ``path`` is the serving endpoint
-    (e.g. ``/v1/completions``).
-    """
-
-    path: str
-    payload: dict[str, Any] | None = None
-    method: str = "POST"
-
-
-@dataclass
-class ServerPlacement:
-    """Where a server runs: process (host subprocess) or container (sibling image).
-
-    ``image``, ``gpu_indices``, and ``labels`` are consumed only by the container
-    leg; the adapter resolves a ``None`` image via the image registry.
-    Constructed by the caller (the server session, from the resolved
-    ``RunnerSpec`` + ``study_execution.gpu_indices`` + the study's container
-    ownership labels); tests construct it directly.
-
-    ``labels`` carries the study's ownership labels
-    (``study.container_lifecycle.generate_container_labels``) so a launched
-    server container is visible to the same leak protection the study's
-    experiment containers get: the study-scoped cleanup and the orphan reaper
-    both select on ``llem.study_id``. A container-mode placement built by the
-    study path always carries them.
-    """
-
-    mode: RunnerMode
-    image: str | None = None
-    gpu_indices: list[int] | None = None
-    labels: dict[str, str] | None = None
-
-
-@dataclass
-class ServerHandle:
-    """A launched server's identity + access, returned by ``ServerCapable.launch``.
-
-    Exposes the ``base_url`` the issuer talks to, the process/container identity
-    (exactly one of ``process`` / ``container_name`` is set), and log access -
-    :meth:`read_logs` is the server-session failure-artefact hand-off (it reads the
-    process log file, or shells ``docker logs`` for the container leg).
-    """
-
-    base_url: str
-    engine: str
-    process: subprocess.Popen[bytes] | None = None
-    container_name: str | None = None
-    log_path: Path | None = None
-    _log_file: Any = field(default=None, repr=False)
-    _closed: bool = field(default=False, repr=False)
-
-    @property
-    def identity(self) -> str:
-        """Human-readable process/container identity for logs and diagnostics."""
-        if self.container_name is not None:
-            return f"container {self.container_name}"
-        if self.process is not None:
-            return f"process pid={self.process.pid}"
-        return "<unlaunched>"
-
-    def read_logs(self, *, tail_lines: int | None = None) -> str:
-        """Return the server's captured logs (best-effort, never raises).
-
-        Process leg reads the redirected stdout/stderr log file; container leg
-        shells ``docker logs``. Returns ``""`` when logs are unavailable.
-        """
-        if self.container_name is not None:
-            cmd = ["docker", "logs"]
-            if tail_lines is not None:
-                cmd += ["--tail", str(tail_lines)]
-            cmd.append(self.container_name)
-            try:
-                result = subprocess.run(
-                    cmd, capture_output=True, text=True, timeout=TIMEOUT_DOCKER_CLI
-                )
-            except (OSError, subprocess.SubprocessError):
-                return ""
-            return result.stdout + result.stderr
-        if self.log_path is not None and self.log_path.exists():
-            try:
-                text = self.log_path.read_text(errors="replace")
-            except OSError:
-                return ""
-            if tail_lines is not None:
-                return "\n".join(text.splitlines()[-tail_lines:])
-            return text
-        return ""
-
-    def _close_log(self) -> None:
-        """Close the process-leg log file handle (idempotent, never raises)."""
-        if self._log_file is not None:
-            with contextlib.suppress(Exception):
-                self._log_file.close()
-            self._log_file = None
 
 
 # ---------------------------------------------------------------------------
@@ -268,87 +131,6 @@ def server_container_name(engine: str) -> str:
 def default_server_log_path(engine: str, port: int) -> Path:
     """Return a temp-dir log path for a process-leg server's captured output."""
     return Path(tempfile.gettempdir()) / f"llem-{engine}-server-{port}.log"
-
-
-# ---------------------------------------------------------------------------
-# Container-leg command construction (pure - unit-testable without docker)
-# ---------------------------------------------------------------------------
-
-
-def build_server_container_argv(
-    *,
-    image: str,
-    container_name: str | None,
-    gpu_indices: list[int] | None,
-    serve_args: list[str],
-    shm_size: str | None = None,
-    labels: dict[str, str] | None = None,
-) -> list[str]:
-    """Build the ``docker run`` argv for a long-lived engine server container.
-
-    Detached (``-d``) so the launch returns immediately and readiness is polled.
-    Deliberately NO ``--rm``: a container that crashes during startup must
-    SURVIVE so ``docker logs`` can recover the startup diagnostic (the
-    failure-artefact hand-off ``read_logs`` promises). ``--rm`` destroys the
-    exited container within ~1s of the crash and the logs with it, so the
-    diagnostic would be permanently lost. Leak-freeness is instead the explicit
-    responsibility of :func:`shutdown` (``docker stop`` then ``docker rm -f``),
-    the crashed-startup fast-detection (:func:`_ensure_container_alive`), and the
-    failed-launch cleanup - all of which force-remove.
-
-    ``--network host`` is UNCONDITIONAL (the peer convention: genai-perf, vllm
-    benchmark_serving and MLPerf vendor repros
-    co-locate client + server on one host; docker bridge overhead is real and
-    directional). Because the container shares the host network namespace, the
-    port is NOT published with ``-p`` - the server binds the host port directly,
-    which the port passed inside ``serve_args`` (e.g. ``--port 8000``) selects.
-
-    ``serve_args`` are the engine command appended after the image; for vLLM the
-    upstream ``vllm/vllm-openai`` image's ``ENTRYPOINT`` is ``["vllm", "serve"]``,
-    so the adapter passes ``[<model>, "--port", <port>]`` and the entrypoint
-    supplies ``vllm serve``. TRT-LLM's NGC image is NOT entrypoint-baked with
-    ``trtllm-serve``, so its adapter passes the full ``["trtllm-serve", <model>,
-    "--port", <port>]`` command (the NGC entrypoint sets up the CUDA libs and
-    execs it).
-
-    The host HuggingFace cache is bind-mounted at ``/root/.cache/huggingface``
-    with ``HF_HOME`` pointed at it (the SAME LLEM_DOCKER_HF_CACHE-driven mount the
-    offline docker dispatch uses, via :func:`hf_cache_mount_args`), so a launched
-    server reuses already-downloaded weights instead of re-downloading the full
-    model on every run.
-
-    ``labels`` are the study's container ownership labels (the same ones the
-    offline docker dispatch sets), rendered by
-    :func:`~llenergymeasure.infra.docker.command.docker_label_args`, so a server
-    container is attributable to its study and reachable by the study-scoped
-    cleanup and the orphan reaper. A server container that outlives its launching
-    process - the exact case ``shutdown`` cannot cover - is otherwise invisible to
-    them.
-    """
-    from llenergymeasure.infra.docker.command import docker_label_args
-    from llenergymeasure.utils.env_config import (
-        docker_gpus_arg,
-        docker_shm_size,
-        hf_cache_mount_args,
-    )
-
-    argv = [
-        "docker",
-        "run",
-        "-d",
-        "--network",
-        "host",
-        "--gpus",
-        docker_gpus_arg(gpu_indices),
-    ]
-    if container_name:
-        argv += ["--name", container_name]
-    argv += docker_label_args(labels)
-    argv += ["--shm-size", shm_size or docker_shm_size()]
-    argv += hf_cache_mount_args()
-    argv.append(image)
-    argv += list(serve_args)
-    return argv
 
 
 # ---------------------------------------------------------------------------
@@ -690,7 +472,7 @@ def _kill_process_group(pid: int, sig: int) -> None:
 
     ``start_new_session=True`` at launch makes the child a group leader, so its
     PID equals its PGID. Errors are suppressed - the group may already be gone.
-    Reimplemented at the infra altitude (the study-layer worker helper cannot be
+    Reimplemented at this altitude (the study-layer worker helper cannot be
     imported downward) but faithful to that precedent.
     """
     with contextlib.suppress(ProcessLookupError, PermissionError):

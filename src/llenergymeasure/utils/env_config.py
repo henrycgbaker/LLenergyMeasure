@@ -298,11 +298,11 @@ def hf_cache_mount_args() -> list[str]:
 
     ``["-v", "<host>:/root/.cache/huggingface", "-e",
     "HF_HOME=/root/.cache/huggingface"]`` where the host source is
-    :func:`docker_hf_cache_dir`. The online-server launch
-    (``infra/server_lifecycle.py``) builds its HF mount here; it and the offline
-    batch dispatch (``infra/docker/command.py``) share the in-container target
-    and ``HF_HOME`` value via :data:`HF_CACHE_CONTAINER_PATH`, so the two cannot
-    drift on where weights are cached. Without the mount a launched server
+    :func:`docker_hf_cache_dir`. Both container shapes built in
+    ``infra/docker/command.py`` - the offline batch dispatch and the
+    online-server launch - build their HF mount here and share the in-container
+    target and ``HF_HOME`` value via :data:`HF_CACHE_CONTAINER_PATH`, so the two
+    cannot drift on where weights are cached. Without the mount a launched server
     re-downloads the full model weights on every run.
     """
     host = docker_hf_cache_dir()

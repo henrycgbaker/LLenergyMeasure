@@ -59,9 +59,10 @@ from llenergymeasure.utils.exceptions import LLEMError
 if TYPE_CHECKING:
     from llenergymeasure.config.models import ServerWarmupConfig
     from llenergymeasure.device.power_thermal import PowerThermalSample
-    from llenergymeasure.harness.traffic import RequestShape, ShapeSource, TrafficSource, Transport
+    from llenergymeasure.harness.traffic import ShapeSource, TrafficSource, Transport
     from llenergymeasure.harness.window_manager import WarmupContext
-    from llenergymeasure.infra.server_lifecycle import ProbeRequest
+    from llenergymeasure.serving.transport import RequestShape
+    from llenergymeasure.serving.types import ProbeRequest
 
 
 @runtime_checkable
@@ -318,7 +319,7 @@ def describe_server_warmup_protocol(config: ServerWarmupConfig) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Readiness-probe request shape (warmup owns the SHAPE; the server lifecycle owns the mechanics)
+# Readiness-probe request shape (warmup owns the SHAPE; the serving layer owns the mechanics)
 # ---------------------------------------------------------------------------
 
 
@@ -329,10 +330,10 @@ def build_probe_request(
 
     Warm (and probe) the path you measure. The probe body is a representative
     request drawn from the SAME shape source the measured traffic uses; ``path`` /
-    ``method`` are the engine's serving endpoint (the server-lifecycle mechanics
+    ``method`` are the engine's serving endpoint (the serving layer's mechanics
     feed this to ``await_ready``). A non-dict payload becomes a bodyless probe.
     """
-    from llenergymeasure.infra.server_lifecycle import ProbeRequest
+    from llenergymeasure.serving.types import ProbeRequest
 
     shape: RequestShape = shape_source(index)
     payload = shape.payload if isinstance(shape.payload, dict) else None

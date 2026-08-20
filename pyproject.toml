@@ -284,6 +284,12 @@ type = "layers"
 # drives one already-resolved experiment, so it must never re-enter the public
 # API or the study orchestrator. Its own level makes that structurally
 # impossible rather than merely unlikely.
+#
+# serving sits between the engines group and infra. It owns the online-serving
+# server lifecycle, which every engine adapter composes (engines -> serving) and
+# which is built out of the container/process plumbing below it
+# (serving -> infra). Its own level below the engines group is what keeps engine
+# knowledge out of it: no engine name, and no import of one, can appear there.
 layers = [
     "llenergymeasure.cli",
     "llenergymeasure.api",
@@ -292,6 +298,7 @@ layers = [
     "llenergymeasure.harness",
     "llenergymeasure.results",
     "llenergymeasure.engines | llenergymeasure.energy | llenergymeasure.datasets",
+    "llenergymeasure.serving",
     "llenergymeasure.infra",
     "llenergymeasure.device",
     "llenergymeasure.config | llenergymeasure.domain",

@@ -14,8 +14,8 @@ from pathlib import Path
 
 import pytest
 
-from llenergymeasure.infra import server_lifecycle as sl
-from llenergymeasure.infra.server_lifecycle import ServerHandle
+from llenergymeasure.serving import lifecycle as sl
+from llenergymeasure.serving.types import ServerHandle
 
 STUB_SERVER = Path(__file__).parent / "_stub_server.py"
 

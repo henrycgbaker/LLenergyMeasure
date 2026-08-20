@@ -3,22 +3,24 @@
 The FULL lifecycle is exercised against the PROCESS leg using the asyncio stub
 server (launch / liveness / real probe / ready / shutdown / kill-escalation /
 idempotence / failed-launch cleanup / log access). The container leg is tested
-without invoking docker: command construction is pure, and stop / remove / logs
-are asserted by mocking ``subprocess.run``. The DooD topology error is tested
-with monkeypatched container-self detection.
+without invoking docker: stop / remove / logs are asserted by mocking
+``subprocess.run``, and the launch argv it is handed is built by a pure builder
+covered in the docker command tests. The DooD topology error is tested with
+monkeypatched container-self detection.
 """
 
 from __future__ import annotations
 
 import signal
+import subprocess
 import sys
 import time
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from llenergymeasure.infra import server_lifecycle as sl
-from llenergymeasure.infra.server_lifecycle import (
+from llenergymeasure.serving import lifecycle as sl
+from llenergymeasure.serving.types import (
     ProbeRequest,
     ServerHandle,
     ServerLaunchError,
@@ -30,6 +32,34 @@ COMPLETIONS_PROBE = ProbeRequest(
     path="/v1/completions",
     payload={"model": "stub", "prompt": "ping", "max_tokens": 1},
 )
+
+
+# ---------------------------------------------------------------------------
+# Vocabulary without the mechanism
+# ---------------------------------------------------------------------------
+
+
+def test_importing_the_types_does_not_load_the_mechanism():
+    """Naming a server must not cost the launch machinery.
+
+    The split exists so a consumer that only needs the value and error types -
+    an annotation, a constructor call, an ``except`` clause - does not pull in
+    the launch, readiness and docker-argv code it will never call. That only
+    holds while nothing re-exports the submodules eagerly, which is easy to undo
+    by accident, so it is asserted in a fresh interpreter (this test module has
+    already imported both halves).
+    """
+    probe = (
+        "import sys, llenergymeasure.serving.types;"
+        "loaded = [m for m in ('llenergymeasure.serving.lifecycle',"
+        "'llenergymeasure.serving.transport',"
+        "'llenergymeasure.infra.docker.command') if m in sys.modules];"
+        "print(','.join(loaded))"
+    )
+    result = subprocess.run([sys.executable, "-c", probe], capture_output=True, text=True)
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "", f"importing the types loaded: {result.stdout.strip()}"
 
 
 # ---------------------------------------------------------------------------
@@ -337,94 +367,8 @@ def test_allocate_free_port_is_bindable():
 
 
 # ---------------------------------------------------------------------------
-# Container leg without docker (command construction + mocked CLI)
+# Container leg without docker (mocked CLI)
 # ---------------------------------------------------------------------------
-
-
-def test_container_argv_has_ruled_flags():
-    """docker run argv carries image, --gpus, --network host, and the port."""
-    argv = sl.build_server_container_argv(
-        image="vllm/vllm-openai:v0.19.1",
-        container_name="llem-vllm-server-abc",
-        gpu_indices=None,
-        serve_args=["Qwen/Qwen2.5-0.5B", "--port", "8123"],
-        shm_size="8g",
-    )
-
-    assert argv[:2] == ["docker", "run"]
-    assert "-d" in argv
-    # No --rm: a crashed container must survive so `docker logs` can recover the
-    # startup diagnostic (the failure-artefact hand-off); leak-freeness is explicit in shutdown.
-    assert "--rm" not in argv
-    # --network host is unconditional and adjacent.
-    assert argv[argv.index("--network") + 1] == "host"
-    assert argv[argv.index("--gpus") + 1] == "all"
-    assert argv[argv.index("--name") + 1] == "llem-vllm-server-abc"
-    # Image precedes the serve args; the port lives in the serve args (host net,
-    # so no -p publish is emitted).
-    img_idx = argv.index("vllm/vllm-openai:v0.19.1")
-    assert argv[img_idx + 1 :] == ["Qwen/Qwen2.5-0.5B", "--port", "8123"]
-    assert "-p" not in argv
-
-
-def test_container_argv_carries_ownership_labels():
-    """Ownership labels are emitted before the image, so the study owns the server.
-
-    The study-scoped cleanup filters on ``llem.study_id`` and the orphan reaper on
-    ``llem.parent_pid``; an unlabelled server container is invisible to both.
-    """
-    argv = sl.build_server_container_argv(
-        image="vllm/vllm-openai:v0.19.1",
-        container_name="llem-vllm-server-abc",
-        gpu_indices=None,
-        serve_args=["m", "--port", "8123"],
-        shm_size="8g",
-        labels={"llem.study_id": "abcdef12", "llem.parent_pid": "4242"},
-    )
-
-    assert "llem.study_id=abcdef12" in argv
-    assert "llem.parent_pid=4242" in argv
-    for value in ("llem.study_id=abcdef12", "llem.parent_pid=4242"):
-        idx = argv.index(value)
-        assert argv[idx - 1] == "--label"
-        # docker run options must precede the image name.
-        assert idx < argv.index("vllm/vllm-openai:v0.19.1")
-
-
-def test_container_argv_without_labels_emits_none():
-    """No labels supplied (e.g. a direct non-study launch) emits no --label flags."""
-    argv = sl.build_server_container_argv(
-        image="img:v1",
-        container_name=None,
-        gpu_indices=None,
-        serve_args=["m"],
-    )
-
-    assert "--label" not in argv
-
-
-def test_container_argv_mounts_hf_cache(monkeypatch):
-    """The server container binds the HF cache + sets HF_HOME (else weights re-download).
-
-    Same LLEM_DOCKER_HF_CACHE-driven mount the offline docker dispatch uses; the
-    mount/env precede the image (docker run options come before the image name).
-    """
-    monkeypatch.setenv("LLEM_DOCKER_HF_CACHE", "/data/hf")
-    argv = sl.build_server_container_argv(
-        image="vllm/vllm-openai:v0.19.1",
-        container_name="llem-vllm-server-abc",
-        gpu_indices=None,
-        serve_args=["m", "--port", "8123"],
-        shm_size="8g",
-    )
-    target = "/root/.cache/huggingface"
-    # -v <host>:<target> present, and it precedes the image.
-    assert f"/data/hf:{target}" in argv
-    mount_idx = argv.index(f"/data/hf:{target}")
-    assert argv[mount_idx - 1] == "-v"
-    assert mount_idx < argv.index("vllm/vllm-openai:v0.19.1")
-    # HF_HOME points at the in-container target.
-    assert f"HF_HOME={target}" in argv
 
 
 def test_launch_container_server_success_and_cleanup_on_failure():

@@ -7,12 +7,17 @@ materialising the dispatch assets (entrypoint script + requirements list) to a
 host tempdir for bind-mounting, and ensuring the host deps cache exists - both
 process-cached and idempotent.
 
-Consumed by ``DockerRunner._build_docker_cmd`` (the experiment dispatch) and by
-``study.baseline_container`` (the baseline dispatch), which share
+This is the single home for ``docker run`` argv construction, so the container
+shapes cannot drift apart unnoticed: :func:`build_docker_cmd` builds the
+run-to-completion experiment dispatch and :func:`build_server_container_argv`
+builds the long-lived engine-server launch. Consumed by
+``DockerRunner._build_docker_cmd`` (the experiment dispatch), by
+``study.baseline_container`` (the baseline dispatch) - which share
 :func:`append_package_dispatch` and :func:`append_nccl_env` so the two setups
-cannot drift. :func:`docker_label_args` is shared more widely still: those two
-plus ``infra.server_lifecycle`` (the engine-server dispatch) all render the
-study's container ownership labels through it.
+cannot drift - and by each engine's server adapter, which passes the argv built
+here to the serving layer's launcher. :func:`docker_label_args` is shared by all
+three, so their emission of the study's container ownership labels cannot drift
+either.
 """
 
 from __future__ import annotations
@@ -48,6 +53,7 @@ from llenergymeasure.utils.env_config import (
     docker_gpus_arg,
     docker_hf_cache_dir,
     docker_shm_size,
+    hf_cache_mount_args,
     trt_build_cache_host_dir,
 )
 from llenergymeasure.utils.exceptions import DockerPreFlightError
@@ -56,6 +62,7 @@ __all__ = [
     "append_nccl_env",
     "append_package_dispatch",
     "build_docker_cmd",
+    "build_server_container_argv",
     "docker_label_args",
 ]
 
@@ -88,8 +95,8 @@ _RESERVED_EXCHANGE_ENV: frozenset[str] = frozenset(
 _TRT_BUILD_CACHE_CONTAINER_PATH: Final = "/root/.cache/trt-llm"
 
 # Container-side mount target for the HuggingFace cache. Single-sourced from
-# env_config (HF_CACHE_CONTAINER_PATH) so the offline dispatch here and the
-# server-container launch (infra/server_lifecycle.py) cannot drift; the host
+# env_config (HF_CACHE_CONTAINER_PATH) so the offline dispatch and the
+# server-container launch, both built in this module, cannot drift; the host
 # source is configurable via LLEM_DOCKER_HF_CACHE (see docker_hf_cache_dir),
 # the in-container target and HF_HOME are fixed.
 _HF_CACHE_CONTAINER_PATH: Final = HF_CACHE_CONTAINER_PATH
@@ -395,6 +402,74 @@ def docker_label_args(labels: dict[str, str] | None) -> list[str]:
     argv: list[str] = []
     for key, value in (labels or {}).items():
         argv += ["--label", f"{key}={value}"]
+    return argv
+
+
+def build_server_container_argv(
+    *,
+    image: str,
+    container_name: str | None,
+    gpu_indices: list[int] | None,
+    serve_args: list[str],
+    shm_size: str | None = None,
+    labels: dict[str, str] | None = None,
+) -> list[str]:
+    """Build the ``docker run`` argv for a long-lived engine server container.
+
+    Detached (``-d``) so the launch returns immediately and readiness is polled.
+    Deliberately NO ``--rm``: a container that crashes during startup must
+    SURVIVE so ``docker logs`` can recover the startup diagnostic (the
+    failure-artefact hand-off the server handle's log reader promises). ``--rm``
+    destroys the exited container within ~1s of the crash and the logs with it, so
+    the diagnostic would be permanently lost. Leak-freeness is instead the
+    explicit responsibility of the serving layer that runs this argv: its
+    shutdown (``docker stop`` then ``docker rm -f``), its crashed-startup
+    fast-detection, and its failed-launch cleanup all force-remove.
+
+    ``--network host`` is UNCONDITIONAL (the peer convention: genai-perf, vllm
+    benchmark_serving and MLPerf vendor repros
+    co-locate client + server on one host; docker bridge overhead is real and
+    directional). Because the container shares the host network namespace, the
+    port is NOT published with ``-p`` - the server binds the host port directly,
+    which the port passed inside ``serve_args`` (e.g. ``--port 8000``) selects.
+
+    ``serve_args`` are the engine command appended after the image; for vLLM the
+    upstream ``vllm/vllm-openai`` image's ``ENTRYPOINT`` is ``["vllm", "serve"]``,
+    so the adapter passes ``[<model>, "--port", <port>]`` and the entrypoint
+    supplies ``vllm serve``. TRT-LLM's NGC image is NOT entrypoint-baked with
+    ``trtllm-serve``, so its adapter passes the full ``["trtllm-serve", <model>,
+    "--port", <port>]`` command (the NGC entrypoint sets up the CUDA libs and
+    execs it).
+
+    The host HuggingFace cache is bind-mounted at ``/root/.cache/huggingface``
+    with ``HF_HOME`` pointed at it (the SAME LLEM_DOCKER_HF_CACHE-driven mount the
+    offline docker dispatch uses, via :func:`hf_cache_mount_args`), so a launched
+    server reuses already-downloaded weights instead of re-downloading the full
+    model on every run.
+
+    ``labels`` are the study's container ownership labels (the same ones the
+    offline docker dispatch sets), rendered by :func:`docker_label_args`, so a
+    server container is attributable to its study and reachable by the
+    study-scoped cleanup and the orphan reaper. A server container that outlives
+    its launching process - the exact case shutdown cannot cover - is otherwise
+    invisible to them.
+    """
+    argv = [
+        "docker",
+        "run",
+        "-d",
+        "--network",
+        "host",
+        "--gpus",
+        docker_gpus_arg(gpu_indices),
+    ]
+    if container_name:
+        argv += ["--name", container_name]
+    argv += docker_label_args(labels)
+    argv += ["--shm-size", shm_size or docker_shm_size()]
+    argv += hf_cache_mount_args()
+    argv.append(image)
+    argv += list(serve_args)
     return argv
 
 

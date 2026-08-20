@@ -7,11 +7,14 @@ the source modules (since container_entrypoint uses lazy local imports).
 
 from __future__ import annotations
 
+import importlib.resources
+import importlib.util
 import json
 import os
 import subprocess
 import sys
 from pathlib import Path
+from types import ModuleType
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -512,8 +515,57 @@ def _make_dist(
         (pkg / "__init__.py").write_text(module_body, encoding="utf-8")
 
 
-def _run_probe(tmp_path: Path, site: Path, requirements: str) -> list[str]:
-    """Run the real probe module against a fake site-packages; return missing specs.
+@pytest.fixture(scope="session")
+def probe_script(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """The shipped probe script, materialised from package data to a real path.
+
+    ``_container/`` is plain package DATA, not an importable package: the probe
+    is executed as a plain script inside the dispatch container and must stay
+    reachable from an installed wheel without a package marker. Resolving it here
+    exactly the way the dispatch resolves the entrypoint - ``importlib.resources``
+    on ``llenergymeasure.infra`` with a ``_container/`` sub-path - is what keeps
+    that true rather than assumed.
+    """
+    payload = (
+        importlib.resources.files("llenergymeasure.infra")
+        .joinpath("_container/probe_imports.py")
+        .read_bytes()
+    )
+    path = tmp_path_factory.mktemp("probe-script") / "probe_imports.py"
+    path.write_bytes(payload)
+    return path
+
+
+@pytest.fixture(scope="session")
+def probe_imports(probe_script: Path) -> ModuleType:
+    """The probe loaded from its script path, for in-process coverage of its helpers."""
+    spec = importlib.util.spec_from_file_location("llem_probe_imports", probe_script)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_container_assets_resolve_as_infra_package_data():
+    """Both container assets are reachable as package data, without their own package.
+
+    ``_container/`` deliberately carries no package marker: nothing imports from
+    it, the shell script is not Python at all, and the probe is executed as a
+    plain script inside the container against the bind-mounted source. What must
+    hold is that both files stay resolvable as data under ``llenergymeasure.infra``,
+    which is how the dispatch reads them from an installed wheel.
+    """
+    for name in ("container_entrypoint.sh", "probe_imports.py"):
+        payload = (
+            importlib.resources.files("llenergymeasure.infra")
+            .joinpath(f"_container/{name}")
+            .read_bytes()
+        )
+        assert payload, f"{name} resolved but is empty"
+
+
+def _run_probe(probe_script: Path, tmp_path: Path, site: Path, requirements: str) -> list[str]:
+    """Run the real probe script against a fake site-packages; return missing specs.
 
     Runs the shipped ``infra/_container/probe_imports.py`` as a plain script file
     (exactly as the container entrypoint does) with a synthetic site-packages on
@@ -521,15 +573,13 @@ def _run_probe(tmp_path: Path, site: Path, requirements: str) -> list[str]:
     ``importlib.metadata`` / ``sys.modules`` contamination from the real
     environment (some fake dist names, e.g. pyyaml, collide with installed ones).
     """
-    from llenergymeasure.infra._container import probe_imports
-
     reqs = tmp_path / "requirements.txt"
     reqs.write_text(requirements, encoding="utf-8")
 
     env = dict(os.environ)
     env["PYTHONPATH"] = os.pathsep.join([str(site), env.get("PYTHONPATH", "")]).rstrip(os.pathsep)
     proc = subprocess.run(
-        [sys.executable, probe_imports.__file__, str(reqs)],
+        [sys.executable, str(probe_script), str(reqs)],
         env=env,
         capture_output=True,
         text=True,
@@ -539,29 +589,23 @@ def _run_probe(tmp_path: Path, site: Path, requirements: str) -> list[str]:
 
 
 class TestProbeImportsUnit:
-    """Direct-import unit coverage of the pure probe helpers.
+    """Unit coverage of the pure probe helpers.
 
     The probe is a real module (not an inline heredoc), so its stateless helpers
-    are imported and exercised in-process.
+    are loaded from the shipped script and exercised in-process.
     """
 
-    def test_bare_name_strips_bounds_and_extras(self):
-        from llenergymeasure.infra._container import probe_imports
-
+    def test_bare_name_strips_bounds_and_extras(self, probe_imports):
         assert probe_imports.bare_name("pyarrow>=14.0") == "pyarrow"
         assert probe_imports.bare_name("pydantic==2.5.0") == "pydantic"
         assert probe_imports.bare_name("uvicorn[standard]>=0.30") == "uvicorn"
         assert probe_imports.bare_name("numpy") == "numpy"
 
-    def test_canonical_normalises_case_and_separators(self):
-        from llenergymeasure.infra._container import probe_imports
-
+    def test_canonical_normalises_case_and_separators(self, probe_imports):
         assert probe_imports.canonical("PyYAML") == "pyyaml"
         assert probe_imports.canonical("nvidia_ml_py") == "nvidia-ml-py"
 
-    def test_known_override_table(self):
-        from llenergymeasure.infra._container import probe_imports
-
+    def test_known_override_table(self, probe_imports):
         assert probe_imports.IMPORT_NAME_OVERRIDES["pyyaml"] == "yaml"
         assert probe_imports.IMPORT_NAME_OVERRIDES["nvidia-ml-py"] == "pynvml"
         assert probe_imports.IMPORT_NAME_OVERRIDES["python-dotenv"] == "dotenv"
@@ -576,7 +620,7 @@ class TestDepProbeImportCheck:
     container does.
     """
 
-    def test_flags_broken_and_absent_deps(self, tmp_path: Path):
+    def test_flags_broken_and_absent_deps(self, probe_script: Path, tmp_path: Path):
         """Present-but-importable stays; broken-import and absent are primed."""
         site = tmp_path / "site"
         site.mkdir()
@@ -591,10 +635,10 @@ class TestDepProbeImportCheck:
             module_body="raise ImportError('extension built for wrong ABI')",
         )
         # (c) absent: no dist-info and no module, only listed in requirements
-        missing = _run_probe(tmp_path, site, "good>=1.0\nbroken>=1.0\nabsent>=1.0\n")
+        missing = _run_probe(probe_script, tmp_path, site, "good>=1.0\nbroken>=1.0\nabsent>=1.0\n")
         assert missing == ["broken>=1.0", "absent>=1.0"]
 
-    def test_resolves_import_name_via_top_level_txt(self, tmp_path: Path):
+    def test_resolves_import_name_via_top_level_txt(self, probe_script: Path, tmp_path: Path):
         """A dist whose import name differs is resolved via top_level.txt.
 
         The normalised-name fallback ('mydist') would not import, so a pass
@@ -603,10 +647,10 @@ class TestDepProbeImportCheck:
         site = tmp_path / "site"
         site.mkdir()
         _make_dist(site, "mydist", "2.0", module="myimportname", top_level="myimportname")
-        missing = _run_probe(tmp_path, site, "mydist>=2.0\n")
+        missing = _run_probe(probe_script, tmp_path, site, "mydist>=2.0\n")
         assert missing == []
 
-    def test_applies_known_import_name_override(self, tmp_path: Path):
+    def test_applies_known_import_name_override(self, probe_script: Path, tmp_path: Path):
         """pyyaml -> yaml is a hardcoded override.
 
         The dist provides only a 'yaml' module (no 'pyyaml'), so the normalised
@@ -615,5 +659,5 @@ class TestDepProbeImportCheck:
         site = tmp_path / "site"
         site.mkdir()
         _make_dist(site, "pyyaml", "6.0", module="yaml")
-        missing = _run_probe(tmp_path, site, "pyyaml>=6.0\n")
+        missing = _run_probe(probe_script, tmp_path, site, "pyyaml>=6.0\n")
         assert missing == []

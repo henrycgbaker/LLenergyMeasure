@@ -33,7 +33,7 @@ from llenergymeasure.config.models import (
     TrafficConfig,
 )
 from llenergymeasure.device.power_thermal import PowerThermalSample
-from llenergymeasure.harness.traffic import IssuerReport, RequestRecord, RequestShape
+from llenergymeasure.harness.traffic import IssuerReport, RequestRecord
 from llenergymeasure.harness.window_manager import (
     ABORTED_LEVEL_ATTR,
     ATTRIBUTION_STEADY_STATE_SPAN,
@@ -51,6 +51,7 @@ from llenergymeasure.harness.window_manager import (
     validate_level_stability,
 )
 from llenergymeasure.harness.windowing import _AUTO_CV_THRESHOLD
+from llenergymeasure.serving.transport import RequestShape
 
 # ---------------------------------------------------------------------------
 # Test doubles + builders

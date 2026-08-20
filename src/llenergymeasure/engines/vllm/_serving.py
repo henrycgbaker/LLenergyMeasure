@@ -1,7 +1,7 @@
 """vLLM-specific server command construction for the ServerCapable adapter.
 
 Holds the engine knowledge the generic lifecycle mechanics
-(:mod:`llenergymeasure.infra.server_lifecycle`) do not have: how vLLM is
+(:mod:`llenergymeasure.serving.lifecycle`) do not have: how vLLM is
 invoked as an online server (``vllm serve <model> --port <port>``), and a
 minimal OpenAI-completions readiness probe.
 
@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from llenergymeasure.infra.server_lifecycle import ProbeRequest
+from llenergymeasure.serving.types import ProbeRequest
 
 #: The upstream vllm/vllm-openai image ENTRYPOINT. The process leg prepends this;
 #: the container leg relies on the image supplying it.

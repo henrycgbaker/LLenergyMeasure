@@ -13,8 +13,9 @@ from pathlib import Path
 from llenergymeasure.engines.protocol import EnginePlugin, ServerCapable
 from llenergymeasure.engines.vllm import _serving
 from llenergymeasure.engines.vllm.plugin import VLLMEngine
-from llenergymeasure.infra import server_lifecycle as sl
-from llenergymeasure.infra.server_lifecycle import ServerHandle, ServerPlacement
+from llenergymeasure.infra.docker.command import build_server_container_argv
+from llenergymeasure.serving import lifecycle as sl
+from llenergymeasure.serving.types import ServerHandle, ServerPlacement
 from tests.conftest import make_config
 
 STUB_SERVER = Path(__file__).parent / "_stub_server.py"
@@ -68,7 +69,7 @@ def test_completions_probe_defaults():
 
 def test_container_argv_carries_ruled_flags():
     """The container leg's docker argv: image, --gpus, --network host, port."""
-    argv = sl.build_server_container_argv(
+    argv = build_server_container_argv(
         image="vllm/vllm-openai:v0.19.1",
         container_name="llem-vllm-server-1",
         gpu_indices=[2],

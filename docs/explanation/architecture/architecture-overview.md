@@ -91,25 +91,28 @@ Each layer may import the layers below it and never the layers above. The orderi
 
 ```mermaid
 flowchart TD
-    L10["Layer 10 - cli/<br/>llem run, llem doctor"]
-    L9["Layer 9 - api/<br/>run_experiment&#40;&#41;, run_study&#40;&#41;"]
-    L8["Layer 8 - study/<br/>StudyRunner, sweep expansion"]
-    L7["Layer 7 - entrypoints/<br/>in-container process entry point"]
-    L6["Layer 6 - harness/<br/>MeasurementHarness, energy sampling"]
-    L5["Layer 5 - results/<br/>persistence, aggregation, extended metrics"]
-    L4["Layer 4 - engines/ + energy/ + datasets/<br/>transformers, vLLM, TensorRT-LLM plugins"]
+    L11["Layer 11 - cli/<br/>llem run, llem doctor"]
+    L10["Layer 10 - api/<br/>run_experiment&#40;&#41;, run_study&#40;&#41;"]
+    L9["Layer 9 - study/<br/>StudyRunner, sweep expansion"]
+    L8["Layer 8 - entrypoints/<br/>in-container process entry point"]
+    L7["Layer 7 - harness/<br/>MeasurementHarness, energy sampling"]
+    L6["Layer 6 - results/<br/>persistence, aggregation, extended metrics"]
+    L5["Layer 5 - engines/ + energy/ + datasets/<br/>transformers, vLLM, TensorRT-LLM plugins"]
+    L4["Layer 4 - serving/<br/>server placement, launch, readiness, transport"]
     L3["Layer 3 - infra/<br/>Docker runner, image registry, runner resolution"]
     L2["Layer 2 - device/<br/>GPU info, NVML, power and thermal"]
     L1["Layer 1 - config/ + domain/<br/>rule loader lives here<br/>engine_rules/loader.py"]
     L0["Layer 0 - utils/<br/>exceptions, constants, security"]
 
-    L10 --> L9 --> L8 --> L7 --> L6 --> L5 --> L4 --> L3 --> L2 --> L1 --> L0
+    L11 --> L10 --> L9 --> L8 --> L7 --> L6 --> L5 --> L4 --> L3 --> L2 --> L1 --> L0
 
     classDef target fill:#fffae6,stroke:#b58900,stroke-width:2px;
     class L1 target;
 ```
 
 `entrypoints/` sits below `study/` and `api/` rather than beside `cli/`: it is the process the container runner starts, and it drives one already-resolved experiment, so it must never re-enter the public API or the study orchestrator.
+
+`serving/` sits below the engines group: it owns the online-serving server lifecycle that every server-capable engine composes, so it must carry no engine knowledge of its own. Each engine's serve command and readiness-probe body stay in that engine's adapter.
 
 ---
 
