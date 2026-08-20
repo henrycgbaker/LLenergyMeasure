@@ -663,11 +663,12 @@ class TensorRTEngine:
         model = config.task.model
 
         if placement.mode == sl.CONTAINER_MODE:
+            from llenergymeasure.infra.docker.command import build_server_container_argv
             from llenergymeasure.infra.image_registry import get_default_image
 
             image = placement.image or get_default_image(config.engine)
             container_name = sl.server_container_name("tensorrt")
-            argv = sl.build_server_container_argv(
+            argv = build_server_container_argv(
                 image=image,
                 container_name=container_name,
                 gpu_indices=placement.gpu_indices,

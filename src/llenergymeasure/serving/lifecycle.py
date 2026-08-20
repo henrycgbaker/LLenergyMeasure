@@ -8,7 +8,9 @@ subprocess in its own process group), the readiness wait, and leak-free
 shutdown with kill escalation. Per-engine knowledge (the ``vllm serve`` command,
 the health path, the probe request shape) lives in the engine adapters, which
 compose these primitives. The value types the signatures here are written in
-live in :mod:`llenergymeasure.serving.types`.
+live in :mod:`llenergymeasure.serving.types`; the container leg's ``docker run``
+argv is built in :mod:`llenergymeasure.infra.docker.command`, beside the other
+container shapes, and handed to :func:`launch_container_server` by the caller.
 
 Design constraints this module enforces:
 
@@ -63,11 +65,6 @@ from llenergymeasure.config.ssot import (
     TIMEOUT_SIGTERM_GRACE,
     RunnerMode,
 )
-
-# The server container's `docker run` argv is built beside the other container
-# shapes, in the one argv-construction home. Re-exported here so a server
-# adapter composes launch, readiness and shutdown from this module alone.
-from llenergymeasure.infra.docker.command import build_server_container_argv
 from llenergymeasure.serving.types import (
     ProbeRequest,
     ServerHandle,
@@ -82,7 +79,6 @@ __all__ = [
     "DEFAULT_HEALTH_PATH",
     "allocate_free_port",
     "await_ready",
-    "build_server_container_argv",
     "default_server_log_path",
     "launch_container_server",
     "launch_process_server",

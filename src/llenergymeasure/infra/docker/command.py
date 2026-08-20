@@ -14,9 +14,10 @@ builds the long-lived engine-server launch. Consumed by
 ``DockerRunner._build_docker_cmd`` (the experiment dispatch), by
 ``study.baseline_container`` (the baseline dispatch) - which share
 :func:`append_package_dispatch` and :func:`append_nccl_env` so the two setups
-cannot drift - and by ``serving.lifecycle`` (the engine-server dispatch).
-:func:`docker_label_args` is shared by all three, so their emission of the
-study's container ownership labels cannot drift either.
+cannot drift - and by each engine's server adapter, which passes the argv built
+here to the serving layer's launcher. :func:`docker_label_args` is shared by all
+three, so their emission of the study's container ownership labels cannot drift
+either.
 """
 
 from __future__ import annotations
@@ -421,9 +422,9 @@ def build_server_container_argv(
     failure-artefact hand-off the server handle's log reader promises). ``--rm``
     destroys the exited container within ~1s of the crash and the logs with it, so
     the diagnostic would be permanently lost. Leak-freeness is instead the
-    explicit responsibility of the serving layer's shutdown (``docker stop`` then
-    ``docker rm -f``), its crashed-startup fast-detection, and its failed-launch
-    cleanup - all of which force-remove.
+    explicit responsibility of the serving layer that runs this argv: its
+    shutdown (``docker stop`` then ``docker rm -f``), its crashed-startup
+    fast-detection, and its failed-launch cleanup all force-remove.
 
     ``--network host`` is UNCONDITIONAL (the peer convention: genai-perf, vllm
     benchmark_serving and MLPerf vendor repros

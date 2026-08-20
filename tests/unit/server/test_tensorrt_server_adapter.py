@@ -15,6 +15,7 @@ from pathlib import Path
 from llenergymeasure.engines.protocol import EnginePlugin, ServerCapable
 from llenergymeasure.engines.tensorrt import _serving
 from llenergymeasure.engines.tensorrt.plugin import TensorRTEngine
+from llenergymeasure.infra.docker.command import build_server_container_argv
 from llenergymeasure.serving import lifecycle as sl
 from llenergymeasure.serving.types import ServerHandle, ServerPlacement
 from tests.conftest import make_config
@@ -65,7 +66,7 @@ def test_completions_probe_defaults():
 
 def test_container_argv_carries_ruled_flags_and_the_explicit_verb():
     """The container leg's docker argv: image, --gpus, --network host, HF mount, verb+port."""
-    argv = sl.build_server_container_argv(
+    argv = build_server_container_argv(
         image="nvcr.io/nvidia/tensorrt-llm/release:1.2.1",
         container_name="llem-tensorrt-server-1",
         gpu_indices=[2],
