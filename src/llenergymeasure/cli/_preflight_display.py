@@ -129,14 +129,10 @@ def build_preflight_panel(
     _section(body, "Execution Controls")
     _line(body, "Experiments", experiments_line)
     _line(body, "Experiment order", str(exec_cfg.experiment_order))
-    exp_gap = (
-        f"{exec_cfg.experiment_gap_seconds}s"
-        if exec_cfg.experiment_gap_seconds is not None
-        else "0s"
-    )
-    cyc_gap = f"{exec_cfg.cycle_gap_seconds}s" if exec_cfg.cycle_gap_seconds is not None else "0s"
-    _line(body, "Experiment gap", exp_gap)
-    _line(body, "Cycle gap", cyc_gap)
+    # Gaps are resolved before dispatch (an unset gap takes the machine default
+    # from the user config), so the panel shows the wait that will actually happen.
+    _line(body, "Experiment gap", f"{exec_cfg.experiment_gap_seconds}s")
+    _line(body, "Cycle gap", f"{exec_cfg.cycle_gap_seconds}s")
     shuffle_val = str(exec_cfg.shuffle_seed) if exec_cfg.shuffle_seed is not None else "auto"
     _line(body, "Shuffle seed", shuffle_val)
     skip_val = "yes" if exec_cfg.skip_preflight else "no"

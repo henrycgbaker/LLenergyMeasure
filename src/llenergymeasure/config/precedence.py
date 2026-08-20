@@ -28,7 +28,7 @@ resolved-vs-declared split lives on ``ExperimentConfig``: the overlay output is
 attached as side-channel state (``attach_resolved_server_warmup``) that
 ``mode_section_identity`` projects into the resolved/observed hashes, while the
 declared hash stays a wholesale dump of the DECLARED fields (user intent, no
-user-config leak). The overlay is applied at study finalisation, before dedup, so
+user-config leak). The overlay is applied during study resolution, before dedup, so
 dedup binds on the realised protocol. Env/call-site chain layers stay
 supported-but-unfed at v0.7. The full setup UX (llem init flow, .env
 rationalisation, routing every user-config field through the chain) stays with the
@@ -53,6 +53,7 @@ __all__ = [
     "UNSET",
     "PrecedenceChain",
     "apply_server_warmup_overlay",
+    "fields_set_layer",
     "is_unset",
     "prune_unset",
     "resolve_layers",
@@ -225,8 +226,8 @@ def apply_server_warmup_overlay(config: ExperimentConfig, user_config: UserConfi
         return
     # UNSET-awareness: only the fields the study YAML actually wrote enter the study
     # layer, so a field it left unset defers to the user/default layers below while a
-    # study-set field always wins. See _fields_set_layer.
-    study_layer = _fields_set_layer(config.server.warmup)
+    # study-set field always wins. See fields_set_layer.
+    study_layer = fields_set_layer(config.server.warmup)
     resolved = resolve_server_warmup(study_yaml=study_layer, user_config=user_layer)
     config.attach_resolved_server_warmup(resolved)
 
@@ -240,15 +241,16 @@ def _user_server_warmup_layer(user_config: UserConfig) -> dict[str, Any]:
     server = user_config.server
     if server is None:
         return {}
-    return _fields_set_layer(server.warmup)
+    return fields_set_layer(server.warmup)
 
 
-def _fields_set_layer(model: BaseModel) -> dict[str, Any]:
+def fields_set_layer(model: BaseModel) -> dict[str, Any]:
     """A model's explicitly-set fields as a precedence layer (the per-field overlay).
 
     Only the fields actually written (``model_fields_set``) appear - a field set to
     the built-in default's VALUE still counts as set, so it enters the layer and
-    wins over the layers below. This is the UNSET-aware projection both the declared
-    study warmup and the user-config warmup use to build their overlay layers.
+    wins over the layers below. This is the UNSET-aware projection every caller uses
+    to turn a parsed pydantic model into a layer that defers on what it did not say:
+    the declared study warmup, the user-config warmup, and the study execution block.
     """
     return {name: getattr(model, name) for name in model.model_fields_set}

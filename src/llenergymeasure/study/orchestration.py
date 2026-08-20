@@ -93,9 +93,17 @@ def orchestrate_study(
     - ``resume_dir``: an explicit study directory to reattach and resume into.
     - ``results_dir_override``: the results-dir override for a fresh run
       (precedence head, above YAML ``output.results_dir`` and user config).
+
+    Requires an ALREADY-RESOLVED study and asserts as much: resolution (the warmup
+    overlay, dedup, the design hash, cycle expansion, equivalence groups) belongs
+    to :func:`llenergymeasure.study.loading.resolve_study`, which every public
+    entry routes through. Orchestration dispatches and assembles; it never
+    resolves, so the two cannot drift apart.
     """
     from llenergymeasure.config.user_config import load_user_config
     from llenergymeasure.study.manifest import ManifestWriter, create_study_dir
+
+    _require_resolved(study)
 
     # Preresolved runner specs bypass preflight; demanding skip_preflight makes the
     # contract explicit rather than silently ignoring the precomputed result.
@@ -105,16 +113,6 @@ def orchestrate_study(
     # Load user config first so runner context can be forwarded to preflight,
     # ensuring preflight uses the same runner resolution as the actual dispatch path.
     user_config = load_user_config()
-
-    # Server-capable-entry-path contract: every entry that
-    # dispatches a server config must apply the user-config warmup overlay (or
-    # reject). ``api.load_study`` overlays before dedup, but ``run_experiment`` and
-    # ``run_study(StudyConfig)`` bypass it; this single choke point overlays every
-    # server experiment here so the ServerSession always reads the overlay-resolved
-    # protocol. Idempotent (re-applying on the load_study path recomputes the same
-    # value), a no-op for offline configs, and dedup-safe (the tool-wide overlay is
-    # uniform across a run, so it never regroups within-run dedup).
-    _apply_server_warmup_overlay_to_study(study, user_config)
 
     runner_specs, system_overrides = _resolve_runner_specs(
         study, user_config, preresolved, skip_preflight, progress
@@ -286,23 +284,32 @@ def _resolve_runner_specs(
     return runner_specs, system_overrides
 
 
-def _apply_server_warmup_overlay_to_study(study: StudyConfig, user_config: Any) -> None:
-    """Overlay the tool-wide user-config server warmup onto every server experiment.
+def _require_resolved(study: StudyConfig) -> None:
+    """Reject a study that has not been through the resolution entry point.
 
-    The server-capable-entry-path contract: ``api.load_study`` applies the
-    overlay before dedup, but ``run_experiment`` / ``run_study(StudyConfig)`` reach
-    the runner without it. Applying it here - the universal orchestration choke
-    point that already loaded the user config - guarantees the ServerSession reads
-    the overlay-resolved warmup on EVERY entry path. Idempotent and a no-op for
-    offline configs and when the user config carries no warmup layer.
+    Running an unresolved study would run it undeduplicated, unhashed and
+    uncycled - silently ignoring ``n_cycles``, skipping the thermal gaps, and
+    producing results with no study identity and an empty equivalence-group
+    sidecar. Fail loudly instead.
+
+    ``study_design_hash`` and ``declared_resolved_config_hashes`` are the markers:
+    :func:`llenergymeasure.study.loading.resolve_study` populates both for every
+    study it resolves, and they are what the run's identity and equivalence
+    records are built from. They are TRUSTED markers, not a proof: both are
+    ordinary settable fields, so a caller who writes them by hand can get an
+    unresolved study past this check. Doing so is unsupported misuse - the
+    supported way to obtain a resolved study is ``api.load_study`` for a YAML
+    study, or handing the StudyConfig to ``run_study`` / ``run_experiment``, which
+    resolve it. Verifying the hash by recomputing it is deliberately not done: it
+    would re-run resolution on every dispatch to catch only deliberate forgery.
     """
-    if not any(exp.serving_mode == "server" for exp in study.experiments):
-        return
-    from llenergymeasure.config.precedence import apply_server_warmup_overlay
-
-    for exp in study.experiments:
-        if exp.serving_mode == "server":
-            apply_server_warmup_overlay(exp, user_config)
+    if study.study_design_hash is None or not study.declared_resolved_config_hashes:
+        raise ValueError(
+            "orchestrate_study requires a resolved study (no resolution markers found). "
+            "Build it with llenergymeasure.api.load_study for a YAML study, or pass the "
+            "StudyConfig to run_study/run_experiment, which resolve it for you. Do not set "
+            "study_design_hash by hand."
+        )
 
 
 def _write_study_artefacts(

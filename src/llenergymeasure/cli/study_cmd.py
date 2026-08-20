@@ -139,7 +139,7 @@ def study_plan(
     from pydantic import ValidationError
 
     from llenergymeasure.api import load_study
-    from llenergymeasure.cli._study_defaults import study_cli_overrides_for_file
+    from llenergymeasure.cli._study_defaults import STUDY_EXECUTION_DEFAULTS
     from llenergymeasure.cli._study_plan import (
         build_funnel,
         dormant_observation_lines,
@@ -151,7 +151,7 @@ def study_plan(
     # preview matches exactly what a run would execute (e.g. n_cycles=3 when the
     # file omits it) rather than the conservative Pydantic default.
     try:
-        study = load_study(study_file, cli_overrides=study_cli_overrides_for_file(study_file))
+        study = load_study(study_file, execution_defaults=STUDY_EXECUTION_DEFAULTS)
     except (ConfigError, ValidationError) as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=2) from None

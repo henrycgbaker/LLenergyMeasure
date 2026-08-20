@@ -339,17 +339,19 @@ def test_early_stopping_never_accepted_public_path():
     assert cfg.transformers.engine_params.early_stopping == "never"
 
 
-def test_early_stopping_never_accepted_via_loader():
-    """The same value survives the CLI-override loader path."""
-    cfg = load_experiment_config(
-        path=None,
-        cli_overrides={
-            "task.model": "gpt2",
-            "engine": "transformers",
-            "serving_mode": "offline",
-            "transformers.engine_params.early_stopping": "never",
-        },
+def test_early_stopping_never_accepted_via_loader(tmp_path):
+    """The same value survives the file-loading path."""
+    path = tmp_path / "experiment.yaml"
+    path.write_text(
+        "serving_mode: offline\n"
+        "engine: transformers\n"
+        "task:\n"
+        "  model: gpt2\n"
+        "transformers:\n"
+        "  engine_params:\n"
+        "    early_stopping: never\n"
     )
+    cfg = load_experiment_config(path)
     assert cfg.transformers.engine_params.early_stopping == "never"
 
 

@@ -47,7 +47,7 @@ def _make_experiment(
 
 def _make_study(n_experiments: int = 2, n_cycles: int = 2) -> StudyConfig:
     # study.experiments is the fully-cycled execution list in production
-    # (finalise_study runs apply_cycles before the manifest is built), so the
+    # (resolve_study runs apply_cycles before the manifest is built), so the
     # fixture must cycle too - _build_entries counts occurrences in that list.
     from llenergymeasure.config.grid import ExperimentOrder, apply_cycles
 

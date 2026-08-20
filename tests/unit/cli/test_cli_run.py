@@ -88,15 +88,16 @@ def _make_experiment_yaml(tmp_path: Path) -> Path:
 
 
 def _make_capture_load() -> tuple:
-    """Return (capture_fn, captured_overrides) for study routing tests.
+    """Return (capture_fn, captured_defaults) for study routing tests.
 
-    The capture function mimics the api load_study facade: records cli_overrides
-    and returns a MagicMock with properly configured study attributes.
+    The capture function mimics the api load_study facade: records the
+    execution_defaults it was handed and returns a MagicMock with properly
+    configured study attributes.
     """
     captured: list = []
 
-    def _capture(path, cli_overrides=None):
-        captured.append(cli_overrides)
+    def _capture(path, cli_overrides=None, *, execution_defaults=None):
+        captured.append(execution_defaults)
         mock = MagicMock()
         mock.experiments = [MagicMock()]
         mock.study_execution.n_cycles = 1
@@ -585,7 +586,7 @@ def test_run_study_cli_defaults_applied(tmp_path):
         "name: test\nmodel: test/model\nengine: transformers\nsweep:\n  transformers.dtype: [float32, float16]\n"
     )
     mock_study_result = make_study_result()
-    _capture_load, captured_overrides = _make_capture_load()
+    _capture_load, captured_defaults = _make_capture_load()
 
     # load_study (api facade), run_study, and build_preflight_panel are all
     # lazily imported inside _run_study_impl - patch at source modules
@@ -597,11 +598,11 @@ def test_run_study_cli_defaults_applied(tmp_path):
         result = runner.invoke(app, ["run", str(study_yaml)])
 
     assert result.exit_code == 0
-    assert len(captured_overrides) == 1
-    overrides = captured_overrides[0]
-    assert overrides is not None
-    assert overrides["study_execution"]["n_cycles"] == 3
-    assert overrides["study_execution"]["experiment_order"] == "shuffle"
+    assert len(captured_defaults) == 1
+    defaults = captured_defaults[0]
+    assert defaults is not None
+    assert defaults["n_cycles"] == 3
+    assert defaults["experiment_order"] == "shuffle"
 
 
 def test_run_no_config_error_points_to_study_init():

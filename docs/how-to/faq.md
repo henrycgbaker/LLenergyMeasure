@@ -34,7 +34,7 @@ Yes, for engines you have installed on the host. Set `runners: { transformers: p
 
 Several stochastic sources, in decreasing order of impact:
 
-1. **Thermal state** - a hot GPU clocks down. Use the default `study_execution.experiment_gap_seconds: 10` and `cycle_gap_seconds: 30` (or longer) so each cell starts from a comparable thermal floor.
+1. **Thermal state** - a hot GPU clocks down. Leave `study_execution.experiment_gap_seconds` and `cycle_gap_seconds` unset to take your machine defaults (60s and 300s, changeable under `execution:` in the user config), or set them in the study file, so each cell starts from a comparable thermal floor.
 2. **Sampling RNG** - if `decoder.do_sample: true` and `random_seed` differs, generations vary. Pin `random_seed: 42`. See [Methodology &gt; Reproducibility](/explanation/methodology/methodology#reproducibility).
 3. **System load** - other processes on the host affect baseline power and throttle the GPU. Run on a dedicated GPU when possible.
 4. **NVML sampling jitter** - ~1 % run-to-run from sampling-instant variability. This is below the +/-5 % NVML accuracy floor and not actionable.

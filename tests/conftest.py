@@ -140,6 +140,39 @@ def make_study_result(**overrides) -> StudyResult:
     return StudyResult(**defaults)
 
 
+def make_resolved_study(
+    experiments: list[ExperimentConfig],
+    *,
+    study_name: str | None = None,
+    output=None,
+    study_execution=None,
+    runners: dict[str, str] | None = None,
+    images: dict[str, str] | None = None,
+) -> StudyConfig:
+    """Build a StudyConfig through the single study-resolution entry point.
+
+    ``orchestrate_study`` accepts only resolved studies, so a test that drives the
+    orchestrator directly builds its fixture here instead of constructing a bare
+    StudyConfig. Resolution is genuine: equivalent configs are deduplicated, the
+    design hash is computed, and ``n_cycles`` is expanded into the execution
+    sequence. No user config is supplied, so the fixture stays independent of
+    whatever user config the machine running the tests happens to have.
+    """
+    from llenergymeasure.config.models import OutputConfig
+    from llenergymeasure.study.loading import resolve_study_objects
+
+    return resolve_study_objects(
+        StudyConfig(
+            experiments=list(experiments),
+            study_name=study_name,
+            output=output if output is not None else OutputConfig(),
+            study_execution=study_execution if study_execution is not None else ExecutionConfig(),
+            runners=runners,
+            images=images,
+        )
+    )
+
+
 def make_study(engines: list[str]) -> StudyConfig:
     """Build a minimal StudyConfig with one experiment per engine name.
 

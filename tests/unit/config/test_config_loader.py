@@ -14,7 +14,7 @@ from pydantic import ValidationError
 
 from llenergymeasure.config.loader import deep_merge, load_experiment_config, load_study_config
 from llenergymeasure.config.models import ExperimentConfig, StudyConfig
-from llenergymeasure.study.loading import finalise_study
+from llenergymeasure.study.loading import resolve_study
 from llenergymeasure.utils.exceptions import ConfigError
 
 # ---------------------------------------------------------------------------
@@ -30,14 +30,14 @@ def _write_yaml(tmp_path: Path, content: str, name: str = "config.yaml") -> Path
 
 
 def _load_study(path: Path, cli_overrides: dict | None = None) -> StudyConfig:
-    """Parse + finalise a study YAML into a resolved StudyConfig.
+    """Parse + resolve a study YAML into a runnable StudyConfig.
 
-    The config loader now returns a LoadedStudyRaw (pure parse/expand); the
-    study-layer finalise step adds dedup, study_design_hash, cycles, and
-    equivalence groups. These tests assert on the finalised StudyConfig, so
+    The config loader returns a LoadedStudyRaw (pure parse/expand); the
+    study-layer resolution step adds dedup, study_design_hash, cycles, and
+    equivalence groups. These tests assert on the resolved StudyConfig, so
     compose both steps here.
     """
-    return finalise_study(load_study_config(path, cli_overrides=cli_overrides))
+    return resolve_study(load_study_config(path, cli_overrides=cli_overrides))
 
 
 # ---------------------------------------------------------------------------
@@ -160,54 +160,6 @@ def test_pydantic_validation_error_not_wrapped_in_config_error(tmp_path):
     # engine is a valid field name, but the value is invalid → ValidationError
     with pytest.raises(ValidationError):
         load_experiment_config(path)
-
-
-# ---------------------------------------------------------------------------
-# CLI override merging
-# ---------------------------------------------------------------------------
-
-
-def test_cli_overrides_merged(tmp_path):
-    """cli_overrides override YAML values at highest priority."""
-    path = _write_yaml(
-        tmp_path, "task:\n  model: gpt2\nengine: transformers\nserving_mode: offline\n"
-    )
-    config = load_experiment_config(path, cli_overrides={"task.model": "bert-base"})
-    assert config.task.model == "bert-base"
-
-
-def test_cli_overrides_none_values_ignored(tmp_path):
-    """None values in cli_overrides are ignored (unset CLI flags)."""
-    path = _write_yaml(
-        tmp_path, "task:\n  model: gpt2\nengine: transformers\nserving_mode: offline\n"
-    )
-    config = load_experiment_config(
-        path, cli_overrides={"task.model": None, "transformers.engine_params.dtype": None}
-    )
-    assert config.task.model == "gpt2"  # file value retained
-
-
-def test_cli_overrides_without_file():
-    """load_experiment_config with cli_overrides and no file works."""
-    config = load_experiment_config(
-        path=None,
-        cli_overrides={"task.model": "gpt2", "engine": "transformers", "serving_mode": "offline"},
-    )
-    assert config.task.model == "gpt2"
-    assert config.engine == "transformers"
-
-
-def test_cli_override_dotted_key(tmp_path):
-    """Dotted CLI override keys are unflattened into nested dicts."""
-    path = _write_yaml(
-        tmp_path, "task:\n  model: gpt2\nengine: transformers\nserving_mode: offline\n"
-    )
-    config = load_experiment_config(
-        path,
-        cli_overrides={"transformers.engine_params.num_beams": 8},
-    )
-    assert config.transformers is not None
-    assert config.transformers.engine_params.num_beams == 8
 
 
 # ---------------------------------------------------------------------------
@@ -447,11 +399,12 @@ def test_load_study_config_empty_study_raises(tmp_path):
         load_study_config(study_yaml)
 
 
-def test_load_study_config_mixed_serving_mode_explicit_raises(tmp_path):
-    """A study whose explicit experiments mix serving_mode is rejected (v0.7 staging).
+def test_mixed_serving_mode_explicit_raises_at_resolution(tmp_path):
+    """A study whose explicit experiments mix serving_mode is rejected.
 
-    The error names both modes found, points at the field by name, and tells the
-    user to split the study.
+    The gate lives at the resolution entry point, so parsing the file succeeds and
+    resolving it is what rejects the study. The error names both modes found,
+    points at the field by name, and tells the user to split the study.
     """
     study_yaml = tmp_path / "study.yaml"
     study_yaml.write_text(
@@ -469,8 +422,9 @@ def test_load_study_config_mixed_serving_mode_explicit_raises(tmp_path):
             }
         )
     )
+    assert len(load_study_config(study_yaml).valid_experiments) == 2  # parses fine
     with pytest.raises(ConfigError) as exc:
-        load_study_config(study_yaml)
+        _load_study(study_yaml)
     msg = str(exc.value)
     assert "offline" in msg
     assert "server" in msg
@@ -478,7 +432,7 @@ def test_load_study_config_mixed_serving_mode_explicit_raises(tmp_path):
     assert "split" in msg.lower()
 
 
-def test_load_study_config_mixed_serving_mode_sweep_raises(tmp_path):
+def test_mixed_serving_mode_sweep_raises_at_resolution(tmp_path):
     """A serving_mode sweep spanning both modes funnels through the SAME validator.
 
     A flat ``serving_mode: [offline, server]`` axis cannot produce two valid arms
@@ -503,7 +457,7 @@ def test_load_study_config_mixed_serving_mode_sweep_raises(tmp_path):
         )
     )
     with pytest.raises(ConfigError) as exc:
-        load_study_config(study_yaml)
+        _load_study(study_yaml)
     msg = str(exc.value)
     assert "offline" in msg
     assert "server" in msg
@@ -585,9 +539,9 @@ def test_load_study_config_design_hash_is_stable(tmp_path):
 
     The hash is persisted in study manifests and used for resume drift
     detection, so its VALUE is a stable contract. This pin guards against any
-    accidental change to the resolve -> dedup -> hash pipeline (e.g. the
-    finalisation moving out of the config loader). If this assertion fails, a
-    behaviour change has slipped in - it is not safe to "just update the value".
+    accidental change to the resolve -> dedup -> hash pipeline (e.g. resolution
+    moving out of the config loader). If this assertion fails, a behaviour change
+    has slipped in - it is not safe to "just update the value".
     """
     study_yaml = tmp_path / "study.yaml"
     study_yaml.write_text(
