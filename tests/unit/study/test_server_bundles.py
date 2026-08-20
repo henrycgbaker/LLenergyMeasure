@@ -1254,21 +1254,14 @@ _HINT_FRAGMENT = "one server per cell per cycle"
 
 
 def _resolve_order(experiments: list[ExperimentConfig], *, order: str, n_cycles: int) -> Any:
-    """Run resolve_study over a bare LoadedStudyRaw with the given cycle ordering."""
-    from llenergymeasure.config.loader import LoadedStudyRaw
-    from llenergymeasure.config.models import ExecutionConfig, OutputConfig
-    from llenergymeasure.study.loading import resolve_study
+    """Resolve these experiments under the given cycle ordering."""
+    from tests.conftest import make_resolved_study
 
-    raw = LoadedStudyRaw(
-        valid_experiments=list(experiments),
-        skipped=[],
+    return make_resolved_study(
+        experiments,
         study_name="hint-test",
-        output=OutputConfig(),
-        execution=ExecutionConfig(experiment_order=order, n_cycles=n_cycles),
-        runners=None,
-        images=None,
+        study_execution={"experiment_order": order, "n_cycles": n_cycles},
     )
-    return resolve_study(raw)
 
 
 class TestSequentialServerHint:

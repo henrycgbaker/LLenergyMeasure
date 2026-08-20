@@ -12,8 +12,8 @@ arrived as a YAML file or as objects a caller built in memory (#886). A study
 that reaches the orchestrator without it is unresolved - no dedup, no identity
 hash, no cycle expansion - so the orchestrator rejects it rather than running it.
 ``llenergymeasure.api.load_study`` is the YAML front door (parse, then resolve);
-``run_study`` and ``run_experiment`` build a ``LoadedStudyRaw`` from the objects
-they were handed and call the same entry, touching no file.
+:func:`resolve_study_objects` is the object front door that ``run_study`` and
+``run_experiment`` use for a study a caller built in memory, touching no file.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ from llenergymeasure.study.library_resolution import resolve_library_effective
 if TYPE_CHECKING:
     from llenergymeasure.config.user_config import UserConfig
 
-__all__ = ["resolve_study"]
+__all__ = ["resolve_study", "resolve_study_objects"]
 
 logger = logging.getLogger(__name__)
 
@@ -181,6 +181,53 @@ def resolve_study(
         declared_resolved_config_hashes=list(dedup.declared_resolved_hashes),
         dormant_observations=[asdict(obs) for obs in dedup.dormant_observations],
     )
+
+
+def resolve_study_objects(
+    study: StudyConfig,
+    *,
+    user_config: UserConfig | None = None,
+) -> StudyConfig:
+    """Resolve a StudyConfig a caller built in memory, touching no file.
+
+    The object front door onto :func:`resolve_study`, the counterpart of the YAML
+    front door ``api.load_study``: it unwraps the parts the caller assembled back
+    into a :class:`~llenergymeasure.config.loader.LoadedStudyRaw` and resolves
+    them, so a programmatically built study is deduplicated, hashed,
+    cycle-expanded and given its equivalence groups exactly as a study file is
+    (#886).
+
+    The unwrap lives here, beside ``LoadedStudyRaw`` and the resolution it feeds,
+    so a new ``StudyConfig`` field has one obvious place to be carried across
+    rather than being dropped silently by a caller's own copy of this mapping.
+
+    Args:
+        study: The study as the caller assembled it. Its declared fields are never
+            rewritten; see ``resolve_study`` for the side-channel state the warmup
+            overlay attaches to the caller's own ExperimentConfig objects.
+        user_config: Tool-wide user config, passed straight through to
+            :func:`resolve_study`.
+
+    Returns:
+        The resolved StudyConfig, as a new object.
+    """
+    raw = LoadedStudyRaw(
+        valid_experiments=list(study.experiments),
+        # Skipped grid points only arise from YAML sweep expansion, so a study
+        # built from objects normally has none. They are carried across after
+        # resolution instead of through the raw material: they are already dicts,
+        # the shape resolve_study emits, so nothing is silently dropped.
+        skipped=[],
+        study_name=study.study_name,
+        output=study.output,
+        execution=study.study_execution,
+        runners=study.runners,
+        images=study.images,
+    )
+    resolved = resolve_study(raw, user_config=user_config)
+    if study.skipped_configs:
+        resolved = resolved.model_copy(update={"skipped_configs": study.skipped_configs})
+    return resolved
 
 
 def _validate_homogeneous_serving_mode(experiments: list[ExperimentConfig]) -> None:

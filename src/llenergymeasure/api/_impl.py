@@ -347,39 +347,24 @@ def _resolve_objects(study: StudyConfig) -> StudyConfig:
     A StudyConfig assembled in memory - by ``run_study(StudyConfig(...))``, by
     ``run_experiment``, or by any programmatic caller - has had none of the
     resolution the YAML path performs: no dedup, no ``study_design_hash``, no
-    cycle expansion, no equivalence groups. Wrapping its parts back into a
-    ``LoadedStudyRaw`` and calling ``resolve_study`` gives it exactly the
-    resolution a YAML study gets, with no file touched (#886).
+    cycle expansion, no equivalence groups.
+    :func:`llenergymeasure.study.loading.resolve_study_objects` gives it exactly
+    the resolution a YAML study gets, with no file touched (#886).
 
     An already-resolved study (one that carries a ``study_design_hash``, i.e. it
-    came from ``load_study``) is returned untouched: its experiment list is
-    already cycle-expanded, so resolving twice would re-expand it. A study whose
-    hash was written by hand rather than by resolution is therefore NOT quietly
-    resolved here - the orchestrator refuses it, which is the louder outcome.
+    came from ``load_study``) is returned untouched, before the user config is
+    even read: its experiment list is already cycle-expanded, so resolving twice
+    would re-expand it. A study whose hash was written by hand rather than by
+    resolution is therefore NOT quietly resolved here - the orchestrator refuses
+    it, which is the louder outcome.
     """
     if study.study_design_hash is not None:
         return study
 
-    from llenergymeasure.config.loader import LoadedStudyRaw
     from llenergymeasure.config.user_config import load_user_config
-    from llenergymeasure.study.loading import resolve_study
+    from llenergymeasure.study.loading import resolve_study_objects
 
-    raw = LoadedStudyRaw(
-        valid_experiments=list(study.experiments),
-        # Skipped grid points only arise from YAML sweep expansion. A caller that
-        # recorded some on the StudyConfig keeps them (they are already dicts, the
-        # shape resolve_study emits), so nothing is silently dropped.
-        skipped=[],
-        study_name=study.study_name,
-        output=study.output,
-        execution=study.study_execution,
-        runners=study.runners,
-        images=study.images,
-    )
-    resolved = resolve_study(raw, user_config=load_user_config())
-    if study.skipped_configs:
-        resolved = resolved.model_copy(update={"skipped_configs": study.skipped_configs})
-    return resolved
+    return resolve_study_objects(study, user_config=load_user_config())
 
 
 def _to_study_config(

@@ -9,7 +9,6 @@ declared protocol in place.
 
 from __future__ import annotations
 
-from llenergymeasure.config.loader import LoadedStudyRaw
 from llenergymeasure.config.models import (
     ExecutionConfig,
     ExperimentConfig,
@@ -19,7 +18,7 @@ from llenergymeasure.config.models import (
 )
 from llenergymeasure.config.user_config import UserConfig, UserServerConfig
 from llenergymeasure.domain.experiment import compute_declared_config_hash
-from llenergymeasure.study.loading import resolve_study
+from llenergymeasure.study.loading import resolve_study_objects
 
 
 def _server_exp() -> ExperimentConfig:
@@ -43,27 +42,13 @@ def _user(mode: str = "fixed") -> UserConfig:
     return UserConfig(server=UserServerConfig(warmup=ServerWarmupConfig(mode=mode)))
 
 
-def _resolve_from_objects(study: StudyConfig, user_config: UserConfig) -> StudyConfig:
-    """Resolve a caller-built StudyConfig the way run_study does, without a file."""
-    raw = LoadedStudyRaw(
-        valid_experiments=list(study.experiments),
-        skipped=[],
-        study_name=study.study_name,
-        output=study.output,
-        execution=study.study_execution,
-        runners=study.runners,
-        images=study.images,
-    )
-    return resolve_study(raw, user_config=user_config)
-
-
 def test_overlay_applies_to_a_server_study() -> None:
     """A server study built from objects resolves the overlaid warmup protocol."""
     study = StudyConfig(
         experiments=[_server_exp()],
         study_execution=ExecutionConfig(experiment_order="sequential"),
     )
-    resolved_study = _resolve_from_objects(study, _user("fixed"))
+    resolved_study = resolve_study_objects(study, user_config=_user("fixed"))
 
     resolved = resolved_study.experiments[0].resolved_server_warmup()
     assert resolved is not None and resolved.mode == "fixed"
@@ -74,7 +59,9 @@ def test_overlay_leaves_an_offline_study_untouched() -> None:
     offline = _offline_exp()
     declared_before = compute_declared_config_hash(offline)
 
-    resolved_study = _resolve_from_objects(StudyConfig(experiments=[offline]), _user("fixed"))
+    resolved_study = resolve_study_objects(
+        StudyConfig(experiments=[offline]), user_config=_user("fixed")
+    )
     resolved_offline = resolved_study.experiments[0]
 
     assert resolved_offline.resolved_server_warmup() is None
@@ -84,8 +71,8 @@ def test_overlay_leaves_an_offline_study_untouched() -> None:
 def test_resolution_is_stable_across_repeated_calls() -> None:
     """Resolving the same objects twice under one user config agrees exactly."""
     user = _user("fixed")
-    first = _resolve_from_objects(StudyConfig(experiments=[_server_exp()]), user)
-    second = _resolve_from_objects(StudyConfig(experiments=[_server_exp()]), user)
+    first = resolve_study_objects(StudyConfig(experiments=[_server_exp()]), user_config=user)
+    second = resolve_study_objects(StudyConfig(experiments=[_server_exp()]), user_config=user)
 
     warmup_first = first.experiments[0].resolved_server_warmup()
     warmup_second = second.experiments[0].resolved_server_warmup()
@@ -97,14 +84,16 @@ def test_resolution_is_stable_across_repeated_calls() -> None:
 
 def test_offline_only_study_needs_no_overlay() -> None:
     offline = _offline_exp()
-    resolved = _resolve_from_objects(StudyConfig(experiments=[offline]), UserConfig())
+    resolved = resolve_study_objects(StudyConfig(experiments=[offline]), user_config=UserConfig())
     assert resolved.experiments[0].resolved_server_warmup() is None
 
 
 def test_overlay_noop_when_user_config_has_no_warmup_layer() -> None:
     # A server experiment but no user-config warmup layer: resolved falls back to
     # the declared server.warmup (byte-identical to no-overlay behaviour).
-    resolved = _resolve_from_objects(StudyConfig(experiments=[_server_exp()]), UserConfig())
+    resolved = resolve_study_objects(
+        StudyConfig(experiments=[_server_exp()]), user_config=UserConfig()
+    )
     warmup = resolved.experiments[0].resolved_server_warmup()
     assert warmup is not None and warmup.mode == "composite"  # the built-in default
 
@@ -112,7 +101,9 @@ def test_overlay_noop_when_user_config_has_no_warmup_layer() -> None:
 def test_resolution_from_objects_writes_no_file(tmp_path) -> None:
     """The programmatic path is pure in-memory: nothing lands on disk."""
     before = set(tmp_path.iterdir())
-    resolved = _resolve_from_objects(StudyConfig(experiments=[_server_exp()]), _user("fixed"))
+    resolved = resolve_study_objects(
+        StudyConfig(experiments=[_server_exp()]), user_config=_user("fixed")
+    )
     assert resolved.study_design_hash is not None
     assert set(tmp_path.iterdir()) == before
 
@@ -122,5 +113,5 @@ def test_output_config_survives_resolution() -> None:
         experiments=[_offline_exp()],
         output=OutputConfig(results_dir="/tmp/somewhere"),
     )
-    resolved = _resolve_from_objects(study, UserConfig())
+    resolved = resolve_study_objects(study, user_config=UserConfig())
     assert resolved.output.results_dir == "/tmp/somewhere"

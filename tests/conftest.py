@@ -158,27 +158,19 @@ def make_resolved_study(
     sequence. No user config is supplied, so the fixture stays independent of
     whatever user config the machine running the tests happens to have.
     """
-    from llenergymeasure.config.loader import LoadedStudyRaw
     from llenergymeasure.config.models import OutputConfig
-    from llenergymeasure.study.loading import resolve_study
+    from llenergymeasure.study.loading import resolve_study_objects
 
-    if study_execution is None:
-        execution = ExecutionConfig()
-    elif isinstance(study_execution, dict):
-        execution = ExecutionConfig(**study_execution)
-    else:
-        execution = study_execution
-
-    raw = LoadedStudyRaw(
-        valid_experiments=list(experiments),
-        skipped=[],
-        study_name=study_name,
-        output=output if output is not None else OutputConfig(),
-        execution=execution,
-        runners=runners,
-        images=images,
+    return resolve_study_objects(
+        StudyConfig(
+            experiments=list(experiments),
+            study_name=study_name,
+            output=output if output is not None else OutputConfig(),
+            study_execution=study_execution if study_execution is not None else ExecutionConfig(),
+            runners=runners,
+            images=images,
+        )
     )
-    return resolve_study(raw)
 
 
 def make_study(engines: list[str]) -> StudyConfig:
