@@ -97,7 +97,7 @@ class ServerPlacement:
     ownership labels); tests construct it directly.
 
     ``labels`` carries the study's ownership labels
-    (``study.container_lifecycle.generate_container_labels``) so a launched
+    (``infra.docker.ownership.generate_container_labels``) so a launched
     server container is visible to the same leak protection the study's
     experiment containers get: the study-scoped cleanup and the orphan reaper
     both select on ``llem.study_id``. A container-mode placement built by the

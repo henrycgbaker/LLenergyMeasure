@@ -15,8 +15,24 @@ separation server-mode measurement follows in its own
   so a detached long-lived server must not call this.
 
 :func:`run_blocking` is the classic no-progress path (``subprocess.run`` blocking
-until exit); :func:`ensure_image` is the image-availability pull guard. Neither
-builds server dispatch - only the launch/wait seam is left clean.
+until exit). Neither builds server dispatch - only the launch/wait seam is left
+clean.
+
+Image availability is the module's other job, and every ``docker pull`` this
+framework issues goes through :func:`_pull_image_if_absent`: guarded by a local
+``docker image inspect`` so an already-cached image never triggers a remote call.
+Two entry points sit on it, because the two callers want opposite things from
+docker's output:
+
+- :func:`ensure_image` - one image, for a single interactive run. Docker's own
+  progress output streams straight to stderr so a multi-GB download visibly
+  moves, and a failure raises.
+- :func:`ensure_images` - several images at once, for a study that spans multiple
+  engines. Pulls run concurrently and docker's output is CAPTURED instead:
+  interleaved progress bars from three simultaneous pulls are unreadable, and the
+  caller needs the stderr text to tell an unreachable registry from an absent
+  image. Failures are reported per item rather than raised, so one bad image does
+  not cancel its siblings.
 """
 
 from __future__ import annotations
@@ -28,9 +44,11 @@ import subprocess
 import sys
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
-from typing import TYPE_CHECKING, Any
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from llenergymeasure.config.ssot import (
     DOCKER_PULL_TIMEOUT,
@@ -40,6 +58,7 @@ from llenergymeasure.config.ssot import (
 from llenergymeasure.domain.progress import resolve_container_step
 from llenergymeasure.infra.docker_errors import (
     DockerContainerError,
+    DockerImagePullError,
     DockerStdoutSilenceError,
     DockerTimeoutError,
 )
@@ -48,6 +67,14 @@ if TYPE_CHECKING:
     from llenergymeasure.domain.progress import ProgressCallback
 
 logger = logging.getLogger(__name__)
+
+_K = TypeVar("_K")
+_T = TypeVar("_T")
+
+# Upper bound on simultaneous ``docker pull`` threads. A study rarely spans more
+# than three engines, and the daemon serialises layer writes anyway, so a small
+# cap keeps memory/disk pressure bounded without throttling the common case.
+MAX_CONCURRENT_PULLS = 3
 
 # Watchdog poll cadence: small enough to surface timeouts promptly, large
 # enough to keep idle CPU near zero. 0.5s gives users at most a half-second
@@ -75,12 +102,154 @@ _ACTIVITY_KEYWORDS = (
 )
 
 
-def ensure_image(image: str, progress: ProgressCallback | None = None) -> None:
-    """Check if the Docker image exists locally; pull with visible output if not.
+@dataclass(frozen=True)
+class PullOutcome:
+    """What one guarded ``docker pull`` did, and what docker said about it.
 
-    Always emits an ``image_check`` step so the user sees the cache lookup.
-    If the image is not cached, emits a separate ``pull`` step.
-    Substeps report image metadata (ID, size, age) for provenance visibility.
+    Deliberately a report rather than a verdict: whether an absent image is a
+    user error, and what to advise about it, depends on who asked. A single
+    interactive run wants an exception; a multi-engine study wants to finish
+    pulling its other images first and then name every failure at once, with a
+    per-engine rebuild hint. Both read the same three facts from here - did a
+    pull run, did it succeed, and what did docker print.
+
+    Attributes:
+        image:           The image reference that was ensured.
+        cached:          The local cache already had it, so NO pull ran.
+        returncode:      ``docker pull``'s exit status; ``None`` when no pull ran
+                         (cached) or it never returned (timed out).
+        stderr:          ``docker pull`` stderr on a FAILED pull, decoded - the
+                         text that distinguishes an unreachable registry from an
+                         absent image. Empty otherwise, and empty on any path
+                         whose output was streamed rather than captured (see
+                         :func:`ensure_images`).
+        inspect_stdout:  ``docker image inspect`` JSON for the now-present image
+                         (the guard's output when cached, a fresh inspect after a
+                         successful pull). ``b""`` when unavailable, which callers
+                         must tolerate - it is display/verification metadata, not
+                         a success signal.
+        elapsed:         Seconds the pull took; ``0.0`` when cached.
+        timeout_exc:     The ``TimeoutExpired`` raised when the pull exceeded
+                         ``DOCKER_PULL_TIMEOUT``, else ``None``. It is both the
+                         record THAT the pull timed out (see :attr:`timed_out`)
+                         and the cause a caller can chain when it turns this
+                         report back into an exception - reporting the outcome
+                         instead of raising is what would otherwise lose the
+                         traceback.
+    """
+
+    image: str
+    cached: bool = False
+    returncode: int | None = None
+    stderr: str = ""
+    inspect_stdout: bytes = b""
+    elapsed: float = 0.0
+    timeout_exc: BaseException | None = None
+
+    @property
+    def timed_out(self) -> bool:
+        """Whether the pull exceeded ``DOCKER_PULL_TIMEOUT``.
+
+        Derived from :attr:`timeout_exc` rather than stored alongside it, so the
+        flag and the exception behind it cannot disagree.
+        """
+        return self.timeout_exc is not None
+
+    @property
+    def ok(self) -> bool:
+        """Whether the image is now present locally."""
+        return self.cached or (not self.timed_out and self.returncode == 0)
+
+
+def _image_is_cached(image: str) -> subprocess.CompletedProcess[bytes]:
+    """Run the local ``docker image inspect`` that guards every pull.
+
+    Kept in this module rather than delegating to ``image_registry`` so that all
+    of the offline dispatch's docker subprocess calls stay behind one patchable
+    boundary.
+    """
+    return subprocess.run(
+        ["docker", "image", "inspect", image],
+        capture_output=True,
+        timeout=TIMEOUT_DOCKER_INSPECT,
+    )
+
+
+def _pull_image_if_absent(
+    image: str,
+    *,
+    capture_output: bool,
+    on_pull_start: Callable[[], None] | None = None,
+) -> PullOutcome:
+    """Pull *image* unless it is already cached locally. The single pull site.
+
+    The guard is the point: ``docker image inspect`` is a local daemon call, so
+    checking first means a warm image never reaches out to a registry at all.
+
+    ``capture_output`` decides where docker's own progress output goes - to this
+    process's stderr (visible, for one interactive pull) or into
+    :attr:`PullOutcome.stderr` (quiet, for concurrent pulls and for callers that
+    need to classify the failure text). ``on_pull_start`` fires once the guard has
+    decided a pull is actually needed, before it begins, so a caller that reports
+    the cache lookup and the download as separate phases can close one and open
+    the other at the right moment.
+
+    Never raises: the outcome carries what happened and the caller decides what it
+    means.
+    """
+    check = _image_is_cached(image)
+    if check.returncode == 0:
+        return PullOutcome(image=image, cached=True, inspect_stdout=check.stdout)
+
+    if on_pull_start is not None:
+        on_pull_start()
+    logger.info("Image %s not found locally, pulling...", image)
+    if not capture_output:
+        print(f"Pulling image: {image}", file=sys.stderr)
+
+    t0 = time.perf_counter()
+    sink: dict[str, Any] = (
+        {"capture_output": True} if capture_output else {"stdout": sys.stderr, "stderr": sys.stderr}
+    )
+    try:
+        pull = subprocess.run(["docker", "pull", image], timeout=DOCKER_PULL_TIMEOUT, **sink)
+    except subprocess.TimeoutExpired as exc:
+        return PullOutcome(
+            image=image,
+            elapsed=time.perf_counter() - t0,
+            timeout_exc=exc,
+        )
+    elapsed = time.perf_counter() - t0
+
+    if pull.returncode != 0:
+        # Only a failure's stderr is worth carrying: it is what tells an
+        # unreachable registry from an image that genuinely is not there.
+        stderr = (pull.stderr or b"").decode("utf-8", "replace") if capture_output else ""
+        return PullOutcome(image=image, returncode=pull.returncode, stderr=stderr, elapsed=elapsed)
+
+    # The image is present now; re-inspect so the caller can read its metadata
+    # and schema labels without issuing its own docker call. Unavailable metadata
+    # is not a failure - the pull succeeded.
+    try:
+        inspect = _image_is_cached(image)
+        inspect_stdout = inspect.stdout if inspect.returncode == 0 else b""
+    except Exception:
+        inspect_stdout = b""
+    return PullOutcome(image=image, returncode=0, inspect_stdout=inspect_stdout, elapsed=elapsed)
+
+
+def ensure_image(image: str, progress: ProgressCallback | None = None) -> None:
+    """Ensure one image is present locally, pulling with visible output if not.
+
+    The single-run entry point onto :func:`_pull_image_if_absent`. Always emits an
+    ``image_check`` step so the user sees the cache lookup; a pull gets its own
+    ``pull`` step. Docker's progress output goes straight to stderr, so a
+    multi-GB download visibly moves rather than looking hung.
+
+    Raises:
+        DockerImagePullError: The image is absent and could not be pulled (or the
+            pull timed out). A single run has nothing to salvage, so this is
+            terminal here - contrast :func:`ensure_images`, which reports.
     """
     from llenergymeasure.utils.formatting import short_name
 
@@ -90,12 +259,14 @@ def ensure_image(image: str, progress: ProgressCallback | None = None) -> None:
         progress.on_step_start("image_check", "Inspecting", short_image)
     t0 = time.perf_counter()
 
-    check = subprocess.run(
-        ["docker", "image", "inspect", image],
-        capture_output=True,
-        timeout=TIMEOUT_DOCKER_INSPECT,
-    )
-    if check.returncode == 0:
+    def _pull_starting() -> None:
+        if progress:
+            progress.on_step_done("image_check", time.perf_counter() - t0)
+            progress.on_step_start("pull", "Pulling", image)
+
+    outcome = _pull_image_if_absent(image, capture_output=False, on_pull_start=_pull_starting)
+
+    if outcome.cached:
         if progress:
             progress.on_step_update("image_check", f"{short_image} (cached)")
             progress.on_step_done("image_check", time.perf_counter() - t0)
@@ -103,42 +274,91 @@ def ensure_image(image: str, progress: ProgressCallback | None = None) -> None:
         return
 
     if progress:
-        progress.on_step_done("image_check", time.perf_counter() - t0)
-
-    # Image not cached - pull it
-    if progress:
-        progress.on_step_start("pull", "Pulling", image)
-    t0_pull = time.perf_counter()
-
-    print(f"Pulling image: {image}", file=sys.stderr)
-    try:
-        pull = subprocess.run(
-            ["docker", "pull", image],
-            stdout=sys.stderr,
-            stderr=sys.stderr,
-            timeout=DOCKER_PULL_TIMEOUT,
-        )
-    except subprocess.TimeoutExpired as exc:
-        if progress:
-            progress.on_step_done("pull", time.perf_counter() - t0_pull)
-        from llenergymeasure.infra.docker_errors import DockerImagePullError
-
+        progress.on_step_done("pull", outcome.elapsed)
+    if outcome.timed_out:
         raise DockerImagePullError(
             message=f"Image pull timed out after {DOCKER_PULL_TIMEOUT}s: {image}",
             fix_suggestion=f"Pull manually: docker pull {image}",
-        ) from exc
-    if pull.returncode != 0:
-        if progress:
-            progress.on_step_done("pull", time.perf_counter() - t0_pull)
-        from llenergymeasure.infra.docker_errors import DockerImagePullError
-
+        ) from outcome.timeout_exc
+    if not outcome.ok:
         raise DockerImagePullError(
             message=f"Image not found or could not be pulled: {image}",
             fix_suggestion=f"docker pull {image}",
         )
 
-    if progress:
-        progress.on_step_done("pull", time.perf_counter() - t0_pull)
+
+def ensure_images(
+    items: Sequence[tuple[_K, str]],
+    *,
+    max_concurrent: int = MAX_CONCURRENT_PULLS,
+    on_outcome: Callable[[_K, PullOutcome], _T],
+) -> list[_T]:
+    """Ensure several images are present, pulling the absent ones concurrently.
+
+    One thread per distinct image, capped at *max_concurrent*, so a multi-engine
+    study on a fresh box does not serialise several multi-GB downloads. Each pull
+    is guarded by the same local inspect as the single-image path, so an image
+    already in the cache costs one daemon call and no network.
+
+    Each item pairs an image reference with a KEY of the caller's choosing, and
+    that key comes back to *on_outcome* alongside the outcome. The key is what
+    makes two items sharing one image tag distinguishable: that is expressible
+    (two engines can be pinned to the same image), and a caller left to recover
+    its own context from the image reference alone would collapse the two into
+    one. The image is still pulled ONCE for all the items that name it - each of
+    them gets its own report of that single outcome - because submitting the same
+    tag twice would race two identical downloads past the guard.
+
+    A failing pull does NOT cancel its siblings: every image runs to completion
+    and *on_outcome* is called for every item, so the caller can report every
+    failure at once instead of aborting on the first. Docker's pull output is
+    captured rather than streamed - three interleaved progress bars are
+    unreadable, and the captured stderr is what lets a caller tell an unreachable
+    registry from a genuinely absent image.
+
+    Args:
+        items: ``(key, image)`` pairs to ensure. Distinct images are pulled in
+            order of first appearance.
+        max_concurrent: Ceiling on simultaneous pulls.
+        on_outcome: Called once per ITEM with that item's key and the outcome for
+            its image, from the worker thread that pulled it. Per-item follow-up
+            work therefore stays concurrent (the point, when that work includes a
+            cold verification probe); anything that must not interleave -
+            terminal output above all - is the caller's to serialise. Its return
+            values are collected.
+
+    Returns:
+        Whatever *on_outcome* returned, one per item, in the order *items* was
+        given (not completion order).
+    """
+    if not items:
+        return []
+
+    # Group by image so one tag is pulled once however many items name it, while
+    # every item still gets its own on_outcome call. Insertion order is the input
+    # order of each image's first appearance, so submission order is stable.
+    positions_by_image: dict[str, list[int]] = {}
+    for position, (_key, image) in enumerate(items):
+        positions_by_image.setdefault(image, []).append(position)
+
+    def _ensure_one(image: str, positions: list[int]) -> list[tuple[int, _T]]:
+        outcome = _pull_image_if_absent(image, capture_output=True)
+        return [(position, on_outcome(items[position][0], outcome)) for position in positions]
+
+    with ThreadPoolExecutor(
+        max_workers=min(len(positions_by_image), max_concurrent),
+        thread_name_prefix="image-pull",
+    ) as executor:
+        futures = [
+            executor.submit(_ensure_one, image, positions)
+            for image, positions in positions_by_image.items()
+        ]
+        # .result() re-raises anything a worker raised, so an unexpected failure
+        # in on_outcome surfaces rather than vanishing into the pool.
+        collected: dict[int, _T] = {}
+        for future in futures:
+            collected.update(future.result())
+    return [collected[position] for position in range(len(items))]
 
 
 def run_blocking(cmd: list[str], timeout: float | None) -> tuple[int, str]:

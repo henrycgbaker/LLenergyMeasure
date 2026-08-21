@@ -17,7 +17,7 @@ Implements the sweep runner that executes a `StudyConfig` (a list of `Experiment
 | `_progress.py` | `_QueueProgressCallback` + `_consume_progress_events()` - cross-process progress bridge |
 | `baseline_measure.py` | `_BaselineMixin` - baseline measurement, caching, and drift validation |
 | `image_prep.py` | `_ImageMixin` - Docker image preparation and schema-fingerprint verification |
-| `container_lifecycle.py` | Container naming/labels/cleanup, SIGTERM bridge, orphan reaper, failure artefacts |
+| `failure_artefacts.py` | `failed-runs/` persistence for a failed experiment: container log + error JSON, or a captured traceback |
 | `single.py` | `run_single_experiment()` - in-process / direct-DockerRunner path for a single experiment |
 | `manifest.py` | `ManifestWriter`, `StudyManifest`, `ExperimentManifestEntry` - checkpoint model |
 | `gpu_memory.py` | `check_gpu_memory_residual()` - pre-dispatch GPU memory check |

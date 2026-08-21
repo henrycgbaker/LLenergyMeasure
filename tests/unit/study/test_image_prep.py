@@ -1,10 +1,12 @@
 """Tests for concurrent Docker image preparation in ``study.image_prep``.
 
-Exercises ``_ImageMixin._prepare_images`` without a real Docker daemon by
-patching ``inspect_image`` (local cache probe) and ``subprocess.run`` (the
-``docker pull`` / ``docker image inspect`` calls). Fingerprint verification is
-bypassed via ``LLEM_SKIP_IMAGE_CHECK`` so the tests isolate the pull /
-concurrency / error-aggregation behaviour.
+Exercises ``_ImageMixin._prepare_images`` without a real Docker daemon. The
+study's own serial cache pre-pass is faked by patching ``inspect_image``; the
+concurrent pulling happens one layer down in ``infra.docker.lifecycle``, so the
+``docker pull`` / ``docker image inspect`` calls are faked by patching that
+module's ``subprocess.run`` with :func:`_fake_docker_cli`. Fingerprint
+verification is bypassed via ``LLEM_SKIP_IMAGE_CHECK`` so the tests isolate the
+pull / concurrency / error-aggregation behaviour.
 """
 
 from __future__ import annotations
@@ -12,6 +14,7 @@ from __future__ import annotations
 import re
 import subprocess
 import threading
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from subprocess import CompletedProcess
 from unittest.mock import MagicMock
@@ -21,6 +24,7 @@ from rich.console import Console
 
 from llenergymeasure.cli._step_display import StudyStepDisplay
 from llenergymeasure.config.runner_spec import RunnerSpec
+from llenergymeasure.infra.docker import lifecycle
 from llenergymeasure.infra.docker_errors import DockerImagePullError
 from llenergymeasure.study import image_prep
 from llenergymeasure.study.image_prep import (
@@ -28,6 +32,7 @@ from llenergymeasure.study.image_prep import (
     _classify_pull_failure,
     _ImageMixin,
 )
+from tests.helpers.docker_cli import fake_docker_pull_cli
 
 # =============================================================================
 # Harness + helpers
@@ -61,6 +66,18 @@ def _missing() -> CompletedProcess[bytes]:
     return CompletedProcess(["docker", "image", "inspect"], 1, b"", b"Error: No such image")
 
 
+def _fake_docker_cli(
+    pull: Callable[[str], CompletedProcess[bytes]],
+) -> Callable[..., CompletedProcess[bytes]]:
+    """The shared docker-CLI fake; only the ``subprocess.run`` stand-in is needed.
+
+    These tests drive the study's reading of each pull outcome, not the argv the
+    container layer issued, so the fake's call log is discarded here.
+    """
+    run, _calls = fake_docker_pull_cli(pull)
+    return run
+
+
 @pytest.fixture(autouse=True)
 def _bypass_fingerprint(monkeypatch: pytest.MonkeyPatch) -> None:
     """Skip the schema-fingerprint handshake so no host/probe work runs."""
@@ -83,9 +100,9 @@ def test_all_cached_no_pull_no_executor(monkeypatch: pytest.MonkeyPatch) -> None
         run_calls.append(argv)
         return _cached()
 
-    monkeypatch.setattr(image_prep.subprocess, "run", fake_run)
+    monkeypatch.setattr(lifecycle.subprocess, "run", fake_run)
     executor_cls = MagicMock()
-    monkeypatch.setattr(image_prep, "ThreadPoolExecutor", executor_cls)
+    monkeypatch.setattr(lifecycle, "ThreadPoolExecutor", executor_cls)
 
     progress = MagicMock()
     harness = _Harness(specs, progress)
@@ -123,15 +140,13 @@ def test_missing_images_pulled_concurrently(monkeypatch: pytest.MonkeyPatch) -> 
     pulled: list[str] = []
     pulled_lock = threading.Lock()
 
-    def fake_run(argv: list[str], **_kwargs: object) -> CompletedProcess[bytes]:
-        if argv[:2] == ["docker", "pull"]:
-            barrier.wait()  # requires all 3 threads present concurrently
-            with pulled_lock:
-                pulled.append(argv[2])
-            return CompletedProcess(argv, 0, b"", b"")
-        return _cached()  # the post-pull "docker image inspect"
+    def pull(image: str) -> CompletedProcess[bytes]:
+        barrier.wait()  # requires all 3 threads present concurrently
+        with pulled_lock:
+            pulled.append(image)
+        return CompletedProcess(["docker", "pull", image], 0, b"", b"")
 
-    monkeypatch.setattr(image_prep.subprocess, "run", fake_run)
+    monkeypatch.setattr(lifecycle.subprocess, "run", _fake_docker_cli(pull))
 
     progress = MagicMock()
     harness = _Harness(specs, progress)
@@ -146,27 +161,27 @@ def test_missing_images_pulled_concurrently(monkeypatch: pytest.MonkeyPatch) -> 
 
 def test_pull_worker_count_capped(monkeypatch: pytest.MonkeyPatch) -> None:
     """max_workers is capped at _MAX_CONCURRENT_PULLS even with more missing images."""
-    n = image_prep._MAX_CONCURRENT_PULLS + 2
+    n = lifecycle.MAX_CONCURRENT_PULLS + 2
     specs = {f"e{i}": _docker_spec(f"img/e{i}:latest") for i in range(n)}
     monkeypatch.setattr(image_prep, "inspect_image", lambda image, timeout: _missing())
 
     seen_max_workers: list[int] = []
-    real_executor = image_prep.ThreadPoolExecutor
+    real_executor = lifecycle.ThreadPoolExecutor
 
     def spy_executor(*, max_workers: int, thread_name_prefix: str = "") -> ThreadPoolExecutor:
         seen_max_workers.append(max_workers)
         return real_executor(max_workers=max_workers, thread_name_prefix=thread_name_prefix)
 
-    monkeypatch.setattr(image_prep, "ThreadPoolExecutor", spy_executor)
+    monkeypatch.setattr(lifecycle, "ThreadPoolExecutor", spy_executor)
     monkeypatch.setattr(
-        image_prep.subprocess,
+        lifecycle.subprocess,
         "run",
-        lambda argv, **_kw: CompletedProcess(argv, 0, b"[]", b""),
+        _fake_docker_cli(lambda image: CompletedProcess(["docker", "pull", image], 0, b"", b"")),
     )
 
     _Harness(specs)._prepare_images()
 
-    assert seen_max_workers == [image_prep._MAX_CONCURRENT_PULLS]
+    assert seen_max_workers == [lifecycle.MAX_CONCURRENT_PULLS]
 
 
 # =============================================================================
@@ -186,17 +201,15 @@ def test_one_pull_fails_others_complete(monkeypatch: pytest.MonkeyPatch) -> None
     completed: list[str] = []
     completed_lock = threading.Lock()
 
-    def fake_run(argv: list[str], **_kwargs: object) -> CompletedProcess[bytes]:
-        if argv[:2] == ["docker", "pull"]:
-            image = argv[2]
-            if image == "img/vllm:latest":
-                return CompletedProcess(argv, 1, b"", b"manifest unknown")
-            with completed_lock:
-                completed.append(image)
-            return CompletedProcess(argv, 0, b"", b"")
-        return _cached()
+    def pull(image: str) -> CompletedProcess[bytes]:
+        argv = ["docker", "pull", image]
+        if image == "img/vllm:latest":
+            return CompletedProcess(argv, 1, b"", b"manifest unknown")
+        with completed_lock:
+            completed.append(image)
+        return CompletedProcess(argv, 0, b"", b"")
 
-    monkeypatch.setattr(image_prep.subprocess, "run", fake_run)
+    monkeypatch.setattr(lifecycle.subprocess, "run", _fake_docker_cli(pull))
 
     progress = MagicMock()
     harness = _Harness(specs, progress)
@@ -228,17 +241,15 @@ def test_multiple_failures_aggregate_names_each(monkeypatch: pytest.MonkeyPatch)
     }
     monkeypatch.setattr(image_prep, "inspect_image", lambda image, timeout: _missing())
 
-    def fake_run(argv: list[str], **_kwargs: object) -> CompletedProcess[bytes]:
-        if argv[:2] == ["docker", "pull"]:
-            image = argv[2]
-            if image == "img/vllm:latest":
-                return CompletedProcess(argv, 1, b"", b"manifest unknown")  # absent
-            if image == "img/tensorrt:latest":
-                return CompletedProcess(argv, 1, b"", b"dial tcp: i/o timeout")  # network
-            return CompletedProcess(argv, 0, b"", b"")
-        return _cached()
+    def pull(image: str) -> CompletedProcess[bytes]:
+        argv = ["docker", "pull", image]
+        if image == "img/vllm:latest":
+            return CompletedProcess(argv, 1, b"", b"manifest unknown")  # absent
+        if image == "img/tensorrt:latest":
+            return CompletedProcess(argv, 1, b"", b"dial tcp: i/o timeout")  # network
+        return CompletedProcess(argv, 0, b"", b"")
 
-    monkeypatch.setattr(image_prep.subprocess, "run", fake_run)
+    monkeypatch.setattr(lifecycle.subprocess, "run", _fake_docker_cli(pull))
 
     harness = _Harness(specs)
     with pytest.raises(DockerImagePullError) as excinfo:
@@ -267,18 +278,15 @@ def test_aggregate_error_is_order_independent(monkeypatch: pytest.MonkeyPatch) -
         }
         monkeypatch.setattr(image_prep, "inspect_image", lambda image, timeout: _missing())
 
-        def fake_run(argv: list[str], **_kwargs: object) -> CompletedProcess[bytes]:
-            if argv[:2] == ["docker", "pull"]:
-                image = argv[2]
-                # Force a completion order: the non-fast image lingers briefly.
-                if image != fast_image:
-                    import time as _time
+        def pull(image: str) -> CompletedProcess[bytes]:
+            # Force a completion order: the non-fast image lingers briefly.
+            if image != fast_image:
+                import time as _time
 
-                    _time.sleep(0.05)
-                return CompletedProcess(argv, 1, b"", b"manifest unknown")
-            return _cached()
+                _time.sleep(0.05)
+            return CompletedProcess(["docker", "pull", image], 1, b"", b"manifest unknown")
 
-        monkeypatch.setattr(image_prep.subprocess, "run", fake_run)
+        monkeypatch.setattr(lifecycle.subprocess, "run", _fake_docker_cli(pull))
 
         harness = _Harness(specs)
         with pytest.raises(DockerImagePullError) as excinfo:
@@ -306,14 +314,11 @@ def test_concurrent_failures_all_render_in_real_display(
     }
     monkeypatch.setattr(image_prep, "inspect_image", lambda image, timeout: _missing())
 
-    def fake_run(argv: list[str], **_kwargs: object) -> CompletedProcess[bytes]:
-        if argv[:2] == ["docker", "pull"]:
-            image = argv[2]
-            stderr = b"manifest unknown" if image == "img/vllm:latest" else b"dial tcp: i/o timeout"
-            return CompletedProcess(argv, 1, b"", stderr)
-        return _cached()
+    def pull(image: str) -> CompletedProcess[bytes]:
+        stderr = b"manifest unknown" if image == "img/vllm:latest" else b"dial tcp: i/o timeout"
+        return CompletedProcess(["docker", "pull", image], 1, b"", stderr)
 
-    monkeypatch.setattr(image_prep.subprocess, "run", fake_run)
+    monkeypatch.setattr(lifecycle.subprocess, "run", _fake_docker_cli(pull))
 
     # force_terminal drives the live-panel (TTY) code path so _render_image_prep
     # reflects accumulated state rather than the immediate non-TTY prints.
@@ -341,12 +346,10 @@ def test_pull_timeout_reported_and_aggregated(monkeypatch: pytest.MonkeyPatch) -
     specs = {"vllm": _docker_spec("img/vllm:latest")}
     monkeypatch.setattr(image_prep, "inspect_image", lambda image, timeout: _missing())
 
-    def fake_run(argv: list[str], **_kwargs: object) -> CompletedProcess[bytes]:
-        if argv[:2] == ["docker", "pull"]:
-            raise subprocess.TimeoutExpired(cmd=argv, timeout=1)
-        return _cached()
+    def pull(image: str) -> CompletedProcess[bytes]:
+        raise subprocess.TimeoutExpired(cmd=["docker", "pull", image], timeout=1)
 
-    monkeypatch.setattr(image_prep.subprocess, "run", fake_run)
+    monkeypatch.setattr(lifecycle.subprocess, "run", _fake_docker_cli(pull))
 
     progress = MagicMock()
     harness = _Harness(specs, progress)
@@ -355,6 +358,71 @@ def test_pull_timeout_reported_and_aggregated(monkeypatch: pytest.MonkeyPatch) -
 
     assert "timed out" in str(excinfo.value).lower()
     progress.image_failed.assert_called_once()
+
+
+# =============================================================================
+# Two engines, one image tag
+# =============================================================================
+
+
+def test_two_engines_on_one_image_each_get_their_own_row(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A shared image tag is pulled once and reported under BOTH engine names.
+
+    Nothing stops two engines resolving to the same image. The engine name is
+    carried through the pull as the item key precisely so this case works: if the
+    study had to recover the engine from the image reference, both rows would be
+    attributed to whichever engine came last, and the other engine's row would
+    never resolve.
+    """
+    shared = "img/shared:latest"
+    specs = {"vllm": _docker_spec(shared), "tensorrt": _docker_spec(shared)}
+    monkeypatch.setattr(image_prep, "inspect_image", lambda image, timeout: _missing())
+
+    run, calls = fake_docker_pull_cli(
+        lambda image: CompletedProcess(["docker", "pull", image], 0, b"", b"")
+    )
+    monkeypatch.setattr(lifecycle.subprocess, "run", run)
+
+    progress = MagicMock()
+    harness = _Harness(specs, progress)
+    harness._prepare_images()
+
+    assert harness._images_prepared is True
+    # One row per engine, each under its own name, both naming the shared image.
+    reported = sorted(c.args[:2] for c in progress.image_ready.call_args_list)
+    assert reported == [("tensorrt", shared), ("vllm", shared)]
+    # ...and exactly one pull, not the same tag raced against itself.
+    assert [c for c in calls if c[:2] == ["docker", "pull"]] == [["docker", "pull", shared]]
+
+
+def test_shared_image_failure_names_both_engines(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A shared tag that cannot be pulled fails both engines, not just one."""
+    shared = "img/shared:latest"
+    specs = {"vllm": _docker_spec(shared), "tensorrt": _docker_spec(shared)}
+    monkeypatch.setattr(image_prep, "inspect_image", lambda image, timeout: _missing())
+
+    monkeypatch.setattr(
+        lifecycle.subprocess,
+        "run",
+        _fake_docker_cli(
+            lambda image: CompletedProcess(["docker", "pull", image], 1, b"", b"manifest unknown")
+        ),
+    )
+
+    progress = MagicMock()
+    harness = _Harness(specs, progress)
+    with pytest.raises(DockerImagePullError) as excinfo:
+        harness._prepare_images()
+
+    failed = sorted(c.args[0] for c in progress.image_failed.call_args_list)
+    assert failed == ["tensorrt", "vllm"]
+    # Both engines' rebuild hints survive into the aggregate: the per-engine
+    # advice is the whole reason the engine name has to reach the failure.
+    fix = excinfo.value.fix_suggestion
+    assert "docker compose build vllm" in fix
+    assert "docker compose build tensorrt" in fix
 
 
 # =============================================================================

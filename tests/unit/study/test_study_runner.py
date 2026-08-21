@@ -1278,7 +1278,7 @@ def test_identity_refusal_precedes_every_side_effect(
 
     with (
         patch("llenergymeasure.study.gpu_locks.acquire_gpu_locks") as mock_acquire,
-        patch("llenergymeasure.study.container_lifecycle.reap_orphaned_containers") as mock_reap,
+        patch("llenergymeasure.infra.docker.ownership.reap_orphaned_containers") as mock_reap,
         patch("atexit.register") as mock_atexit,
         patch.object(StudyRunner, "_prepare_images") as mock_prepare,
         pytest.raises(StudyError),
@@ -1911,7 +1911,9 @@ class TestPrepareImages:
         inspect_ok.returncode = 0
         inspect_ok.stdout = FAKE_INSPECT_JSON
 
-        with patch("subprocess.run", side_effect=[inspect_fail, pull_ok, inspect_ok]):
+        # inspect (study's cache pre-pass), inspect (the guard on the pull
+        # itself), pull, inspect (metadata for the now-present image).
+        with patch("subprocess.run", side_effect=[inspect_fail, inspect_fail, pull_ok, inspect_ok]):
             runner._prepare_images()
 
         assert runner._images_prepared
@@ -1945,7 +1947,7 @@ class TestPrepareImages:
         pull_fail.stderr = b"Error response from daemon: manifest unknown"
 
         with (
-            patch("subprocess.run", side_effect=[inspect_fail, pull_fail]),
+            patch("subprocess.run", side_effect=[inspect_fail, inspect_fail, pull_fail]),
             pytest.raises(DockerImagePullError, match="Image not found"),
         ):
             runner._prepare_images()
@@ -1976,7 +1978,11 @@ class TestPrepareImages:
         with (
             patch(
                 "subprocess.run",
-                side_effect=[inspect_fail, subprocess.TimeoutExpired("docker pull", 1800)],
+                side_effect=[
+                    inspect_fail,
+                    inspect_fail,
+                    subprocess.TimeoutExpired("docker pull", 1800),
+                ],
             ),
             pytest.raises(DockerImagePullError, match="timed out"),
         ):
@@ -2024,6 +2030,9 @@ class TestPrepareImages:
             tmp_path,
         )
 
+        inspect_fail = MagicMock(spec=subprocess.CompletedProcess)
+        inspect_fail.returncode = 1
+
         pull_ok = MagicMock(spec=subprocess.CompletedProcess)
         pull_ok.returncode = 0
 
@@ -2033,7 +2042,7 @@ class TestPrepareImages:
 
         with patch(
             "subprocess.run",
-            side_effect=[FileNotFoundError("docker"), pull_ok, inspect_ok],
+            side_effect=[FileNotFoundError("docker"), inspect_fail, pull_ok, inspect_ok],
         ):
             runner._prepare_images()
 
