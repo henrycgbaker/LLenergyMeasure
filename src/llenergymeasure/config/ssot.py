@@ -96,11 +96,12 @@ SOURCE_IMPLICIT: Final = "implicit"
 ran - distinct from ``default``, which is a real fall-through)."""
 
 EXPLICIT_RUNNER_SOURCES: Final[frozenset[str]] = frozenset(
-    {SOURCE_ENV, SOURCE_YAML, SOURCE_USER_CONFIG}
+    {SOURCE_CALL_SITE, SOURCE_ENV, SOURCE_YAML, SOURCE_USER_CONFIG}
 )
-"""Runner source tags that represent an explicit user pin (env var, study YAML, or user
-config). In a multi-engine study these win over container elevation; only auto-resolved
-runners (``auto_detected`` / ``default``) are elevated to container mode for isolation."""
+"""Runner source tags that represent an explicit user pin (call-site override, env var,
+study YAML, or user config). In a multi-engine study these win over container elevation;
+only auto-resolved runners (``auto_detected`` / ``default``) are elevated to container
+mode for isolation."""
 
 RunnerMode = Literal["process", "container"]
 

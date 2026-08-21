@@ -193,6 +193,47 @@ def test_multi_engine_explicit_process_missing_package_raises(monkeypatch):
     assert "local" not in msg
 
 
+def test_multi_engine_call_site_process_pin_is_explicit(monkeypatch, two_engine_study):
+    """A call-site runner pin counts as explicit: honoured loudly, never elevated.
+
+    call_site is in EXPLICIT_RUNNER_SOURCES, so a process pin supplied as a
+    call-site override gets the host import pre-flight (PreFlightError when the
+    engine is not importable) instead of being silently container-elevated.
+    """
+    patch_env(monkeypatch, docker=True, importable=False)
+    pinned = two_engine_study.model_copy(
+        update={
+            "runners": {"transformers": "process"},
+            "settings_provenance": {"runners.transformers": "call_site"},
+        }
+    )
+
+    with pytest.raises(PreFlightError) as exc_info:
+        run_study_preflight(pinned)
+
+    msg = str(exc_info.value)
+    assert "transformers" in msg
+    assert "not importable" in msg
+
+
+def test_multi_engine_call_site_process_pin_importable_is_kept(monkeypatch, two_engine_study):
+    """An importable call-site process pin is kept as process, not elevated."""
+    patch_env(monkeypatch, docker=True, importable=True)
+    pinned = two_engine_study.model_copy(
+        update={
+            "runners": {"transformers": "process"},
+            "settings_provenance": {"runners.transformers": "call_site"},
+        }
+    )
+
+    specs, _overrides = run_study_preflight(pinned)
+
+    assert specs["transformers"].mode == "process"
+    assert specs["transformers"].source == "call_site"
+    # The unpinned engine still elevates for isolation.
+    assert specs["vllm"].mode == "container"
+
+
 def test_multi_engine_all_explicit_local_without_docker_passes(monkeypatch, two_engine_study):
     """All-explicit-process multi-engine study passes without Docker."""
     # Both engines pinned process and importable on the host.
