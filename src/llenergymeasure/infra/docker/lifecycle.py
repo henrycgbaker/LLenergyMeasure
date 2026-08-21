@@ -129,6 +129,10 @@ class PullOutcome:
                          must tolerate - it is display/verification metadata, not
                          a success signal.
         elapsed:         Seconds the pull took; ``0.0`` when cached.
+        timeout_exc:     The ``TimeoutExpired`` behind ``timed_out``, kept so a
+                         caller that turns this report back into an exception can
+                         chain it as the cause. Reporting the outcome instead of
+                         raising is what would otherwise lose the traceback.
     """
 
     image: str
@@ -138,6 +142,7 @@ class PullOutcome:
     stderr: str = ""
     inspect_stdout: bytes = b""
     elapsed: float = 0.0
+    timeout_exc: BaseException | None = None
 
     @property
     def ok(self) -> bool:
@@ -197,8 +202,13 @@ def _pull_image_if_absent(
     )
     try:
         pull = subprocess.run(["docker", "pull", image], timeout=DOCKER_PULL_TIMEOUT, **sink)
-    except subprocess.TimeoutExpired:
-        return PullOutcome(image=image, timed_out=True, elapsed=time.perf_counter() - t0)
+    except subprocess.TimeoutExpired as exc:
+        return PullOutcome(
+            image=image,
+            timed_out=True,
+            elapsed=time.perf_counter() - t0,
+            timeout_exc=exc,
+        )
     elapsed = time.perf_counter() - t0
 
     if pull.returncode != 0:
@@ -259,7 +269,7 @@ def ensure_image(image: str, progress: ProgressCallback | None = None) -> None:
         raise DockerImagePullError(
             message=f"Image pull timed out after {DOCKER_PULL_TIMEOUT}s: {image}",
             fix_suggestion=f"Pull manually: docker pull {image}",
-        )
+        ) from outcome.timeout_exc
     if not outcome.ok:
         raise DockerImagePullError(
             message=f"Image not found or could not be pulled: {image}",

@@ -269,3 +269,26 @@ def test_ensure_image_raises_on_timeout(monkeypatch: pytest.MonkeyPatch):
 
     with pytest.raises(DockerImagePullError, match="timed out"):
         lifecycle.ensure_image("img:1")
+
+
+def test_ensure_image_timeout_keeps_the_original_exception_as_cause(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """The TimeoutExpired stays chained, so the traceback still shows the timeout.
+
+    The pull reports its outcome rather than raising, which is what makes the
+    concurrent path possible - but it is also how a cause gets dropped. The
+    outcome carries the exception so the raising entry point can chain it.
+    """
+    timeout = subprocess.TimeoutExpired(cmd=["docker", "pull", "img:1"], timeout=1)
+
+    def pull(image: str) -> CompletedProcess[bytes]:
+        raise timeout
+
+    run, _ = _fake_docker_cli(pull)
+    monkeypatch.setattr(lifecycle.subprocess, "run", run)
+
+    with pytest.raises(DockerImagePullError) as excinfo:
+        lifecycle.ensure_image("img:1")
+
+    assert excinfo.value.__cause__ is timeout
