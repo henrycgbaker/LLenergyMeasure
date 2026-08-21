@@ -252,7 +252,9 @@ def run_study(
             resumable study in ``output_dir`` (default ``results/``).
         output_dir: Dual role by run mode. For a fresh run it is the results-dir
             override (precedence: ``output_dir`` > YAML ``output.results_dir`` >
-            user config > ``./results``). For an auto-detect resume it is the base
+            user config > ``./results``). Applies to an already-resolved
+            StudyConfig input too - redirecting where results land never touches
+            the resolved identity. For an auto-detect resume it is the base
             directory searched for the most recent resumable study. Ignored when
             ``resume_dir`` is given explicitly.
         skip_set: Set of (config_hash, cycle) pairs to skip (already completed in a
@@ -265,8 +267,13 @@ def run_study(
         cli_overrides: Overrides applied on top of the study file when ``config``
             is a path (forwarded to :func:`load_study` as its call-site layer, so
             they win over what the file declares and are recorded as ``call_site``
-            in the provenance). Ignored for a StudyConfig input, which the caller
-            has already built.
+            in the provenance). Study-file-shaped and nested only, e.g.
+            ``{"task": {"model": "gpt2"}}`` or ``{"study_execution":
+            {"n_cycles": 5}}`` - flat or dotted keys (``{"model": ...}``,
+            ``{"task.model": ...}``) are not study-file keys and fail loudly at
+            load. An ``n_cycles`` override really multiplies the dispatched
+            experiment list, like any resolved cycle count. Ignored for a
+            StudyConfig input, which the caller has already built.
         preresolved: Optional ``(runner_specs, system_overrides)`` already
             computed by a prior ``run_study_preflight`` call (e.g. the CLI runs
             preflight to render the panel). When supplied, the orchestrator reuses
