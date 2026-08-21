@@ -1455,7 +1455,8 @@ class OutputConfig(BaseModel):
     is an operational concern, not part of the scientific specification.
 
     Resolution chain (highest wins):
-        study YAML output.results_dir > user_config.output.results_dir > "./results"
+        call-site override (-o / output_dir) > study YAML output.results_dir >
+        user_config.output.results_dir > "./results"
     """
 
     model_config = {"extra": "forbid"}
