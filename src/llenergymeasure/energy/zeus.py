@@ -57,15 +57,31 @@ class ZeusSampler:
         restricting ``CUDA_VISIBLE_DEVICES`` (which the process runner sets when
         llem is scoped to a subset of the host's GPUs) makes the two spaces
         differ. Handing Zeus a physical index there would monitor the wrong
-        device or raise. Identity when nothing restricts visibility. A monitored
-        device that is not visible at all is dropped: Zeus cannot see it.
+        device or raise. Identity when nothing restricts visibility.
+
+        Raises:
+            ExperimentError: A monitored device is not CUDA-visible. Zeus cannot
+                see it, so dropping it would silently corrupt the measurement:
+                an all-invisible set records a plausible-looking 0.0 J, and a
+                partially-invisible one under-reports. Both must be impossible
+                without a loud failure.
         """
         from llenergymeasure.device.gpu_info import cuda_visible_physical_order
+        from llenergymeasure.utils.exceptions import ExperimentError
 
         visible = cuda_visible_physical_order()
         if visible is None:
             return [(i, i) for i in self._gpu_indices]
-        return [(i, visible.index(i)) for i in self._gpu_indices if i in visible]
+        invisible = [i for i in self._gpu_indices if i not in visible]
+        if invisible:
+            raise ExperimentError(
+                f"Zeus cannot monitor physical GPU(s) {invisible}: CUDA_VISIBLE_DEVICES "
+                f"exposes only {visible} to this process. Measuring the remaining devices "
+                f"would silently under-report energy (monitored set: {self._gpu_indices}), "
+                "so the measurement is refused. Align the monitored devices with "
+                "CUDA_VISIBLE_DEVICES, or widen it to cover them."
+            )
+        return [(i, visible.index(i)) for i in self._gpu_indices]
 
     def start_tracking(self) -> Any:
         """Begin a Zeus measurement window.
