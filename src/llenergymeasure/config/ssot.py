@@ -66,14 +66,25 @@ def engine_str(engine: Any) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Runner mode constants
+# Built-in resolution defaults
 # ---------------------------------------------------------------------------
+# The bottom layer of the precedence chain. They live here, not in the chain or the
+# user-config schema, because both read them: the user-config schema as its field
+# defaults and the chain as its built-in layer. One home means the two cannot
+# disagree about what the built-in default is, and the chain never has to import the
+# user-config module to know it.
 
-#: Machine-local thermal gap defaults (seconds). Single source of truth: the
-#: user-config schema's field defaults and the precedence chain's bottom layer both
-#: read these, so the chain never has to import the user-config module to know them.
+#: Machine-local thermal gap defaults (seconds).
 DEFAULT_EXPERIMENT_GAP_SECONDS: Final = 60.0
 DEFAULT_CYCLE_GAP_SECONDS: Final = 300.0
+
+#: Built-in results directory, the bottom of the ``output.results_dir`` chain.
+DEFAULT_RESULTS_DIR: Final = "./results"
+
+
+# ---------------------------------------------------------------------------
+# Runner mode constants
+# ---------------------------------------------------------------------------
 
 RUNNER_PROCESS: Final = "process"
 RUNNER_CONTAINER: Final = "container"
@@ -390,6 +401,7 @@ __all__ = [
     "CONTAINER_EXCHANGE_DIR",
     "DEFAULT_CYCLE_GAP_SECONDS",
     "DEFAULT_EXPERIMENT_GAP_SECONDS",
+    "DEFAULT_RESULTS_DIR",
     "DOCKER_PULL_TIMEOUT",
     "ENGINES",
     "ENGINE_PACKAGES",

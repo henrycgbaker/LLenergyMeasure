@@ -124,7 +124,7 @@ def orchestrate_study(
     else:
         # A resolved study always carries a results_dir; the fallback only guards a
         # hand-assembled study that bypassed resolution with a hand-written hash.
-        from llenergymeasure.config.precedence import DEFAULT_RESULTS_DIR
+        from llenergymeasure.config.ssot import DEFAULT_RESULTS_DIR
 
         study_dir = create_study_dir(
             study.study_name, Path(study.output.results_dir or DEFAULT_RESULTS_DIR)

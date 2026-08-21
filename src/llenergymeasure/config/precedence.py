@@ -61,6 +61,7 @@ from llenergymeasure.config.ssot import (
     ALL_ENGINES,
     DEFAULT_CYCLE_GAP_SECONDS,
     DEFAULT_EXPERIMENT_GAP_SECONDS,
+    DEFAULT_RESULTS_DIR,
     ENV_IMAGE_PREFIX,
     ENV_RUNNER_PREFIX,
     SOURCE_CALL_SITE,
@@ -80,7 +81,6 @@ if TYPE_CHECKING:
     from llenergymeasure.config.user_config import UserConfig
 
 __all__ = [
-    "DEFAULT_RESULTS_DIR",
     "UNSET",
     "Layer",
     "PrecedenceChain",
@@ -310,10 +310,6 @@ class ResolvedStudySettings:
     runners: dict[str, str]
     images: dict[str, str]
     provenance: dict[str, str]
-
-
-#: Built-in default results directory, the bottom of the ``output.results_dir`` chain.
-DEFAULT_RESULTS_DIR: Final = "./results"
 
 
 def resolve_study_settings(

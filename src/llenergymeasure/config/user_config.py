@@ -24,6 +24,7 @@ from llenergymeasure.config.ssot import (
     ALL_ENGINES,
     DEFAULT_CYCLE_GAP_SECONDS,
     DEFAULT_EXPERIMENT_GAP_SECONDS,
+    DEFAULT_RESULTS_DIR,
     legacy_runner_migration_message,
     legacy_runner_replacement,
 )
@@ -34,7 +35,9 @@ class UserOutputConfig(BaseModel):
 
     model_config = {"extra": "forbid"}
 
-    results_dir: str = Field(default="./results", description="Default results output location")
+    results_dir: str = Field(
+        default=DEFAULT_RESULTS_DIR, description="Default results output location"
+    )
 
 
 class UserRunnersConfig(BaseModel):
