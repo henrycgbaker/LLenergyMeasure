@@ -22,12 +22,14 @@ safe; an already-equilibrated later level exits fast). Two modes:
     (the per-sample ``thermal_throttle`` flag = the "while active" reading of
     ``ThrottleInfo.thermal.any``).
 
-  The observables are computed over a 1 Hz VIEW of the poll, off the event loop:
-  steady-state detection costs super-quadratically in the sample count, so the gate
-  evaluates a decimated view while the capture keeps the sampler's full cadence for
-  the energy integration (``_gate_view``, ``_evaluate_off_loop``). A hard
-  ``timeout_seconds`` failsafe (default 900s) PROCEEDS with a loud ``timed_out``
-  stamp rather than hanging or silently passing.
+  The gate is evaluated off the event loop, and the POWER PLATEAU observable reads a
+  1 Hz view of the poll rather than the raw series: steady-state detection costs
+  super-quadratically in the sample count, so on a series that grows for as long as
+  warmup lasts it has to be given a bounded view. The other two observables are
+  extreme-value statistics that a decimated series would go blind to, so they read the
+  poll at the sampler's full cadence, as does the energy integration (``_gate_view``,
+  ``_evaluate_off_loop``). A hard ``timeout_seconds`` failsafe (default 900s) PROCEEDS
+  with a loud ``timed_out`` stamp rather than hanging or silently passing.
 
 - **fixed** (explicit opt-out): the same issuer-driven traffic path, no gate, for
   ``duration_seconds`` (default 300s; 0 skips warmup traffic entirely).
@@ -168,9 +170,9 @@ _TEMP_SETTLED_DELTA_C = 2.0
 _THROTTLE_ACTIVE_WINDOW_S = _TEMP_CONFIRM_WINDOW_S
 #: Default gate-evaluation cadence.
 _GATE_POLL_INTERVAL_S = 2.0
-#: Cadence of the DOWNSAMPLED series view the gate's observables are computed over.
-#: The sampler keeps its own (100ms) cadence for the energy integration; only the
-#: GATE's view is decimated. See :func:`_gate_view` for why.
+#: Cadence of the DOWNSAMPLED series view the POWER PLATEAU observable is computed over.
+#: The throttle and temperature observables, and the energy integration, all keep the
+#: sampler's own (100ms) cadence. See :func:`_gate_view` for why the split.
 _GATE_VIEW_INTERVAL_S = 1.0
 
 
@@ -183,30 +185,55 @@ _GATE_VIEW_INTERVAL_S = 1.0
 def _gate_view(samples: list[PowerThermalSample]) -> list[PowerThermalSample]:
     """Decimate one poll to at most one sample per GPU per ``_GATE_VIEW_INTERVAL_S``.
 
-    WHY the gate looks at a downsampled view rather than the raw series: the power
-    plateau observable runs ``windowing._detect_steady_state``, whose cost grows
-    super-quadratically with the sample count (it slides a window over the series and,
-    from every candidate onset, re-tests every window through to the end). The gate
-    re-evaluates on a series that GROWS for as long as warmup lasts, so at the
-    sampler's full cadence a single evaluation eventually costs more than the whole
-    poll interval, and its worst case is exactly a series that stops being stable at
-    the very end. Decimating the gate's view keeps the per-poll cost flat: at 1 Hz the
-    sample count is bounded by the warmup's own failsafe timeout in seconds.
+    Feeds the POWER PLATEAU observable only. The other two observables are extreme-value
+    statistics over a trailing window - ``any()`` over the throttle bit, max-minus-min
+    over temperature - and a decimated series is systematically blind to a short-lived
+    extreme: a 100ms throttle episode survives sub-sampling to 1 Hz about one time in
+    ten. They therefore stay at the sampler's full cadence, which costs nothing worth
+    counting because both are linear in the sample count (about 2ms together at the
+    9000 samples a 900s warmup collects, against ~1.4s for the plateau).
 
-    WHY this leaves the gate's question unchanged: every threshold the three
-    observables apply is defined over a DURATION, not over a sample count - the
-    trailing temperature and throttle windows are in seconds, and the plateau window
-    is a FRACTION of the series, so it spans the same wall-clock stretch at either
-    cadence. Sub-sampling a stationary series leaves its coefficient of variation
-    unchanged in expectation, and 1 Hz still clears the detector's 4-sample floor by
-    two orders of magnitude at the ~90s of history the temperature observable already
-    requires.
+    WHY the plateau observable needs a downsampled view: it runs
+    ``windowing._detect_steady_state``, whose cost grows super-quadratically with the
+    sample count (it slides a window over the series and, from every candidate onset,
+    re-tests every window through to the end). The gate re-evaluates on a series that
+    GROWS for as long as warmup lasts, so at the sampler's full cadence a single
+    evaluation eventually costs more than the whole poll interval, and its worst case
+    is exactly a series that stops being stable at the very end - which is what a
+    stalled issuing loop produces. Decimating the view does not make the cost flat; it
+    re-bases the same curve on the warmup's failsafe timeout in SECONDS instead of on
+    the capture cadence, which is ~3.9s per evaluation at the 900s default. That
+    timeout carries no upper bound, so the cost still runs away if it is set far above
+    the default (~30s per evaluation at 1800s); the loop stays responsive throughout
+    because the evaluation runs off it, but an abandoned worker thread does keep
+    burning a core until it finishes.
 
-    Decimation is per GPU (the observables are per GPU, or pooled per GPU), and the
-    NEWEST sample of each GPU is always kept: the trailing windows are anchored on it,
-    so the view must never lag the series it summarises. The MEASUREMENT is untouched
-    by all of this - ``_integrate_sampler_energy`` integrates the sampler's own full
-    series, not this view.
+    WHAT the decimation changes, deliberately, for the plateau observable. Its
+    thresholds are duration-based and so survive unchanged: the plateau window is a
+    FRACTION of the series, so it spans the same wall-clock stretch at either cadence,
+    and sub-sampling a stationary series leaves its coefficient of variation unchanged
+    in expectation. Two SAMPLE-COUNT constants in the same pipeline do not survive
+    unchanged, and both are accepted:
+
+    * ``windowing._MEDIAN_KERNEL`` = 3 smooths over 3 samples, so its dropout filter
+      spans 3s of the view rather than 0.3s of the raw series. It exists to kill
+      single-sample NVML transients, and a 1 Hz view has no sub-second transients left
+      to kill.
+    * ``windowing._AUTO_MIN_WINDOW_SAMPLES`` = 4 makes this observable need 8 samples,
+      so its own history floor becomes 8s rather than 0.8s. It is never the binding
+      floor: the temperature observable already requires ~90s of history before the
+      gate can pass, which is 90 samples of the view, 22x the detector's 4-sample
+      minimum.
+
+    The view is also blind to power ripple faster than its own Nyquist frequency, where
+    the raw series would read the ripple as instability. That is the acceptable
+    direction here: the plateau question is whether the series has settled at a level
+    over a trailing window, not whether consecutive samples differ.
+
+    Decimation is per GPU (the plateau pools per GPU), and the NEWEST sample of each GPU
+    is always kept, so the view never lags the series it summarises. The MEASUREMENT is
+    untouched by all of this - ``_integrate_sampler_energy`` integrates the sampler's
+    own full series, not this view.
     """
     by_gpu: dict[int, list[PowerThermalSample]] = {}
     for s in samples:
@@ -303,18 +330,19 @@ class ObservableState:
 
 
 def _evaluate_observables(samples: list[PowerThermalSample]) -> ObservableState:
-    """The three observables from one raw poll, computed over the decimated gate view.
+    """The three observables from one raw poll; only the plateau reads a decimated view.
 
-    The decimation is applied HERE, at the single point where a poll becomes gate
-    state, so no caller can point the gate at the raw series by accident (see
-    :func:`_gate_view` for the cost constraint that requires it). This runs off the
-    event loop - keep it free of anything but the observables.
+    The split is the whole point (see :func:`_gate_view`): the plateau observable is the
+    one whose cost forces a bounded view, and the throttle and temperature observables
+    are the two that must not lose a short-lived extreme, so they read the poll as
+    captured. Applying the view HERE keeps the decision in one place instead of leaving
+    each observable to pick a cadence. This runs off the event loop - keep it free of
+    anything but the observables.
     """
-    view = _gate_view(samples)
     return ObservableState(
-        power_plateau=_power_plateau(view),
-        temperature_settled=_temperature_settled(view),
-        throttle_clear=_throttle_clear(view),
+        power_plateau=_power_plateau(_gate_view(samples)),
+        temperature_settled=_temperature_settled(samples),
+        throttle_clear=_throttle_clear(samples),
     )
 
 
@@ -388,9 +416,9 @@ def describe_server_warmup_protocol(config: ServerWarmupConfig) -> str:
         "server convergence-composite warmup: issuer-driven traffic at the target rate "
         f"until GPU power plateaus (CoV <= {_AUTO_CV_THRESHOLD:g}), temperature settles "
         f"(trailing-{_TEMP_SETTLE_WINDOW_S:g}s range < {_TEMP_SETTLED_DELTA_C:g}C held "
-        f"+{_TEMP_CONFIRM_WINDOW_S:g}s), and no thermal throttle is active; observables "
-        f"evaluated on a {1.0 / _GATE_VIEW_INTERVAL_S:g} Hz view of the sampler series "
-        f"(the capture keeps its full cadence); failsafe timeout "
+        f"+{_TEMP_CONFIRM_WINDOW_S:g}s), and no thermal throttle is active; the plateau "
+        f"is evaluated on a {1.0 / _GATE_VIEW_INTERVAL_S:g} Hz view of the sampler series "
+        "and the other two observables at its full cadence; failsafe timeout "
         f"{config.timeout_seconds:g}s (proceeds with timed_out on expiry)"
     )
 
