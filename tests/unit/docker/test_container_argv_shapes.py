@@ -7,10 +7,16 @@ parameterisations of it. Their divergences are load-bearing:
 
 - server: no ``--rm`` (a crash-on-startup must survive for ``docker logs``),
   ``-d``, ``--network host``, no package-dispatch bootstrap, HF-cache mount only;
-- baseline: blocking, ``--rm``, package dispatch with its own entry module, NCCL
-  forwarding, anonymous (labels but no ``--name``);
+- baseline: blocking, ``--rm``, package dispatch with its own entry module,
+  anonymous (labels but no ``--name``);
 - offline: blocking, ``--rm``, package dispatch, ``LLEM_*`` forwarding, the full
   mount set.
+
+Host ``NCCL_*`` forwarding is NOT one of the divergences: all three shapes carry
+it. The server shape used to omit it, which was an omission rather than a
+decision - the engine's tensor-parallel workers run inside the server container,
+so a host needing ``NCCL_P2P_DISABLE=1`` for multi-GPU needs it there exactly as
+the offline and baseline containers do.
 
 Sibling files pin individual flags with targeted assertions. These tests instead
 pin the ENTIRE argv, element for element, so a refactor of the shared core cannot
@@ -322,7 +328,8 @@ def test_baseline_argv_is_pinned_whole_with_gpu_pin_and_nccl(
 
 # ---------------------------------------------------------------------------
 # Engine server: detached, NOT --rm, --network host, no package dispatch, HF
-# mount only, identity ahead of the resource flags, engine command after image.
+# mount plus host NCCL forwarding, identity ahead of the resource flags, engine
+# command after image.
 # ---------------------------------------------------------------------------
 
 
@@ -365,6 +372,9 @@ def test_server_argv_is_pinned_whole(pinned_host: None):
     assert "--entrypoint" not in argv
     # Host network namespace, so the port is selected in serve_args, not published.
     assert "-p" not in argv
+    # The no-NCCL half of the forwarding pair: the fixture exports no NCCL_* var,
+    # so the forwarding adds nothing and the argv is exactly what it always was.
+    assert not any("NCCL" in token for token in argv)
 
 
 def test_server_argv_is_pinned_whole_anonymous_with_gpu_pin(pinned_host: None):
@@ -394,6 +404,57 @@ def test_server_argv_is_pinned_whole_anonymous_with_gpu_pin(pinned_host: None):
         "m",
         "--port",
         "9000",
+    ]
+
+
+def test_server_argv_is_pinned_whole_with_host_nccl(
+    pinned_host: None, monkeypatch: pytest.MonkeyPatch
+):
+    """Host ``NCCL_*`` forwarding, pinned in place inside the whole server argv.
+
+    The set half of the forwarding pair. The engine's tensor-parallel workers run
+    inside this container, so a PCIe host without functional GPU peer-to-peer
+    needs ``NCCL_P2P_DISABLE=1`` here just as the offline and baseline containers
+    do; without it the server hangs at its first NCCL collective and never
+    becomes ready. Emitted as ``-e KEY=VALUE`` in sorted key order, the same form
+    the other two shapes use, after the HF mount and still before the image.
+    """
+    monkeypatch.setenv("NCCL_P2P_DISABLE", "1")
+    monkeypatch.setenv("NCCL_DEBUG", "INFO")
+
+    argv = cmd.build_server_container_argv(
+        image="vllm/vllm-openai:v0.19.1",
+        container_name="llem-vllm-server-abc123def456",
+        gpu_indices=[0, 1],
+        serve_args=["Qwen/Qwen2.5-0.5B", "--port", "8123", "--tensor-parallel-size", "2"],
+        shm_size=None,
+        labels=_LABELS,
+    )
+
+    assert argv == [
+        "docker",
+        "run",
+        "-d",
+        "--network",
+        "host",
+        "--gpus",
+        '"device=0,1"',
+        "--name",
+        "llem-vllm-server-abc123def456",
+        *_LABEL_ARGS,
+        "--shm-size",
+        "8g",
+        *_HF_MOUNT,
+        "-e",
+        "NCCL_DEBUG=INFO",
+        "-e",
+        "NCCL_P2P_DISABLE=1",
+        "vllm/vllm-openai:v0.19.1",
+        "Qwen/Qwen2.5-0.5B",
+        "--port",
+        "8123",
+        "--tensor-parallel-size",
+        "2",
     ]
 
 
@@ -457,6 +518,21 @@ def test_every_shape_puts_ownership_labels_before_the_image(pinned_host: None):
         for position, token in enumerate(argv):
             if token == "--label":
                 assert position < image_index, shape
+
+
+def test_every_shape_forwards_host_nccl_env(pinned_host: None, monkeypatch: pytest.MonkeyPatch):
+    """No shape may skip host ``NCCL_*`` forwarding.
+
+    The server shape's omission is the defect this guards against recurring: the
+    engine's tensor-parallel workers run inside the server container, so a host
+    that needs ``NCCL_P2P_DISABLE=1`` for multi-GPU needs it in every shape that
+    runs a multi-GPU process, not only the offline ones.
+    """
+    monkeypatch.setenv("NCCL_P2P_DISABLE", "1")
+
+    for shape, argv in _all_three_shapes().items():
+        position = argv.index("NCCL_P2P_DISABLE=1")
+        assert argv[position - 1] == "-e", shape
 
 
 def test_removal_policy_is_exclusive_per_shape(pinned_host: None):

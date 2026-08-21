@@ -411,6 +411,32 @@ forbidden_modules = ["engine_versions"]
 # that the shipped runtime product imports neither. Adding scripts to
 # root_packages above makes both sides of the edge visible to the graph.
 [[tool.importlinter.contracts]]
+id = "resolution-choke-point"
+name = "User config is read at the resolution edge only, never downstream of it"
+# Study settings resolve through the precedence chain BEFORE orchestration; the
+# resolved study carries the answers (results_dir, execution, runner and image
+# pins, provenance). Everything downstream of the api resolution edge consumes
+# the resolved study, so none of it may read the user config: together with the
+# layers contract (study cannot import api) this makes a runtime user-config
+# read below the edge structurally impossible, not merely unlikely (#886).
+type = "forbidden"
+source_modules = [
+    "llenergymeasure.study",
+    "llenergymeasure.harness",
+    "llenergymeasure.engines",
+    "llenergymeasure.energy",
+    "llenergymeasure.infra",
+    "llenergymeasure.results",
+    "llenergymeasure.entrypoints",
+    "llenergymeasure.serving",
+    "llenergymeasure.datasets",
+    "llenergymeasure.search",
+    "llenergymeasure.device",
+    "llenergymeasure.domain",
+]
+forbidden_modules = ["llenergymeasure.config.user_config"]
+
+[[tool.importlinter.contracts]]
 id = "scripts-tooling-only"
 name = "scripts is CI-time tooling; runtime layers must not import it"
 type = "forbidden"

@@ -39,9 +39,9 @@ def _hash_canonical(canonical: str) -> str:
 def compute_declared_config_hash(config: ExperimentConfig) -> str:
     """SHA-256[:16] of ExperimentConfig, with the sole slo exclusion.
 
-    Layer 3 fields (datacenter_pue, grid_carbon_intensity) are not in
-    ExperimentConfig (they live in user config only), so model_dump()
-    naturally excludes them.
+    Layer 3 fields (datacenter PUE, grid carbon intensity) are not in
+    ExperimentConfig (CO2 estimation belongs to the CodeCarbon sampler, which
+    sources them itself), so model_dump() naturally excludes them.
 
     ``server.traffic.slo`` is the one field deliberately excluded from this
     wholesale dump (``exclude={"server": {"traffic": {"slo"}}}``): SLO bounds are

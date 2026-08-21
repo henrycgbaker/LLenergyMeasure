@@ -1,7 +1,10 @@
-"""Runner resolution - determine process vs container execution mode for each engine.
+"""Runner mechanics - turn a runner pin, or no pin, into an execution mode.
 
-Precedence chain (highest wins):
-  env var > study/experiment YAML > user config > auto-detection > default
+Which config layer wins - env var versus study file versus user config - is settled
+before this module runs, by the precedence chain in
+:mod:`llenergymeasure.config.precedence`. This module holds what is left: parsing a
+pinned runner value, and probing the host to pick a runner for an engine nothing
+pinned.
 
 Auto-detection is container-self-aware. Placement is relative: llenergymeasure may
 itself run inside a container, so PATH inspection alone is not enough - a stray
@@ -10,11 +13,6 @@ inside a container it resolves by Docker-socket availability (siblings via the h
 daemon if a socket is mounted, otherwise process). On the host, if Docker + the
 NVIDIA Container Toolkit are available it defaults to container mode for best
 measurement isolation; otherwise it falls back to process mode with a nudge message.
-
-User config: non-"auto" values in UserRunnersConfig are treated as explicit.
-"auto" (the default) falls through to auto-detection, allowing Docker to be
-picked up automatically when available. Pass ``user_config=None`` to skip
-the user config step entirely.
 
 This module is intentionally free of Docker dispatch mechanics - it only decides
 *what* should run *where*. Dispatch is handled by DockerRunner.
@@ -30,18 +28,14 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from llenergymeasure.config.user_config import UserRunnersConfig
+    from collections.abc import Mapping
 
-from llenergymeasure.config.runner_spec import RunnerSpec
+from llenergymeasure.config.runner_spec import RunnerPin, RunnerSpec
 from llenergymeasure.config.ssot import (
-    ENV_RUNNER_PREFIX,
     RUNNER_CONTAINER,
     RUNNER_PROCESS,
     SOURCE_AUTO_DETECTED,
     SOURCE_DEFAULT,
-    SOURCE_ENV,
-    SOURCE_USER_CONFIG,
-    SOURCE_YAML,
 )
 
 # The NVIDIA Container Toolkit binary list lives in docker_preflight (its canonical
@@ -67,21 +61,6 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # .env file loading
 # ---------------------------------------------------------------------------
-
-
-@functools.cache
-def _load_dotenv() -> None:
-    """Load ``.env`` from the working directory if present.
-
-    Uses ``override=False`` so shell environment variables always win.
-    Cached so the filesystem scan happens at most once per process.
-    """
-    try:
-        from dotenv import load_dotenv
-
-        load_dotenv(override=False)
-    except ImportError:
-        pass
 
 
 # ---------------------------------------------------------------------------
@@ -172,67 +151,40 @@ def is_container_socket_available() -> bool:
 # ---------------------------------------------------------------------------
 
 
-def resolve_runner(
-    engine: str,
-    yaml_runners: dict[str, str] | None = None,
-    user_config: UserRunnersConfig | None = None,
-) -> RunnerSpec:
-    """Resolve the runner for a single engine using the full precedence chain.
+def resolve_runner(engine: str, pin: RunnerPin | None = None) -> RunnerSpec:
+    """Turn an explicit runner pin, or the absence of one, into a RunnerSpec.
 
-    Precedence (highest to lowest):
-        1. Env var   ``LLEM_RUNNER_{ENGINE}``   - source="env"
-        2. Study YAML ``runners:`` section       - source="yaml"
-        3. User config ``runners.{engine}``      - source="user_config"
-           Only non-"auto" values are treated as explicit. "auto" falls through
-           to step 4. Pass ``user_config=None`` to allow auto-detection.
-        4. Auto-detection (container-self-aware)  - source="auto_detected"
+    The precedence question - env var versus study file versus user config - is
+    settled before this is called, by the precedence chain
+    (:func:`llenergymeasure.config.precedence.resolve_study_settings`). What is left
+    here is the mechanics: parse the pinned value, or, when nothing pinned this
+    engine, probe the host and pick a runner.
+
+    Fallback when there is no pin (in order):
+        1. Auto-detection (container-self-aware) - source="auto_detected"
            In a container: container mode iff a Docker socket is available (DooD
            siblings), else process. On the host: container iff Docker + NVIDIA CT.
-        5. Built-in default: process            - source="default"
+        2. Built-in default: process             - source="default"
 
     When mode is "container" and image is None, the caller (DockerRunner) should
     resolve the image via ``get_default_image(engine)`` from image_registry.
 
     Args:
-        engine:       Engine name, e.g. "transformers", "vllm", "tensorrt".
-        yaml_runners: Runners dict from study YAML ``runners:`` section.
-                      Keys are engine names, values are runner strings.
-        user_config:  UserRunnersConfig from loaded user preferences.
-                      None = no user config present (enables auto-detection).
-                      When provided, "auto" values fall through to auto-detection;
-                      explicit values ("process", "container", "container:<img>") are
-                      honoured (the legacy "local"/"docker" vocabulary was renamed in
-                      v0.7 and is now rejected with a migration error).
+        engine: Engine name, e.g. "transformers", "vllm", "tensorrt".
+        pin: The runner the chain resolved for this engine, with the layer that
+            supplied it, or None when no layer pinned it. A pinned value is
+            honoured verbatim (the legacy "local"/"docker" vocabulary was renamed
+            in v0.7 and is rejected with a migration error).
 
     Returns:
         RunnerSpec with mode, image, and source fields populated.
     """
-    # Load .env (idempotent, shell env wins via override=False)
-    _load_dotenv()
+    if pin is not None:
+        mode, image = parse_runner_value(pin.value)
+        return RunnerSpec(mode=mode, image=image, source=pin.source)
 
-    # 1. Env var: LLEM_RUNNER_{ENGINE} (highest precedence)
-    env_key = f"{ENV_RUNNER_PREFIX}{engine.upper()}"
-    if env_val := os.environ.get(env_key):
-        mode, image = parse_runner_value(env_val)
-        return RunnerSpec(mode=mode, image=image, source=SOURCE_ENV)
-    # 2. Study/experiment YAML runners section
-    if yaml_runners is not None and engine in yaml_runners:
-        yaml_val = yaml_runners[engine]
-        if yaml_val is not None:
-            mode, image = parse_runner_value(yaml_val)
-            return RunnerSpec(mode=mode, image=image, source=SOURCE_YAML)
-    # 3. User config - "auto" means no explicit preference, fall through to auto-detection.
-    #    Passing user_config=None means "no user config file present" → auto-detect.
-    if user_config is not None:
-        user_val: str = getattr(user_config, engine, "auto")
-        if user_val != "auto":
-            mode, image = parse_runner_value(user_val)
-            return RunnerSpec(
-                mode=mode, image=image, source=SOURCE_USER_CONFIG
-            )  # "auto" -> fall through to auto-detection
-
-    # 4. Auto-detection.
-    #    4a. Container-self-aware branch. If llem itself runs inside a container, PATH
+    # No layer pinned this engine, so detect.
+    #    Container-self-aware branch. If llem itself runs inside a container, PATH
     #    inspection alone is misleading: a docker CLI on PATH without a usable control
     #    socket would make dispatch attempt docker-in-docker. Resolve by socket
     #    availability (the DooD signal) instead. See is_running_in_container /
@@ -253,12 +205,12 @@ def resolve_runner(
         # so the CLI renders "(auto-detected)" rather than the misleading "(default)".
         return RunnerSpec(mode=RUNNER_PROCESS, image=None, source=SOURCE_AUTO_DETECTED)
 
-    #    4b. On the host: Docker + NVIDIA Container Toolkit available?
+    #    On the host: Docker + NVIDIA Container Toolkit available?
     if is_docker_available():
         logger.info("Docker detected. Using containerised execution for reproducible measurements.")
         return RunnerSpec(mode=RUNNER_CONTAINER, image=None, source=SOURCE_AUTO_DETECTED)
 
-    # 5. Default: process mode with nudge message
+    # Default: process mode with nudge message
     logger.info(
         "Docker not detected. Install Docker + NVIDIA Container Toolkit "
         "for reproducible isolated measurements."
@@ -273,24 +225,20 @@ def resolve_runner(
 
 def resolve_study_runners(
     engines: list[str],
-    yaml_runners: dict[str, str] | None = None,
-    user_config: UserRunnersConfig | None = None,
+    pins: Mapping[str, RunnerPin] | None = None,
 ) -> dict[str, RunnerSpec]:
     """Resolve runners for all engines in a study.
 
-    Calls ``resolve_runner`` for each unique engine and returns a mapping of
-    engine name → RunnerSpec. The ``yaml_runners`` dict (from the study YAML
-    ``runners:`` section) and ``user_config`` are passed through unchanged.
+    Calls :func:`resolve_runner` for each unique engine, handing it that engine's
+    pin from the precedence chain when one exists. An engine with no pin
+    auto-detects.
 
     Args:
-        engines:      Unique engine names present in the study's experiments.
-        yaml_runners: Study-level ``runners:`` section from YAML (optional).
-        user_config:  Loaded UserRunnersConfig (optional, None = auto-detect).
+        engines: Unique engine names present in the study's experiments.
+        pins: Chain-resolved runner pins keyed by engine name.
 
     Returns:
         Dict mapping each engine name to its resolved RunnerSpec.
     """
-    return {
-        engine: resolve_runner(engine, yaml_runners=yaml_runners, user_config=user_config)
-        for engine in engines
-    }
+    resolved_pins = pins or {}
+    return {engine: resolve_runner(engine, resolved_pins.get(engine)) for engine in engines}

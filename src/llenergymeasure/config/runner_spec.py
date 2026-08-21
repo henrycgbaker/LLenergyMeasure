@@ -15,9 +15,24 @@ next to the taxonomy it describes.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
-from llenergymeasure.config.ssot import EXPLICIT_RUNNER_SOURCES, RunnerMode
+from llenergymeasure.config.ssot import EXPLICIT_RUNNER_SOURCES, SOURCE_YAML, RunnerMode
+
+
+@dataclass(frozen=True)
+class RunnerPin:
+    """An explicitly pinned runner (or image) value, and the layer that supplied it.
+
+    What the precedence chain hands to the runner and image mechanics: the winning
+    value, plus its ``SOURCE_*`` tag so the mechanics can record where it came from
+    instead of guessing. A pin exists only when some layer actually set the value -
+    an engine with no pin is what tells the mechanics to auto-detect.
+    """
+
+    value: str
+    source: str
 
 
 @dataclass
@@ -63,3 +78,26 @@ class RunnerSpec:
             "image": self.image,
             "image_source": self.image_source,
         }
+
+
+def pins_from_resolved(
+    values: Mapping[str, str] | None,
+    provenance: Mapping[str, str],
+    *,
+    section: str,
+) -> dict[str, RunnerPin]:
+    """Pair each resolved per-engine value with the layer that supplied it.
+
+    ``values`` is a resolved section of a study (``runners`` or ``images``) and
+    ``provenance`` is the study's ``settings_provenance``, keyed by
+    ``"<section>.<engine>"``. A value with no recorded provenance is labelled
+    ``yaml``: that happens only for a StudyConfig assembled by hand rather than
+    resolved, where the value was declared on the study itself.
+    """
+    return {
+        engine: RunnerPin(
+            value=value,
+            source=provenance.get(f"{section}.{engine}", SOURCE_YAML),
+        )
+        for engine, value in (values or {}).items()
+    }

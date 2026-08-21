@@ -66,6 +66,23 @@ def engine_str(engine: Any) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Built-in resolution defaults
+# ---------------------------------------------------------------------------
+# The bottom layer of the precedence chain. They live here, not in the chain or the
+# user-config schema, because both read them: the user-config schema as its field
+# defaults and the chain as its built-in layer. One home means the two cannot
+# disagree about what the built-in default is, and the chain never has to import the
+# user-config module to know it.
+
+#: Machine-local thermal gap defaults (seconds).
+DEFAULT_EXPERIMENT_GAP_SECONDS: Final = 60.0
+DEFAULT_CYCLE_GAP_SECONDS: Final = 300.0
+
+#: Built-in results directory, the bottom of the ``output.results_dir`` chain.
+DEFAULT_RESULTS_DIR: Final = "./results"
+
+
+# ---------------------------------------------------------------------------
 # Runner mode constants
 # ---------------------------------------------------------------------------
 
@@ -74,7 +91,16 @@ RUNNER_CONTAINER: Final = "container"
 CONTAINER_EXCHANGE_DIR: Final = "/run/llem"
 """Mount point inside Docker containers for config/result exchange."""
 
-# RunnerSpec.source tags - which layer of the precedence chain produced a runner.
+# Provenance tags - which layer of the precedence chain produced a value. Shared by
+# RunnerSpec.source and by every value the precedence chain resolves
+# (llenergymeasure.config.precedence), so one vocabulary names one layer everywhere.
+SOURCE_CALL_SITE: Final = "call_site"
+"""Provenance tag for a value pinned by the caller (a CLI flag, an API argument)."""
+SOURCE_CALL_SITE_DEFAULT: Final = "call_site_default"
+"""Provenance tag for a caller-supplied DEFAULT (e.g. the CLI's execution defaults):
+the caller's value, but one that deliberately sits below the study file, filling what
+the file omitted rather than overriding what it declared. Distinct from
+``call_site``, which names a pin that outranks everything."""
 SOURCE_ENV: Final = "env"
 SOURCE_YAML: Final = "yaml"
 SOURCE_USER_CONFIG: Final = "user_config"
@@ -87,11 +113,12 @@ SOURCE_IMPLICIT: Final = "implicit"
 ran - distinct from ``default``, which is a real fall-through)."""
 
 EXPLICIT_RUNNER_SOURCES: Final[frozenset[str]] = frozenset(
-    {SOURCE_ENV, SOURCE_YAML, SOURCE_USER_CONFIG}
+    {SOURCE_CALL_SITE, SOURCE_ENV, SOURCE_YAML, SOURCE_USER_CONFIG}
 )
-"""Runner source tags that represent an explicit user pin (env var, study YAML, or user
-config). In a multi-engine study these win over container elevation; only auto-resolved
-runners (``auto_detected`` / ``default``) are elevated to container mode for isolation."""
+"""Runner source tags that represent an explicit user pin (call-site override, env var,
+study YAML, or user config). In a multi-engine study these win over container elevation;
+only auto-resolved runners (``auto_detected`` / ``default``) are elevated to container
+mode for isolation."""
 
 RunnerMode = Literal["process", "container"]
 
@@ -142,9 +169,6 @@ ENV_RUNNER_PREFIX: Final = "LLEM_RUNNER_"
 ENV_IMAGE_PREFIX: Final = "LLEM_IMAGE_"
 """Prefix for per-engine image override env vars (e.g. ``LLEM_IMAGE_VLLM=custom:tag``)."""
 
-ENV_CARBON_INTENSITY: Final = "LLEM_CARBON_INTENSITY"
-ENV_DATACENTER_PUE: Final = "LLEM_DATACENTER_PUE"
-ENV_NO_PROMPT: Final = "LLEM_NO_PROMPT"
 ENV_HF_TOKEN: Final = "HF_TOKEN"
 ENV_OUTPUT_DIR: Final = "LLEM_OUTPUT_DIR"
 ENV_SAVE_TIMESERIES: Final = "LLEM_SAVE_TIMESERIES"
@@ -375,13 +399,14 @@ ENGINE_PACKAGES: dict[Engine, str] = {
 __all__ = [
     "ALL_ENGINES",
     "CONTAINER_EXCHANGE_DIR",
+    "DEFAULT_CYCLE_GAP_SECONDS",
+    "DEFAULT_EXPERIMENT_GAP_SECONDS",
+    "DEFAULT_RESULTS_DIR",
     "DOCKER_PULL_TIMEOUT",
     "ENGINES",
     "ENGINE_PACKAGES",
     "ENV_BASELINE_SPEC_PATH",
-    "ENV_CARBON_INTENSITY",
     "ENV_CONFIG_PATH",
-    "ENV_DATACENTER_PUE",
     "ENV_DEPS_CACHE_DIR",
     "ENV_ENGINE",
     "ENV_HF_TOKEN",
@@ -389,7 +414,6 @@ __all__ = [
     "ENV_HOST_UID",
     "ENV_IMAGE_PREFIX",
     "ENV_LOG_LEVEL",
-    "ENV_NO_PROMPT",
     "ENV_OUTPUT_DIR",
     "ENV_RUNNER_PREFIX",
     "ENV_SAVE_TIMESERIES",
@@ -399,6 +423,8 @@ __all__ = [
     "RUNNER_PROCESS",
     "SAMPLING_PRESETS",
     "SOURCE_AUTO_DETECTED",
+    "SOURCE_CALL_SITE",
+    "SOURCE_CALL_SITE_DEFAULT",
     "SOURCE_DEFAULT",
     "SOURCE_ENV",
     "SOURCE_IMPLICIT",

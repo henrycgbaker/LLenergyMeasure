@@ -278,7 +278,7 @@ def test_save_and_record_folds_provenance_into_config(tmp_path: Path) -> None:
 
     resolution_log = {
         "task.model": {"effective": "gpt2", "source": "yaml"},
-        "batching.batch_size": {"effective": 8, "source": "cli_flag", "default": 1},
+        "batching.batch_size": {"effective": 8, "source": "call_site", "default": 1},
     }
 
     result = _make_result(with_timeseries=False)

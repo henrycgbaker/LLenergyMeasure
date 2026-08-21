@@ -23,7 +23,7 @@ class TestEngineSweepAxis:
                 "engine": ["transformers", "tensorrt"],
             },
         }
-        valid, _skipped = expand_grid(raw_study)
+        valid, _skipped, _swept = expand_grid(raw_study)
         assert len(valid) == 2
         assert {c.engine for c in valid} == {"transformers", "tensorrt"}
 
@@ -37,7 +37,7 @@ class TestEngineSweepAxis:
                 "tensorrt.engine_params.tensor_parallel_size": [1, 2],
             },
         }
-        valid, _skipped = expand_grid(raw_study)
+        valid, _skipped, _swept = expand_grid(raw_study)
         # transformers: 1 config (no scoped dims), tensorrt: 2 configs (tensor_parallel_size=[1,2])
         assert len(valid) == 3
         pytorch_configs = [c for c in valid if c.engine == "transformers"]
@@ -63,7 +63,7 @@ class TestDottedNestedSweep:
                 "tensorrt.engine_params.quant_config.quant_algo": ["INT8", "FP8", "W4A16_AWQ"],
             },
         }
-        valid, _skipped = expand_grid(raw_study)
+        valid, _skipped, _swept = expand_grid(raw_study)
         assert len(valid) == 3
         algos = [cast(dict, c.tensorrt.engine_params.quant_config)["quant_algo"] for c in valid]
         assert set(algos) == {"INT8", "FP8", "W4A16_AWQ"}
@@ -78,7 +78,7 @@ class TestDottedNestedSweep:
                 "tensorrt.engine_params.max_num_tokens": [2048, 4096],
             },
         }
-        valid, _skipped = expand_grid(raw_study)
+        valid, _skipped, _swept = expand_grid(raw_study)
         assert len(valid) == 2
         token_values = {c.tensorrt.engine_params.max_num_tokens for c in valid}
         assert token_values == {2048, 4096}
@@ -113,7 +113,7 @@ class TestDottedNestedSweep:
                 "tensorrt.engine_params.quant_config.quant_algo": ["INT8", "W4A16_AWQ"],
             },
         }
-        valid, _skipped = expand_grid(raw_study)
+        valid, _skipped, _swept = expand_grid(raw_study)
         assert len(valid) == 2
         for config in valid:
             assert config.engine == "tensorrt"
@@ -148,7 +148,7 @@ class TestDottedNestedSweep:
                 "tensorrt.engine_params.quant_config.quant_algo": ["INT8", "INVALID_VALUE"],
             },
         }
-        valid, skipped = expand_grid(raw_study)
+        valid, skipped, _swept = expand_grid(raw_study)
         assert len(valid) == 2
         assert len(skipped) == 0
         algos = {cast(dict, c.tensorrt.engine_params.quant_config)["quant_algo"] for c in valid}

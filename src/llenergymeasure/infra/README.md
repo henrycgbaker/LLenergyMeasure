@@ -18,7 +18,7 @@ Manages the full container lifecycle for Docker-isolated experiment execution. A
 | `docker/ownership.py` | Container ownership: naming, ownership labels, atexit cleanup net, SIGTERM bridge, orphan reaper |
 | `_container/` | Container-side dispatch assets: `container_entrypoint.sh` + the `probe_imports.py` dependency probe it invokes |
 | `container_entrypoint.py` | Container-side entry point (invoked inside Docker) |
-| `runner_resolution.py` | `resolve_runner()`, `resolve_study_runners()` - process vs container selection |
+| `runner_resolution.py` | `resolve_runner()`, `resolve_study_runners()` - process vs container mechanics for the pins the precedence chain resolved |
 | `docker_preflight.py` | `run_docker_preflight()` - GPU visibility, CUDA/driver compat checks |
 | `docker_errors.py` | `translate_docker_error()`, typed Docker error classes |
 | `image_registry.py` | `get_default_image()`, `parse_runner_value()` - Docker image registry |
@@ -56,20 +56,24 @@ Reads config JSON, runs via library API (not CLI re-entry), writes result JSON b
 
 ## Runner resolution
 
-Determines whether each engine runs as a host process or in a container:
+Determines whether each engine runs as a host process or in a container. WHICH config
+layer wins is not decided here: the precedence chain
+(`llenergymeasure.config.precedence.resolve_study_settings`) resolves the per-engine
+runner pins during study resolution - call-site override > `LLEM_RUNNER_<ENGINE>` env
+var > `runners:` in the study YAML > user config - and the resolved study carries the
+pins with their provenance. This module keeps the mechanics: parsing a pinned value
+and host probing for engines nothing pinned.
 
 ```python
-from llenergymeasure.infra.runner_resolution import resolve_study_runners, is_docker_available
+from llenergymeasure.config.runner_spec import pins_from_resolved
+from llenergymeasure.infra.runner_resolution import resolve_study_runners
 
-# Precedence: env var > YAML runners: > user config > auto-detection > default
-runner_specs = resolve_study_runners(["pytorch", "vllm"], yaml_runners=..., user_config=...)
+# pins come from the study the chain resolved (settings.runners + provenance)
+runner_specs = resolve_study_runners(["transformers", "vllm"], pins)
 ```
 
-Precedence chain (highest wins):
-1. `LLEM_RUNNER` environment variable
-2. `runners:` section in study YAML
-3. User config (`~/.config/llem/config.yaml`)
-4. Auto-detection (Docker + NVIDIA Container Toolkit available? → container; else → process)
+An engine with no pin at any layer auto-detects: Docker + NVIDIA Container Toolkit
+available → container; otherwise → process.
 
 ## Docker image resolution
 
@@ -86,17 +90,21 @@ Two image sources exist for each engine:
 
 ### Resolution precedence (`resolve_image()`)
 
-The full image resolution chain (highest wins):
+The image pin - which config layer wins - is decided by the precedence chain during
+study resolution and rides the resolved study; `resolve_image()` consumes that pin and
+keeps only the mechanics (the runner-shorthand middle rung and the smart default).
+Effective order (highest wins):
 
-1. **Env var** `LLEM_IMAGE_{ENGINE}` (e.g. `LLEM_IMAGE_VLLM=my/custom:tag`)
-2. **Study YAML** `images:` section
-3. **Runner spec** shorthand (`container:my/custom:tag` in `runners:`)
-4. **User config** `images:` section
-5. **Smart default** via `get_default_image()`: local build → registry fallback
+1. **Pin from the chain**: call-site override > env var `LLEM_IMAGE_{ENGINE}` >
+   study YAML `images:` > user config `images:` (a pin above the shorthand, i.e.
+   call-site/env/yaml, beats it; a user-config pin ranks below it)
+2. **Runner spec** shorthand (`container:my/custom:tag` in `runners:`)
+3. **Smart default** via `get_default_image()`: local build → registry fallback
 
-Each level returns an `(image, image_source)` tuple. The `image_source` string
-(`"env"`, `"yaml"`, `"runner_override"`, `"user_config"`, `"local_build"`,
-`"registry_cached"`, `"registry"`) tracks provenance for display and diagnostics.
+Each resolution returns an `(image, image_source)` tuple. The `image_source` string
+(`"call_site"`, `"env"`, `"yaml"`, `"runner_override"`, `"user_config"`,
+`"local_build"`, `"registry_cached"`, `"registry"`) tracks provenance for display
+and diagnostics.
 
 ### Smart default behaviour
 

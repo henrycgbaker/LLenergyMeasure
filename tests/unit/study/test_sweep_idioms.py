@@ -219,7 +219,7 @@ class TestIdiomsThroughExpandGrid:
               transformers.llem_execution.batch_size: {pow2: {min: 4, max: 16}}
             """
         )
-        valid, skipped = expand_grid(raw)
+        valid, skipped, _swept = expand_grid(raw)
         assert len(skipped) == 0
         # 3 n_prompts x 2 temperatures x 3 batch sizes = 18
         assert len(valid) == 18
@@ -231,8 +231,8 @@ class TestIdiomsThroughExpandGrid:
         base = {"task": {"model": "gpt2"}, "engine": "transformers", "serving_mode": "offline"}
         as_list = {**base, "sweep": {"task.dataset.n_prompts": [10, 20, 30]}}
         as_idiom = {**base, "sweep": {"task.dataset.n_prompts": {"min": 10, "max": 30, "num": 3}}}
-        valid_list, _ = expand_grid(as_list)
-        valid_idiom, _ = expand_grid(as_idiom)
+        valid_list, _, _swept = expand_grid(as_list)
+        valid_idiom, _, _swept = expand_grid(as_idiom)
         assert [c.model_dump() for c in valid_idiom] == [c.model_dump() for c in valid_list]
 
     def test_non_idiom_mapping_fails_loudly_with_axis_name(self):
@@ -271,7 +271,7 @@ class TestExistingMappingSemanticsUnchanged:
             "serving_mode": "offline",
             "sweep": {"task.dataset.n_prompts": [50, 100]},
         }
-        valid, skipped = expand_grid(raw)
+        valid, skipped, _swept = expand_grid(raw)
         assert len(valid) == 2
         assert len(skipped) == 0
         assert {c.task.dataset.n_prompts for c in valid} == {50, 100}
@@ -288,7 +288,7 @@ class TestExistingMappingSemanticsUnchanged:
                 ]
             },
         }
-        valid, skipped = expand_grid(raw)
+        valid, skipped, _swept = expand_grid(raw)
         assert len(valid) == 2
         assert len(skipped) == 0
 

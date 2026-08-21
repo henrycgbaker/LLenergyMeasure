@@ -2,8 +2,8 @@
 
 The UNSET-sentinel precedence chain: a distinct 'use the layer below' sentinel,
 recursive pruning, ascending-precedence deep merge, and the defined layer order
-(call-site > env > study YAML > user config > pydantic defaults), plus the v0.7
-warmup-protocol wiring.
+(call-site > env > study YAML > user config > pydantic defaults), the per-value
+provenance the merge emits, and the warmup-protocol wiring.
 """
 
 from __future__ import annotations
@@ -12,11 +12,20 @@ import copy
 
 from llenergymeasure.config.precedence import (
     UNSET,
+    Layer,
     PrecedenceChain,
     is_unset,
     prune_unset,
+    resolve_labelled_layers,
     resolve_layers,
     resolve_server_warmup,
+)
+from llenergymeasure.config.ssot import (
+    SOURCE_CALL_SITE,
+    SOURCE_DEFAULT,
+    SOURCE_ENV,
+    SOURCE_USER_CONFIG,
+    SOURCE_YAML,
 )
 
 
@@ -128,3 +137,82 @@ class TestResolveServerWarmup:
 
         with pytest.raises(ValidationError):
             resolve_server_warmup(call_site={"mode": "nonsense"})
+
+
+class TestEmittedProvenance:
+    """The merge records which layer won, rather than inferring it afterwards."""
+
+    def test_highest_layer_to_set_a_value_is_the_recorded_source(self):
+        resolved = resolve_labelled_layers(
+            Layer(SOURCE_DEFAULT, {"a": 1, "b": 1}),
+            Layer(SOURCE_USER_CONFIG, {"a": 2}),
+            Layer(SOURCE_YAML, {"a": 3}),
+        )
+        assert resolved.values == {"a": 3, "b": 1}
+        assert resolved.provenance == {"a": SOURCE_YAML, "b": SOURCE_DEFAULT}
+
+    def test_a_deferring_layer_does_not_claim_the_value(self):
+        resolved = resolve_labelled_layers(
+            Layer(SOURCE_USER_CONFIG, {"a": 1}),
+            Layer(SOURCE_YAML, {"a": UNSET}),
+        )
+        assert resolved.values == {"a": 1}
+        assert resolved.provenance == {"a": SOURCE_USER_CONFIG}
+
+    def test_nested_values_are_labelled_per_leaf(self):
+        resolved = resolve_labelled_layers(
+            Layer(SOURCE_DEFAULT, {"n": {"x": 1, "y": 2}}),
+            Layer(SOURCE_ENV, {"n": {"y": 9}}),
+        )
+        assert resolved.values == {"n": {"x": 1, "y": 9}}
+        assert resolved.provenance == {"n.x": SOURCE_DEFAULT, "n.y": SOURCE_ENV}
+
+    def test_an_empty_layer_section_claims_nothing(self):
+        # An empty dict merges as a no-op where a dict already sits, so it must not
+        # be recorded as having supplied the section.
+        resolved = resolve_labelled_layers(
+            Layer(SOURCE_DEFAULT, {"n": {"x": 1}}),
+            Layer(SOURCE_ENV, {"n": {}}),
+        )
+        assert resolved.values == {"n": {"x": 1}}
+        assert resolved.provenance == {"n.x": SOURCE_DEFAULT}
+
+    def test_a_value_replacing_a_subtree_takes_its_provenance(self):
+        resolved = resolve_labelled_layers(
+            Layer(SOURCE_DEFAULT, {"n": {"x": 1}}),
+            Layer(SOURCE_YAML, {"n": 5}),
+        )
+        assert resolved.values == {"n": 5}
+        assert resolved.provenance == {"n": SOURCE_YAML}
+
+    def test_a_subtree_replacing_a_value_takes_its_provenance(self):
+        resolved = resolve_labelled_layers(
+            Layer(SOURCE_DEFAULT, {"n": 5}),
+            Layer(SOURCE_YAML, {"n": {"x": 1}}),
+        )
+        assert resolved.values == {"n": {"x": 1}}
+        assert resolved.provenance == {"n.x": SOURCE_YAML}
+
+    def test_provenance_keys_always_match_the_merged_leaves(self):
+        resolved = resolve_labelled_layers(
+            Layer(SOURCE_DEFAULT, {"a": 1, "n": {"x": 1, "deep": {"z": 1}}}),
+            Layer(SOURCE_USER_CONFIG, {"n": {"deep": 2}}),
+            Layer(SOURCE_ENV, {"b": None}),
+        )
+        assert set(resolved.provenance) == {"a", "n.x", "n.deep", "b"}
+
+    def test_the_named_chain_labels_its_layers(self):
+        resolved = PrecedenceChain(
+            defaults={"a": 0, "b": 0, "c": 0, "d": 0, "e": 0},
+            user_config={"b": 1},
+            study_yaml={"c": 1},
+            env={"d": 1},
+            call_site={"e": 1},
+        ).resolve_labelled()
+        assert resolved.provenance == {
+            "a": SOURCE_DEFAULT,
+            "b": SOURCE_USER_CONFIG,
+            "c": SOURCE_YAML,
+            "d": SOURCE_ENV,
+            "e": SOURCE_CALL_SITE,
+        }
