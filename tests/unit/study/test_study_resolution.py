@@ -791,3 +791,53 @@ def test_allowlist_fill_leaves_the_experiment_list_byte_identical() -> None:
     assert [exp.model_dump(mode="json") for exp in restricted.experiments] == [
         exp.model_dump(mode="json") for exp in unrestricted.experiments
     ]
+
+
+def test_allowlist_fill_reaches_the_container_gpus_selector(monkeypatch, tmp_path: Path) -> None:
+    """End of the wire: a machine-local allowlist becomes the docker --gpus selector.
+
+    The container path reads the RESOLVED study_execution.gpu_indices, so the fill
+    is what makes a study that declares no devices land on the allowed ones.
+    """
+    from llenergymeasure.infra.docker import command as cmd
+
+    monkeypatch.delenv("LLEM_DOCKER_GPUS", raising=False)
+    resolved = resolve_study(
+        _raw(), user_config=UserConfig(execution=UserExecutionConfig(gpu_indices=[2, 3]))
+    )
+
+    argv = cmd.build_docker_cmd(
+        image="llem-transformers:test",
+        config=resolved.experiments[0],
+        config_hash="cafebabe",
+        exchange_dir=str(tmp_path),
+        env_path=None,
+        extra_mounts=[],
+        container_name=None,
+        labels={},
+        gpu_indices=resolved.study_execution.gpu_indices,
+    )
+
+    assert argv[argv.index("--gpus") + 1] == '"device=2,3"'
+
+
+def test_no_allowlist_keeps_the_gpus_selector_at_all(monkeypatch, tmp_path: Path) -> None:
+    """Without an allowlist the container argv is the historical `--gpus all`."""
+    from llenergymeasure.infra.docker import command as cmd
+
+    monkeypatch.delenv("LLEM_DOCKER_GPUS", raising=False)
+    resolved = resolve_study(_raw(), user_config=UserConfig())
+
+    argv = cmd.build_docker_cmd(
+        image="llem-transformers:test",
+        config=resolved.experiments[0],
+        config_hash="cafebabe",
+        exchange_dir=str(tmp_path),
+        env_path=None,
+        extra_mounts=[],
+        container_name=None,
+        labels={},
+        gpu_indices=resolved.study_execution.gpu_indices,
+    )
+
+    assert argv[argv.index("--gpus") + 1] == "all"
