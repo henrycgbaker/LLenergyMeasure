@@ -31,8 +31,8 @@ docker's output:
   engines. Pulls run concurrently and docker's output is CAPTURED instead:
   interleaved progress bars from three simultaneous pulls are unreadable, and the
   caller needs the stderr text to tell an unreachable registry from an absent
-  image. Failures are reported per image rather than raised, so one bad image
-  does not cancel its siblings.
+  image. Failures are reported per item rather than raised, so one bad image does
+  not cancel its siblings.
 """
 
 from __future__ import annotations
@@ -68,6 +68,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_K = TypeVar("_K")
 _T = TypeVar("_T")
 
 # Upper bound on simultaneous ``docker pull`` threads. A study rarely spans more
@@ -287,51 +288,77 @@ def ensure_image(image: str, progress: ProgressCallback | None = None) -> None:
 
 
 def ensure_images(
-    images: Sequence[str],
+    items: Sequence[tuple[_K, str]],
     *,
     max_concurrent: int = MAX_CONCURRENT_PULLS,
-    on_outcome: Callable[[PullOutcome], _T],
+    on_outcome: Callable[[_K, PullOutcome], _T],
 ) -> list[_T]:
     """Ensure several images are present, pulling the absent ones concurrently.
 
-    One thread per image, capped at *max_concurrent*, so a multi-engine study on
-    a fresh box does not serialise several multi-GB downloads. Each pull is
-    guarded by the same local inspect as the single-image path, so an image
+    One thread per distinct image, capped at *max_concurrent*, so a multi-engine
+    study on a fresh box does not serialise several multi-GB downloads. Each pull
+    is guarded by the same local inspect as the single-image path, so an image
     already in the cache costs one daemon call and no network.
 
+    Each item pairs an image reference with a KEY of the caller's choosing, and
+    that key comes back to *on_outcome* alongside the outcome. The key is what
+    makes two items sharing one image tag distinguishable: that is expressible
+    (two engines can be pinned to the same image), and a caller left to recover
+    its own context from the image reference alone would collapse the two into
+    one. The image is still pulled ONCE for all the items that name it - each of
+    them gets its own report of that single outcome - because submitting the same
+    tag twice would race two identical downloads past the guard.
+
     A failing pull does NOT cancel its siblings: every image runs to completion
-    and *on_outcome* is called for each, so the caller can report every failure
-    at once instead of aborting on the first. Docker's pull output is captured
-    rather than streamed - three interleaved progress bars are unreadable, and
-    the captured stderr is what lets a caller tell an unreachable registry from
-    a genuinely absent image.
+    and *on_outcome* is called for every item, so the caller can report every
+    failure at once instead of aborting on the first. Docker's pull output is
+    captured rather than streamed - three interleaved progress bars are
+    unreadable, and the captured stderr is what lets a caller tell an unreachable
+    registry from a genuinely absent image.
 
     Args:
-        images: Image references to ensure. Processed in the order given.
+        items: ``(key, image)`` pairs to ensure. Distinct images are pulled in
+            order of first appearance.
         max_concurrent: Ceiling on simultaneous pulls.
-        on_outcome: Called once per image WITH THE OUTCOME, from the worker
-            thread that pulled it. Per-image follow-up work therefore stays
-            concurrent (the point, when that work includes a cold verification
-            probe); anything that must not interleave - terminal output above all
-            - is the caller's to serialise. Its return values are collected.
+        on_outcome: Called once per ITEM with that item's key and the outcome for
+            its image, from the worker thread that pulled it. Per-item follow-up
+            work therefore stays concurrent (the point, when that work includes a
+            cold verification probe); anything that must not interleave -
+            terminal output above all - is the caller's to serialise. Its return
+            values are collected.
 
     Returns:
-        Whatever *on_outcome* returned, one per image, in the order *images* was
+        Whatever *on_outcome* returned, one per item, in the order *items* was
         given (not completion order).
     """
-    if not images:
+    if not items:
         return []
 
-    def _ensure_one(image: str) -> _T:
-        return on_outcome(_pull_image_if_absent(image, capture_output=True))
+    # Group by image so one tag is pulled once however many items name it, while
+    # every item still gets its own on_outcome call. Insertion order is the input
+    # order of each image's first appearance, so submission order is stable.
+    positions_by_image: dict[str, list[int]] = {}
+    for position, (_key, image) in enumerate(items):
+        positions_by_image.setdefault(image, []).append(position)
+
+    def _ensure_one(image: str, positions: list[int]) -> list[tuple[int, _T]]:
+        outcome = _pull_image_if_absent(image, capture_output=True)
+        return [(position, on_outcome(items[position][0], outcome)) for position in positions]
 
     with ThreadPoolExecutor(
-        max_workers=min(len(images), max_concurrent), thread_name_prefix="image-pull"
+        max_workers=min(len(positions_by_image), max_concurrent),
+        thread_name_prefix="image-pull",
     ) as executor:
-        futures = [executor.submit(_ensure_one, image) for image in images]
+        futures = [
+            executor.submit(_ensure_one, image, positions)
+            for image, positions in positions_by_image.items()
+        ]
         # .result() re-raises anything a worker raised, so an unexpected failure
         # in on_outcome surfaces rather than vanishing into the pool.
-        return [future.result() for future in futures]
+        collected: dict[int, _T] = {}
+        for future in futures:
+            collected.update(future.result())
+    return [collected[position] for position in range(len(items))]
 
 
 def run_blocking(cmd: list[str], timeout: float | None) -> tuple[int, str]:

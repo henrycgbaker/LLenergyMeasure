@@ -51,7 +51,7 @@ def test_cached_image_is_never_pulled(monkeypatch: pytest.MonkeyPatch):
     run, calls = _fake_docker_cli(_pull_ok, present={"img:1"})
     monkeypatch.setattr(lifecycle.subprocess, "run", run)
 
-    outcomes = lifecycle.ensure_images(["img:1"], on_outcome=lambda o: o)
+    outcomes = lifecycle.ensure_images([("k", "img:1")], on_outcome=lambda _k, o: o)
 
     assert [c[:2] for c in calls] == [["docker", "image"]]
     assert outcomes[0].cached is True
@@ -66,7 +66,7 @@ def test_absent_image_is_pulled_then_reinspected(monkeypatch: pytest.MonkeyPatch
     run, calls = _fake_docker_cli(_pull_ok)
     monkeypatch.setattr(lifecycle.subprocess, "run", run)
 
-    outcome = lifecycle.ensure_images(["img:1"], on_outcome=lambda o: o)[0]
+    outcome = lifecycle.ensure_images([("k", "img:1")], on_outcome=lambda _k, o: o)[0]
 
     assert [c[1] for c in calls] == ["image", "pull", "image"]
     assert outcome.cached is False
@@ -95,7 +95,9 @@ def test_pulls_run_concurrently(monkeypatch: pytest.MonkeyPatch):
     run, _ = _fake_docker_cli(pull)
     monkeypatch.setattr(lifecycle.subprocess, "run", run)
 
-    outcomes = lifecycle.ensure_images(["a:1", "b:1", "c:1"], on_outcome=lambda o: o)
+    outcomes = lifecycle.ensure_images(
+        [("a", "a:1"), ("b", "b:1"), ("c", "c:1")], on_outcome=lambda _k, o: o
+    )
 
     assert all(o.ok for o in outcomes)
 
@@ -114,7 +116,7 @@ def test_worker_count_capped(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(lifecycle, "ThreadPoolExecutor", spy)
 
     images = [f"img:{i}" for i in range(lifecycle.MAX_CONCURRENT_PULLS + 2)]
-    lifecycle.ensure_images(images, on_outcome=lambda o: o)
+    lifecycle.ensure_images([(i, i) for i in images], on_outcome=lambda _k, o: o)
 
     assert seen == [lifecycle.MAX_CONCURRENT_PULLS]
 
@@ -130,7 +132,10 @@ def test_one_failure_does_not_cancel_siblings(monkeypatch: pytest.MonkeyPatch):
 
     outcomes = {
         o.image: o
-        for o in lifecycle.ensure_images(["good:1", "bad:1", "also:1"], on_outcome=lambda o: o)
+        for o in lifecycle.ensure_images(
+            [("good", "good:1"), ("bad", "bad:1"), ("also", "also:1")],
+            on_outcome=lambda _k, o: o,
+        )
     }
 
     assert outcomes["good:1"].ok and outcomes["also:1"].ok
@@ -149,7 +154,7 @@ def test_timeout_is_reported_not_raised(monkeypatch: pytest.MonkeyPatch):
     run, _ = _fake_docker_cli(pull)
     monkeypatch.setattr(lifecycle.subprocess, "run", run)
 
-    outcome = lifecycle.ensure_images(["img:1"], on_outcome=lambda o: o)[0]
+    outcome = lifecycle.ensure_images([("k", "img:1")], on_outcome=lambda _k, o: o)[0]
 
     assert outcome.timed_out is True
     assert outcome.ok is False
@@ -168,10 +173,10 @@ def test_results_follow_input_order_not_completion_order(monkeypatch: pytest.Mon
     monkeypatch.setattr(lifecycle.subprocess, "run", run)
 
     order = lifecycle.ensure_images(
-        ["slow:1", "fast:1"], max_concurrent=2, on_outcome=lambda o: o.image
+        [("slow", "slow:1"), ("fast", "fast:1")], max_concurrent=2, on_outcome=lambda k, _o: k
     )
 
-    assert order == ["slow:1", "fast:1"]
+    assert order == ["slow", "fast"]
 
 
 def test_empty_image_list_starts_no_pool(monkeypatch: pytest.MonkeyPatch):
@@ -179,7 +184,7 @@ def test_empty_image_list_starts_no_pool(monkeypatch: pytest.MonkeyPatch):
     executor = MagicMock()
     monkeypatch.setattr(lifecycle, "ThreadPoolExecutor", executor)
 
-    assert lifecycle.ensure_images([], on_outcome=lambda o: o) == []
+    assert lifecycle.ensure_images([], on_outcome=lambda _k, o: o) == []
     executor.assert_not_called()
 
 
@@ -188,11 +193,53 @@ def test_handler_exception_surfaces(monkeypatch: pytest.MonkeyPatch):
     run, _ = _fake_docker_cli(_pull_ok)
     monkeypatch.setattr(lifecycle.subprocess, "run", run)
 
-    def boom(outcome: lifecycle.PullOutcome) -> None:
+    def boom(key: str, outcome: lifecycle.PullOutcome) -> None:
         raise RuntimeError("handler broke")
 
     with pytest.raises(RuntimeError, match="handler broke"):
-        lifecycle.ensure_images(["img:1"], on_outcome=boom)
+        lifecycle.ensure_images([("k", "img:1")], on_outcome=boom)
+
+
+def test_two_keys_on_one_image_get_one_pull_and_two_reports(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Items sharing an image tag are each reported, under their own key.
+
+    Two engines can legitimately be pinned to the same image. Each still needs
+    its own report - a caller that had to recover its context from the image
+    reference alone would collapse the two onto whichever it saw last - but the
+    tag must be pulled exactly ONCE, not raced against itself.
+    """
+    run, calls = _fake_docker_cli(_pull_ok)
+    monkeypatch.setattr(lifecycle.subprocess, "run", run)
+
+    reported = lifecycle.ensure_images(
+        [("vllm", "shared:1"), ("tensorrt", "shared:1")],
+        on_outcome=lambda key, outcome: (key, outcome.image, outcome.ok),
+    )
+
+    assert reported == [
+        ("vllm", "shared:1", True),
+        ("tensorrt", "shared:1", True),
+    ]
+    pulls = [c for c in calls if c[:2] == ["docker", "pull"]]
+    assert pulls == [["docker", "pull", "shared:1"]]
+
+
+def test_a_shared_image_failing_is_reported_against_every_key(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """One failed pull of a shared tag must not be attributed to one key only."""
+    run, calls = _fake_docker_cli(_pull_absent)
+    monkeypatch.setattr(lifecycle.subprocess, "run", run)
+
+    reported = lifecycle.ensure_images(
+        [("vllm", "shared:1"), ("tensorrt", "shared:1")],
+        on_outcome=lambda key, outcome: (key, outcome.ok),
+    )
+
+    assert reported == [("vllm", False), ("tensorrt", False)]
+    assert len([c for c in calls if c[:2] == ["docker", "pull"]]) == 1
 
 
 # ---------------------------------------------------------------------------

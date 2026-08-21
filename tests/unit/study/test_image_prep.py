@@ -361,6 +361,71 @@ def test_pull_timeout_reported_and_aggregated(monkeypatch: pytest.MonkeyPatch) -
 
 
 # =============================================================================
+# Two engines, one image tag
+# =============================================================================
+
+
+def test_two_engines_on_one_image_each_get_their_own_row(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A shared image tag is pulled once and reported under BOTH engine names.
+
+    Nothing stops two engines resolving to the same image. The engine name is
+    carried through the pull as the item key precisely so this case works: if the
+    study had to recover the engine from the image reference, both rows would be
+    attributed to whichever engine came last, and the other engine's row would
+    never resolve.
+    """
+    shared = "img/shared:latest"
+    specs = {"vllm": _docker_spec(shared), "tensorrt": _docker_spec(shared)}
+    monkeypatch.setattr(image_prep, "inspect_image", lambda image, timeout: _missing())
+
+    run, calls = fake_docker_pull_cli(
+        lambda image: CompletedProcess(["docker", "pull", image], 0, b"", b"")
+    )
+    monkeypatch.setattr(lifecycle.subprocess, "run", run)
+
+    progress = MagicMock()
+    harness = _Harness(specs, progress)
+    harness._prepare_images()
+
+    assert harness._images_prepared is True
+    # One row per engine, each under its own name, both naming the shared image.
+    reported = sorted(c.args[:2] for c in progress.image_ready.call_args_list)
+    assert reported == [("tensorrt", shared), ("vllm", shared)]
+    # ...and exactly one pull, not the same tag raced against itself.
+    assert [c for c in calls if c[:2] == ["docker", "pull"]] == [["docker", "pull", shared]]
+
+
+def test_shared_image_failure_names_both_engines(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A shared tag that cannot be pulled fails both engines, not just one."""
+    shared = "img/shared:latest"
+    specs = {"vllm": _docker_spec(shared), "tensorrt": _docker_spec(shared)}
+    monkeypatch.setattr(image_prep, "inspect_image", lambda image, timeout: _missing())
+
+    monkeypatch.setattr(
+        lifecycle.subprocess,
+        "run",
+        _fake_docker_cli(
+            lambda image: CompletedProcess(["docker", "pull", image], 1, b"", b"manifest unknown")
+        ),
+    )
+
+    progress = MagicMock()
+    harness = _Harness(specs, progress)
+    with pytest.raises(DockerImagePullError) as excinfo:
+        harness._prepare_images()
+
+    failed = sorted(c.args[0] for c in progress.image_failed.call_args_list)
+    assert failed == ["tensorrt", "vllm"]
+    # Both engines' rebuild hints survive into the aggregate: the per-engine
+    # advice is the whole reason the engine name has to reach the failure.
+    fix = excinfo.value.fix_suggestion
+    assert "docker compose build vllm" in fix
+    assert "docker compose build tensorrt" in fix
+
+
+# =============================================================================
 # Guard clauses
 # =============================================================================
 

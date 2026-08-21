@@ -265,11 +265,16 @@ class _ImageMixin:
         actionable per engine, verifying the pulled image's schema fingerprint,
         and rendering the engine's row.
 
-        That per-image follow-up runs in the pulling thread, so the fingerprint
+        That per-engine follow-up runs in the pulling thread, so the fingerprint
         verification (potentially a cold docker-run probe) of one image overlaps
         the pull of another. Only the progress emission is serialised, under
         ``progress_lock``, so each image's possibly-multi-line output stays
         coherent instead of interleaving with a sibling's.
+
+        Two engines pinned to the same image tag get one pull and two rows: the
+        engine name is carried through as the item key, so each engine is reported
+        under its own name rather than both collapsing onto whichever appeared
+        last.
 
         Returns the list of errors (pull failures + post-pull fingerprint
         mismatches); an empty list means every image was pulled and verified.
@@ -277,11 +282,8 @@ class _ImageMixin:
         completion before the aggregate is returned.
         """
         progress_lock = threading.Lock()
-        engine_of = {image: engine_name for engine_name, image in missing}
 
-        def _finalise(outcome: PullOutcome) -> Exception | None:
-            engine_name = engine_of[outcome.image]
-
+        def _finalise(engine_name: str, outcome: PullOutcome) -> Exception | None:
             if outcome.timed_out:
                 with progress_lock:
                     if self._progress:
@@ -309,7 +311,10 @@ class _ImageMixin:
                 progress_lock=progress_lock,
             )
 
-        results = ensure_images([image for _, image in missing], on_outcome=_finalise)
+        # The engine name rides along as the item key rather than being recovered
+        # from the image reference: two engines can be pinned to the same image
+        # tag, and keying on the tag would attribute both rows to one of them.
+        results = ensure_images(missing, on_outcome=_finalise)
         return [error for error in results if error is not None]
 
     def _finalise_image(
