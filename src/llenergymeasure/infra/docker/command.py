@@ -74,18 +74,18 @@ from llenergymeasure.utils.env_config import (
 )
 from llenergymeasure.utils.exceptions import DockerPreFlightError
 
+# The three container shapes, and the one filename the study side has to agree
+# with. Everything else here - the shared core, the removal-policy constants, the
+# flag-fragment helpers - is construction material with no consumer outside this
+# module, and it stays unexported on purpose: an advertised core is an invitation
+# to assemble a fourth shape somewhere else, which is the exact drift this module
+# exists to prevent. A future need to define shapes elsewhere can export the core
+# deliberately, as a decision rather than as a leftover.
 __all__ = [
     "BASELINE_SPEC_FILENAME",
-    "LIFETIME_DETACHED",
-    "LIFETIME_RUN_TO_COMPLETION",
-    "ContainerLifetime",
-    "append_nccl_env",
-    "append_package_dispatch",
     "build_baseline_container_argv",
-    "build_container_argv",
     "build_docker_cmd",
     "build_server_container_argv",
-    "docker_label_args",
 ]
 
 #: The container runs to completion and docker removes it on exit (``--rm``).
