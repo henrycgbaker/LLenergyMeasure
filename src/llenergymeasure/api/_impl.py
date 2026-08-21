@@ -361,19 +361,72 @@ def _resolve_objects(study: StudyConfig, *, overrides: dict[str, Any] | None = N
     the resolution a YAML study gets, with no file touched (#886).
 
     An already-resolved study (one that carries a ``study_design_hash``, i.e. it
-    came from ``load_study``) is returned untouched, before the user config is
-    even read: its experiment list is already cycle-expanded, so resolving twice
-    would re-expand it. A study whose hash was written by hand rather than by
-    resolution is therefore NOT quietly resolved here - the orchestrator refuses
-    it, which is the louder outcome.
+    came from ``load_study``) is NOT re-resolved: its experiment list is already
+    cycle-expanded, so resolving twice would re-expand it. A results-dir override
+    (the ``output_dir`` argument) still applies to it - directly, recorded as a
+    call-site value in the provenance - because redirecting where results land
+    never touches the study's identity. Any OTHER override on an already-resolved
+    study raises: silently dropping it would break the documented contract, and
+    quietly re-resolving would re-expand the cycles. A study whose hash was
+    written by hand rather than by resolution is likewise NOT quietly resolved
+    here - the orchestrator refuses it, which is the louder outcome.
     """
     if study.study_design_hash is not None:
-        return study
+        return _apply_overrides_to_resolved(study, overrides)
 
     from llenergymeasure.config.user_config import load_user_config
     from llenergymeasure.study.loading import resolve_study_objects
 
     return resolve_study_objects(study, user_config=load_user_config(), overrides=overrides)
+
+
+def _apply_overrides_to_resolved(
+    study: StudyConfig, overrides: dict[str, Any] | None
+) -> StudyConfig:
+    """Apply call-site overrides to a study that already went through resolution.
+
+    Only ``output.results_dir`` is applicable: it redirects where results land
+    without touching the resolved identity, so it is applied directly and recorded
+    as a call-site value. Anything else must enter through resolution proper -
+    raising here is the loud alternative to silently ignoring it.
+    """
+    if not overrides:
+        return study
+
+    flat = _dotted_paths(overrides)
+    if flat != {"output.results_dir"}:
+        unexpected = sorted(flat - {"output.results_dir"})
+        raise ConfigError(
+            "This study is already resolved (it carries a study_design_hash), so "
+            f"overrides cannot be applied to it: {', '.join(unexpected)}. Pass "
+            "overrides to load_study()/run_study(path, ...) so they enter "
+            "resolution, or rebuild the StudyConfig with the values you want."
+        )
+
+    from llenergymeasure.config.ssot import SOURCE_CALL_SITE
+
+    results_dir = overrides["output"]["results_dir"]
+    return study.model_copy(
+        update={
+            "output": study.output.model_copy(update={"results_dir": results_dir}),
+            "settings_provenance": {
+                **study.settings_provenance,
+                "output.results_dir": SOURCE_CALL_SITE,
+            },
+        }
+    )
+
+
+def _dotted_paths(data: dict[str, Any], prefix: str = "") -> set[str]:
+    """Dotted leaf paths of a nested override dict."""
+    paths: set[str] = set()
+    for key, value in data.items():
+        path = f"{prefix}{key}"
+        if isinstance(value, dict) and value:
+            paths |= _dotted_paths(value, f"{path}.")
+        else:
+            paths.add(path)
+    return paths
 
 
 def _to_study_config(
