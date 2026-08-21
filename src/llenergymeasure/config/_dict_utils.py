@@ -1,4 +1,4 @@
-"""Shared dictionary utilities: unflatten dotted keys, deep merge.
+"""Shared dictionary utilities: unflatten dotted keys, deep merge, leaf paths.
 
 Canonical home for these utilities, imported by config/loader.py
 and config/grid.py.
@@ -6,6 +6,7 @@ and config/grid.py.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from copy import deepcopy
 from typing import Any
 
@@ -31,6 +32,27 @@ def _unflatten(flat: dict[str, Any]) -> dict[str, Any]:
             node = node[part]
         node[parts[-1]] = value
     return result
+
+
+def dotted_leaf_paths(data: Mapping[str, Any], prefix: str = "") -> list[str]:
+    """Dotted paths of every leaf in ``data`` - a non-dict value, or an empty dict.
+
+    An empty dict is a leaf because it carries no leaves of its own to name. A key
+    that is already dotted (``{"task.model": "m"}``) is left as it is, so a nested
+    and a dotted spelling of the same override normalise to the same path.
+
+    Example:
+        {"output": {"results_dir": "/d"}} -> ["output.results_dir"]
+        {"runners": {}}                   -> ["runners"]
+    """
+    paths: list[str] = []
+    for key, value in data.items():
+        path = f"{prefix}{key}"
+        if isinstance(value, dict) and value:
+            paths.extend(dotted_leaf_paths(value, f"{path}."))
+        else:
+            paths.append(path)
+    return paths
 
 
 def deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:

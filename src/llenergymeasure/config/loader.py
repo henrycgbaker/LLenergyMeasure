@@ -21,7 +21,7 @@ from typing import Any
 import yaml
 from pydantic import ValidationError
 
-from llenergymeasure.config._dict_utils import deep_merge
+from llenergymeasure.config._dict_utils import deep_merge, dotted_leaf_paths
 from llenergymeasure.config.grid import SkippedConfig, expand_grid
 from llenergymeasure.config.models import (
     RETIRED_HARNESS_KEY_MSG,
@@ -187,7 +187,7 @@ def load_study_config(
     cli_override_paths: frozenset[str] = frozenset()
     if cli_overrides:
         raw = deep_merge(raw, cli_overrides)
-        cli_override_paths = frozenset(_dotted_leaf_paths(cli_overrides))
+        cli_override_paths = frozenset(dotted_leaf_paths(cli_overrides))
 
     # Strip version key (same as experiment loader)
     raw.pop("version", None)
@@ -243,22 +243,6 @@ def load_study_config(
 # =============================================================================
 # Private helpers
 # =============================================================================
-
-
-def _dotted_leaf_paths(data: dict[str, Any], prefix: str = "") -> list[str]:
-    """Dotted paths of every leaf in a (possibly dotted-keyed) override dict.
-
-    CLI overrides arrive either nested (``{"task": {"model": "m"}}``) or with
-    dotted keys (``{"task.model": "m"}``); both normalise to the same paths.
-    """
-    paths: list[str] = []
-    for key, value in data.items():
-        path = f"{prefix}{key}"
-        if isinstance(value, dict) and value:
-            paths.extend(_dotted_leaf_paths(value, f"{path}."))
-        else:
-            paths.append(path)
-    return paths
 
 
 def _load_file(path: Path | str) -> dict[str, Any]:

@@ -400,7 +400,9 @@ def _apply_overrides_to_resolved(
     if not overrides:
         return study
 
-    flat = _dotted_paths(overrides)
+    from llenergymeasure.config._dict_utils import dotted_leaf_paths
+
+    flat = set(dotted_leaf_paths(overrides))
     if flat != {"output.results_dir"}:
         unexpected = sorted(flat - {"output.results_dir"})
         raise ConfigError(
@@ -422,18 +424,6 @@ def _apply_overrides_to_resolved(
             },
         }
     )
-
-
-def _dotted_paths(data: dict[str, Any], prefix: str = "") -> set[str]:
-    """Dotted leaf paths of a nested override dict."""
-    paths: set[str] = set()
-    for key, value in data.items():
-        path = f"{prefix}{key}"
-        if isinstance(value, dict) and value:
-            paths |= _dotted_paths(value, f"{path}.")
-        else:
-            paths.add(path)
-    return paths
 
 
 def _to_study_config(

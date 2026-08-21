@@ -56,7 +56,7 @@ from typing import TYPE_CHECKING, Any, Final
 
 from pydantic import BaseModel
 
-from llenergymeasure.config._dict_utils import deep_merge
+from llenergymeasure.config._dict_utils import deep_merge, dotted_leaf_paths
 from llenergymeasure.config.ssot import (
     ALL_ENGINES,
     DEFAULT_CYCLE_GAP_SECONDS,
@@ -243,22 +243,10 @@ def _record_provenance(
         for depth in range(1, len(parts)):
             provenance.pop(".".join(parts[:depth]), None)
         if isinstance(value, dict) and value:
-            for leaf in _leaf_paths(value, f"{path}."):
+            for leaf in dotted_leaf_paths(value, f"{path}."):
                 provenance[leaf] = source
         else:
             provenance[path] = source
-
-
-def _leaf_paths(data: Mapping[str, Any], prefix: str = "") -> list[str]:
-    """Dotted paths of every leaf in ``data`` (a non-dict, or an empty dict)."""
-    paths: list[str] = []
-    for key, value in data.items():
-        path = f"{prefix}{key}"
-        if isinstance(value, dict) and value:
-            paths.extend(_leaf_paths(value, f"{path}."))
-        else:
-            paths.append(path)
-    return paths
 
 
 @dataclass(frozen=True)
