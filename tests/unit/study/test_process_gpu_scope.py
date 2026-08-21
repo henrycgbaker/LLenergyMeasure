@@ -9,11 +9,31 @@ the in-process single-experiment leg says out loud that it cannot.
 from __future__ import annotations
 
 import logging
+import os
 
 import pytest
 
 from llenergymeasure.study.single import _warn_unenforceable_gpu_scope
 from llenergymeasure.study.worker import _cuda_visible_devices_value, _scope_to_gpu_indices
+
+
+@pytest.fixture(autouse=True)
+def _hermetic_cuda_visible_devices():
+    """Snapshot and restore CUDA_VISIBLE_DEVICES around every test in this file.
+
+    The code under test (``_scope_to_gpu_indices``) writes ``os.environ``
+    directly, and pytest's MonkeyPatch records nothing for a key that was absent
+    when ``delenv(raising=False)`` ran - so without this, a value like ``"2,3"``
+    leaks into the process and poisons later tests in the same run (translation
+    via ``to_cuda_logical_indices`` then silently empties unrelated index lists).
+    """
+    saved = os.environ.get("CUDA_VISIBLE_DEVICES")
+    yield
+    if saved is None:
+        os.environ.pop("CUDA_VISIBLE_DEVICES", None)
+    else:
+        os.environ["CUDA_VISIBLE_DEVICES"] = saved
+
 
 # ---------------------------------------------------------------------------
 # Spawned worker: CUDA_VISIBLE_DEVICES from the allowed physical indices
@@ -32,15 +52,11 @@ def test_scope_sets_cuda_visible_devices(monkeypatch) -> None:
     """An allowlist becomes the process's CUDA_VISIBLE_DEVICES."""
     monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
     _scope_to_gpu_indices([2, 3])
-    import os
-
     assert os.environ["CUDA_VISIBLE_DEVICES"] == "2,3"
 
 
 def test_scope_is_a_noop_without_an_allowlist(monkeypatch) -> None:
     """No allowlist leaves the variable exactly as it was - today's behaviour."""
-    import os
-
     monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
     _scope_to_gpu_indices(None)
     assert "CUDA_VISIBLE_DEVICES" not in os.environ
@@ -49,8 +65,6 @@ def test_scope_is_a_noop_without_an_allowlist(monkeypatch) -> None:
 def test_scope_overrides_an_inherited_value(monkeypatch) -> None:
     """The allowlist is absolute: it names physical devices, so it replaces any
     inherited visibility rather than indexing into it."""
-    import os
-
     monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "4,5,6,7")
     _scope_to_gpu_indices([1])
     assert os.environ["CUDA_VISIBLE_DEVICES"] == "1"
@@ -97,8 +111,6 @@ def test_in_process_leg_silent_without_a_scope(caplog) -> None:
 
 def test_in_process_leg_never_mutates_the_callers_environment(monkeypatch) -> None:
     """The warning is the whole of the in-process response: no env is touched."""
-    import os
-
     monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
     _warn_unenforceable_gpu_scope([2, 3])
     assert "CUDA_VISIBLE_DEVICES" not in os.environ
