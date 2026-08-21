@@ -110,7 +110,7 @@ class UserUIConfig(BaseModel):
 
 
 class UserExecutionConfig(BaseModel):
-    """Execution gap preferences (machine-local thermal defaults)."""
+    """Execution preferences: machine-local thermal defaults and GPU scoping."""
 
     model_config = {"extra": "forbid"}
 
@@ -122,6 +122,49 @@ class UserExecutionConfig(BaseModel):
     cycle_gap_seconds: float = Field(
         default=DEFAULT_CYCLE_GAP_SECONDS, ge=0.0, description="Thermal gap between cycles"
     )
+    gpu_indices: list[int] | None = Field(
+        default=None,
+        description=(
+            "HOST GPU indices (as `nvidia-smi` shows) llem is allowed to use on this "
+            "machine. When set, llem only ever uses these physical devices - for "
+            "compute placement AND for energy measurement - on both the container and "
+            "the process runner path. null (the default) = every visible GPU, the "
+            "historical behaviour. A study that omits `study_execution.gpu_indices` "
+            "inherits this set; a study that declares its own indices must stay inside "
+            "it or resolution fails. Placement metadata only: never part of any config "
+            "or study-design hash, so restricting llem to a subset of the host's GPUs "
+            "never changes dedup grouping or study identity. `LLEM_DOCKER_GPUS` is the "
+            "per-invocation escape hatch and still wins at `docker run` time."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _validate_gpu_indices(self) -> UserExecutionConfig:
+        """Reject empty, negative, or duplicate GPU indices (fail loudly).
+
+        Absence is expressed as ``None`` (every visible GPU); an empty list is a
+        mistake, not "all". Negative indices and duplicates cannot name real
+        distinct host devices. Deliberately no hardware check here: the config
+        must load on a machine with a remote Docker daemon or no NVIDIA driver at
+        all. Comparing the allowlist against the host's actual device count is a
+        fail-soft preflight warning instead.
+        """
+        if self.gpu_indices is None:
+            return self
+        if not self.gpu_indices:
+            raise ValueError(
+                "execution.gpu_indices must not be empty; omit it (null) to allow all GPUs."
+            )
+        if any(i < 0 for i in self.gpu_indices):
+            raise ValueError(
+                f"execution.gpu_indices must be non-negative host device indices, "
+                f"got {self.gpu_indices}."
+            )
+        if len(set(self.gpu_indices)) != len(self.gpu_indices):
+            raise ValueError(
+                f"execution.gpu_indices must not contain duplicates, got {self.gpu_indices}."
+            )
+        return self
 
 
 class UserServerConfig(BaseModel):
