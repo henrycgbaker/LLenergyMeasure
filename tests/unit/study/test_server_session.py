@@ -1081,3 +1081,43 @@ class TestGpuIndexScoping:
         """No scope keeps the historical single-device resolution."""
         session = _make_session(FakeEngine(), runner=_fake_runner())
         assert session._measurement_gpu_indices() == [0]
+
+    @staticmethod
+    def _container_session(gpu_indices: list[int] | None) -> ServerSession:
+        from llenergymeasure.config.runner_spec import RunnerSpec
+
+        runner = _fake_runner(gpu_indices=gpu_indices)
+        spec = RunnerSpec(mode="container", image="img:v1", source="yaml")
+        return ServerSession(
+            runner, _server_config(), spec, config_hash="h", cycle=1, index=1, engine=FakeEngine()
+        )
+
+    def test_measurement_follows_an_env_pinned_container_placement(self, monkeypatch) -> None:
+        """LLEM_DOCKER_GPUS wins the container placement, so measurement follows it.
+
+        Placement resolves env>config at docker run time; sampling the config
+        scope while the container runs elsewhere would measure idle devices.
+        """
+        monkeypatch.setenv("LLEM_DOCKER_GPUS", "device=5")
+        session = self._container_session([2, 3])
+        assert session._measurement_gpu_indices() == [5]
+
+    def test_unverifiable_env_selector_keeps_the_resolved_scope(self, monkeypatch) -> None:
+        """A selector naming no integer devices (bare count) cannot be followed."""
+        monkeypatch.setenv("LLEM_DOCKER_GPUS", "2")
+        session = self._container_session([2, 3])
+        assert session._measurement_gpu_indices() == [2]
+
+    def test_container_measurement_keeps_the_scope_without_an_env_selector(
+        self, monkeypatch
+    ) -> None:
+        """No env selector: the resolved scope is the placement, so sample it."""
+        monkeypatch.delenv("LLEM_DOCKER_GPUS", raising=False)
+        session = self._container_session([2, 3])
+        assert session._measurement_gpu_indices() == [2]
+
+    def test_process_placement_never_reads_the_env_selector(self, monkeypatch) -> None:
+        """LLEM_DOCKER_GPUS only reaches docker run; a server subprocess ignores it."""
+        monkeypatch.setenv("LLEM_DOCKER_GPUS", "device=5")
+        session = _make_session(FakeEngine(), runner=_fake_runner(gpu_indices=[2, 3]))
+        assert session._measurement_gpu_indices() == [2]

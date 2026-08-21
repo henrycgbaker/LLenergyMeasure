@@ -1803,14 +1803,24 @@ class ServerSession:
         # in THIS process, never inside the server, so they address host device
         # indices for both placements: a sibling server container is scoped by
         # --gpus and a server subprocess by CUDA_VISIBLE_DEVICES, but neither
-        # re-enumerates anything for the sampler here. Drawing them from the
-        # study's allowed set is therefore what makes energy land on the devices
-        # the server actually occupies.
+        # re-enumerates anything for the sampler here. Measurement must follow
+        # PLACEMENT, and for a container placement the effective --gpus selector
+        # is env>config (LLEM_DOCKER_GPUS wins): when that selector names integer
+        # devices, the samplers monitor exactly those. An unverifiable selector
+        # (UUID / count form) falls back to the resolved scope - the existing
+        # conflict warning already flags it as uncheckable. The process placement
+        # never reads the env var, so there the resolved scope IS the placement.
+        from llenergymeasure.config.ssot import RUNNER_CONTAINER
         from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 
-        return _resolve_gpu_indices(
-            self.config, allowed_gpu_indices=self._runner.study.study_execution.gpu_indices
-        )
+        allowed = self._runner.study.study_execution.gpu_indices
+        if self.spec is not None and self.spec.mode == RUNNER_CONTAINER:
+            from llenergymeasure.utils.env_config import docker_gpus, selector_physical_indices
+
+            placed = selector_physical_indices(docker_gpus(allowed))
+            if placed is not None:
+                allowed = placed
+        return _resolve_gpu_indices(self.config, allowed_gpu_indices=allowed)
 
     # -- progress + cleanup --------------------------------------------------
 
