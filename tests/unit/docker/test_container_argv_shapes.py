@@ -402,9 +402,7 @@ def test_server_argv_is_pinned_whole_anonymous_with_gpu_pin(pinned_host: None):
 # ---------------------------------------------------------------------------
 
 
-def _all_three_shapes(**overrides: object) -> dict[str, list[str]]:
-    labels = overrides.get("labels")
-    assert labels is None or isinstance(labels, dict)
+def _all_three_shapes(labels: dict[str, str] | None = None) -> dict[str, list[str]]:
     return {
         "offline": cmd.build_docker_cmd(
             image="llem-transformers:0.7.0",
