@@ -143,8 +143,8 @@ def test_launch_container_uses_explicit_image_override(monkeypatch):
 def test_launch_routes_to_process_leg(monkeypatch):
     captured: dict = {}
 
-    def fake_launch_process(argv, *, base_url, engine, log_path):
-        captured.update(argv=argv, base_url=base_url, engine=engine)
+    def fake_launch_process(argv, *, base_url, engine, log_path, gpu_indices=None):
+        captured.update(argv=argv, base_url=base_url, engine=engine, gpu_indices=gpu_indices)
         return ServerHandle(base_url=base_url, engine=engine, log_path=log_path)
 
     monkeypatch.setattr(sl, "allocate_free_port", lambda: 9222)
@@ -156,6 +156,24 @@ def test_launch_routes_to_process_leg(monkeypatch):
     )
     assert captured["argv"] == ["vllm", "serve", "m", "--port", "9222"]
     assert handle.base_url == "http://127.0.0.1:9222"
+
+
+def test_launch_scopes_the_process_leg_to_the_placement_gpus(monkeypatch):
+    """The placement's physical devices reach the process launch, not just the container."""
+    captured: dict = {}
+
+    def fake_launch_process(argv, *, base_url, engine, log_path, gpu_indices=None):
+        captured.update(gpu_indices=gpu_indices)
+        return ServerHandle(base_url=base_url, engine=engine, log_path=log_path)
+
+    monkeypatch.setattr(sl, "allocate_free_port", lambda: 9222)
+    monkeypatch.setattr(sl, "launch_process_server", fake_launch_process)
+
+    VLLMEngine().launch(
+        make_config(engine="vllm", model="m"),
+        ServerPlacement(mode="process", gpu_indices=[2, 3]),
+    )
+    assert captured["gpu_indices"] == [2, 3]
 
 
 # ---------------------------------------------------------------------------
