@@ -1222,6 +1222,70 @@ class TestResolveGpuIndices:
         config = ExperimentConfig(task={"model": "gpt2"}, engine="vllm", serving_mode="offline")
         assert _resolve_gpu_indices(config) == [0]
 
+    # -- allowlist clamping: every branch draws from the allowed physical set --
+
+    def test_allowlist_clamps_the_single_gpu_default(self):
+        """The single-device default takes the first ALLOWED device, not physical 0."""
+        from llenergymeasure.device.gpu_info import _resolve_gpu_indices
+
+        config = self._make_vllm_config(tp=1)
+        assert _resolve_gpu_indices(config, allowed_gpu_indices=[2, 3]) == [2]
+
+    def test_allowlist_clamps_the_parallelism_branch(self):
+        """A TP=2 run inside a 3-device allowlist monitors its first two devices."""
+        from llenergymeasure.device.gpu_info import _resolve_gpu_indices
+
+        config = self._make_vllm_config(tp=2)
+        assert _resolve_gpu_indices(config, allowed_gpu_indices=[1, 2, 3]) == [1, 2]
+
+    def test_allowlist_narrower_than_the_parallelism_request_warns(self, caplog):
+        """Over-requesting parallelism monitors the allowed devices and says so."""
+        import logging
+
+        from llenergymeasure.device.gpu_info import _resolve_gpu_indices
+
+        config = self._make_vllm_config(tp=4)
+        with caplog.at_level(logging.WARNING):
+            assert _resolve_gpu_indices(config, allowed_gpu_indices=[2, 3]) == [2, 3]
+        assert any("only [2, 3] are allowed" in rec.getMessage() for rec in caplog.records)
+
+    def test_allowlist_replaces_the_nvml_census(self, monkeypatch):
+        """device_map='auto' under an allowlist measures the allowed set, not every device.
+
+        The NVML census branch must not run at all: "all visible GPUs" on a
+        restricted machine means the allowed devices.
+        """
+        import sys
+
+        from llenergymeasure.device.gpu_info import _resolve_gpu_indices
+
+        monkeypatch.setitem(sys.modules, "pynvml", self._make_mock_pynvml(device_count=8))
+        config = self._make_pytorch_config(device_map="auto")
+        assert _resolve_gpu_indices(config, allowed_gpu_indices=[6, 7]) == [6, 7]
+
+    def test_no_allowlist_keeps_the_historical_indices(self, monkeypatch):
+        """Passing None is exactly today's behaviour on every branch."""
+        import sys
+
+        from llenergymeasure.device.gpu_info import _resolve_gpu_indices
+
+        monkeypatch.setitem(sys.modules, "pynvml", self._make_mock_pynvml(device_count=4))
+        assert _resolve_gpu_indices(self._make_vllm_config(tp=2), None) == [0, 1]
+        assert _resolve_gpu_indices(self._make_vllm_config(tp=1), None) == [0]
+        assert _resolve_gpu_indices(self._make_pytorch_config(device_map="auto"), None) == [
+            0,
+            1,
+            2,
+            3,
+        ]
+
+    def test_allowlist_clamps_an_unrecognised_engine(self):
+        """Even the unrecognised-engine fallback stays inside the allowed set."""
+        from llenergymeasure.device.gpu_info import _resolve_gpu_indices
+
+        config = ExperimentConfig.model_construct(task={"model": "gpt2"}, engine="not-an-engine")
+        assert _resolve_gpu_indices(config, allowed_gpu_indices=[5]) == [5]
+
 
 # ---------------------------------------------------------------------------
 # Energy scope is self-documenting through data
