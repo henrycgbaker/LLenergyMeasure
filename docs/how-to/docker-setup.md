@@ -565,24 +565,57 @@ The `--gpus all` flag is missing from the `docker run` command.
 Docker commands manually, ensure you include `--gpus all` (or `--gpus device=0` for a specific
 GPU).
 
-To make `llem` itself target specific GPUs on a shared host, there are two levers:
+To make `llem` itself target specific GPUs on a shared host, there are three levers:
 
-- **`LLEM_DOCKER_GPUS` (env var, host-wide).** Set it to the `docker run --gpus` value (empty
-  means every visible GPU). Quote multi-device values so the shell keeps the comma, e.g.
-  `LLEM_DOCKER_GPUS="device=2,3"`.
+- **`execution.gpu_indices` (user config, machine-wide).** In
+  `~/.config/llenergymeasure/config.yaml`, the list of host GPU indices `llem` is allowed to use
+  on this machine. Absent (the default) means every visible GPU. This is the right lever when
+  the constraint belongs to the machine rather than to a study - a shared box where two GPUs are
+  yours and the rest are somebody else's:
+
+  ```yaml
+  execution:
+    gpu_indices: [2, 3]
+  ```
+
+  A study that declares no GPUs of its own inherits this set. A study that declares GPUs must
+  name a subset of it; naming a device the allowlist forbids is refused at load time, with both
+  sets in the error, rather than being quietly narrowed.
+
 - **`study_execution.gpu_indices` (study YAML, per study).** A list of host GPU indices, e.g.
-  `gpu_indices: [2, 3]`, translated to `--gpus device=2,3`. This lets a study YAML declare its
-  own GPU placement without an env var.
+  `gpu_indices: [2, 3]`. This lets a study YAML declare its own GPU placement without an env
+  var, and lets one study use fewer devices than the machine allows.
 
-Both are **host device indices** as the NVIDIA driver / NVML enumerate them (what `nvidia-smi`
-shows). Restricting at the docker level (rather than setting `CUDA_VISIBLE_DEVICES` inside the
-container) keeps CUDA and NVML indices consistent inside the container - both re-enumerate from
-0 - so energy attribution addresses the correct physical device without any index translation.
+- **`LLEM_DOCKER_GPUS` (env var, per invocation).** Set it to the `docker run --gpus` value
+  (empty means every visible GPU). Quote multi-device values so the shell keeps the comma, e.g.
+  `LLEM_DOCKER_GPUS="device=2,3"`.
 
-**Precedence: `LLEM_DOCKER_GPUS` (env) overrides `study_execution.gpu_indices` (config).** When
-both are set the env wins and `llem` logs a one-line warning; the config indices are ignored.
-Because the env fully overrides the config, the two never compose - there is no "config indices
-index into the env-restricted set" case to reason about. Pick one lever per run.
+All three take **host device indices** as the NVIDIA driver / NVML enumerate them (what
+`nvidia-smi` shows), and all three scope both COMPUTE and MEASUREMENT: `llem` only ever places
+work on, and only ever samples energy from, the devices you named.
+
+How the scope is applied depends on the runner. The **container runner** restricts at the docker
+level (`--gpus device=2,3`) rather than with `CUDA_VISIBLE_DEVICES` inside the container, which
+keeps CUDA and NVML indices consistent in there - both re-enumerate from 0 - so energy
+attribution addresses the correct physical device without any index translation. The **process
+runner** has no docker level to use, so it sets `CUDA_VISIBLE_DEVICES` on the worker (and on a
+launched engine server). The engine then sees the allowed devices as `0..n-1` while `llem`'s
+NVML sampling keeps addressing them at their real host indices, so compute and energy still land
+on the same hardware.
+
+One exception, and `llem` says so in a warning when it applies: a single-experiment run on the
+process runner executes in the calling process, where setting `CUDA_VISIBLE_DEVICES` would mean
+mutating your own environment. There the measurement is scoped but compute is not. Export
+`CUDA_VISIBLE_DEVICES` yourself before invoking `llem`, or use the container runner, if you need
+the scope enforced for that case.
+
+**Precedence: `LLEM_DOCKER_GPUS` (env) > `study_execution.gpu_indices` (study YAML) >
+`execution.gpu_indices` (user config).** The env var is a deliberate per-invocation override, so
+it wins outright at `docker run` time and never composes with the config - there is no "config
+indices index into the env-restricted set" case to reason about. When it overrides the resolved
+scope, and again when it names a device outside it, `llem` logs a one-line warning naming both
+sets. A UUID or count selector cannot be checked against an integer scope at all, and is warned
+about as unverifiable.
 
 For tensor-parallel runs, `llem` also forwards every non-empty `NCCL_*` host variable into each
 workload container it launches - the experiment container, the baseline container, and the
