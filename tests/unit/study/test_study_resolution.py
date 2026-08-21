@@ -659,3 +659,33 @@ def test_yaml_null_gap_falls_through_to_execution_defaults() -> None:
     )
 
     assert resolved.study_execution.experiment_gap_seconds == 77.0
+
+
+def test_provenance_keeps_labelled_fields_at_default_value(tmp_path, monkeypatch):
+    """An override or swept axis equal to the pydantic default keeps its entry.
+
+    The sidecar trim is presentation only; it must never erase a label the merges
+    emitted. n_prompts is overridden to its own default here - the provenance
+    still records the call_site override.
+    """
+    monkeypatch.setattr(
+        "llenergymeasure.config.user_config.load_user_config", lambda **_kw: UserConfig()
+    )
+    path = _write_study(
+        tmp_path,
+        {
+            "study_name": "prov-default-equal",
+            "task": {"model": "gpt2"},
+            "engine": "transformers",
+            "serving_mode": "offline",
+        },
+    )
+    from llenergymeasure.config.models import TaskConfig
+
+    default_value = TaskConfig.model_fields["dataset"].default_factory().n_prompts
+    study = load_study(path, cli_overrides={"task": {"dataset": {"n_prompts": default_value}}})
+
+    (log,) = study.provenance_logs.values()
+    entry = log["task.dataset.n_prompts"]
+    assert entry["source"] == "call_site"
+    assert entry["effective"] == default_value

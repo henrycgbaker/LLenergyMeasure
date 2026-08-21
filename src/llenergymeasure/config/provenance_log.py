@@ -9,7 +9,11 @@ the shared source vocabulary (``call_site`` / ``sweep`` / ``yaml``).
 
 The comparison against Pydantic defaults that happens here is presentation only:
 fields whose effective value equals the built-in default are trimmed from the log
-to keep the sidecar small. It never decides a field's source.
+to keep the sidecar small - EXCEPT fields a merge actually labelled (a call-site
+override or a swept axis), which are kept even at the default value: an override
+that happens to equal the default is still an override, and erasing its label
+would lose real provenance. The default comparison never decides a field's
+source.
 
 The result is folded into the per-experiment ``config.json`` sidecar as its
 ``provenance`` section (there is no standalone ``_resolution.json`` file).
@@ -50,7 +54,9 @@ def format_experiment_provenance(
     CLI-override merge set it, ``sweep`` when the sweep expansion varied it,
     ``yaml`` otherwise - and trims fields whose effective value equals the
     Pydantic default (presentation only; a trimmed field was simply never
-    overridden by anything).
+    overridden by anything). A field the merges labelled is never trimmed: a
+    call-site override or swept axis sitting at the default value keeps its
+    entry, because its provenance is real.
 
     Args:
         config_dict: Fully resolved experiment config as a dict (from model_dump()).
@@ -77,8 +83,11 @@ def format_experiment_provenance(
             continue
 
         # Presentation trim: a value equal to the built-in default was never
-        # overridden by any layer, so it carries no provenance worth recording.
-        if key in flat_defaults and _values_equal(value, flat_defaults[key]):
+        # overridden by any layer, so it carries no provenance worth recording -
+        # unless a merge DID label it (an override or swept axis that happens to
+        # equal the default is still an override), in which case it stays.
+        labelled = key in cli_override_paths or key in swept_paths
+        if not labelled and key in flat_defaults and _values_equal(value, flat_defaults[key]):
             continue
 
         if key in cli_override_paths:
