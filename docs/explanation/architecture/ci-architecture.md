@@ -283,11 +283,11 @@ party that knows which devices are free; an index chosen in CI would be a guess.
 Observed on the runner, a `--gpus 1` container was granted host device 1, not
 device 0.
 
-The GPU jobs serialize because the shared runner guarantees at most two free
-devices, so concurrent GPU jobs collide on device allocation. `engine-smoke`
-therefore `needs` the `transformers` job (waiting for it to finish and release
-its GPU before the smoke legs claim one), and the smoke matrix runs
-`max-parallel: 1` because all three legs pin the same device.
+The GPU jobs serialize because the shared runner has only three free devices
+(GPU 0 carries a foreign workload), so concurrent GPU jobs collide on device
+allocation. `engine-smoke` therefore `needs` the `transformers` job (waiting for
+it to finish and release its GPU before the smoke legs claim one), and the smoke
+matrix runs `max-parallel: 1` because all three legs pin the same device.
 
 ### Triggers
 

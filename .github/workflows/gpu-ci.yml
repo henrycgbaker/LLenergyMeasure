@@ -16,8 +16,9 @@ name: GPU CI
 #     never on energy values (power numbers in CI are noise).
 #
 # GPU jobs serialize (engine-smoke `needs` transformers; smoke matrix is
-# `max-parallel: 1`) because the shared runner guarantees at most two free
-# devices, so concurrent GPU jobs collide on device allocation.
+# `max-parallel: 1`) because the shared runner has only three free devices
+# (GPU 0 carries a foreign workload, see the engine-smoke env block below), so
+# concurrent GPU jobs collide on device allocation.
 #
 # Triggers:
 #   1. Manual:      workflow_dispatch (runs all jobs; run_gpu defaults true).
