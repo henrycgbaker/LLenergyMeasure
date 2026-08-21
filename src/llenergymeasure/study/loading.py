@@ -109,7 +109,7 @@ def resolve_study(
         execution_defaults=execution_defaults,
         overrides=overrides,
     )
-    execution = _validated_execution(settings.execution)
+    execution = _validated_execution(settings.execution, settings.provenance)
 
     # Overlay the tool-wide user-config server warmup onto each declared
     # server config BEFORE dedup, so the resolved-config hash - and hence dedup -
@@ -326,12 +326,17 @@ def _resolve_settings(
     )
 
 
-def _validated_execution(resolved: dict[str, Any]) -> ExecutionConfig:
+def _validated_execution(
+    resolved: dict[str, Any], provenance: Mapping[str, str] | None = None
+) -> ExecutionConfig:
     """Validate the chain's resolved execution block back into an ExecutionConfig.
 
     Raises:
         ConfigError: A caller-supplied layer named a field the execution block does
-            not have, or gave one a value it will not take.
+            not have, or gave one a value it will not take. The error names the
+            PARAMETER that supplied the offending value (``execution_defaults`` or
+            ``overrides``), read from the provenance the merge emitted, so the
+            caller knows which argument to fix.
     """
     try:
         return ExecutionConfig.model_validate(resolved)
@@ -340,9 +345,20 @@ def _validated_execution(resolved: dict[str, Any]) -> ExecutionConfig:
         # so a failure here comes from a caller-supplied layer (execution_defaults
         # or an override). Name the parameter rather than emitting a bare pydantic
         # traceback about a study block the caller never wrote.
-        details = "; ".join(
-            f"{'.'.join(str(p) for p in e['loc'])}: {e['msg']}" for e in exc.errors()
-        )
+        from llenergymeasure.config.ssot import SOURCE_CALL_SITE, SOURCE_CALL_SITE_DEFAULT
+
+        param_names = {
+            SOURCE_CALL_SITE_DEFAULT: "execution_defaults",
+            SOURCE_CALL_SITE: "overrides",
+        }
+
+        def _blame(loc: tuple[Any, ...]) -> str:
+            field_path = ".".join(str(p) for p in loc)
+            source = (provenance or {}).get(f"study_execution.{field_path}")
+            supplied_by = param_names.get(source or "", source)
+            return f"{field_path} (from {supplied_by}): " if supplied_by else f"{field_path}: "
+
+        details = "; ".join(f"{_blame(e['loc'])}{e['msg']}" for e in exc.errors())
         raise ConfigError(
             f"Invalid execution settings: {details}. Keys must be study_execution "
             f"fields ({', '.join(sorted(ExecutionConfig.model_fields))})."
