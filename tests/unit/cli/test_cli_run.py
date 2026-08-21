@@ -96,7 +96,7 @@ def _make_capture_load() -> tuple:
     """
     captured: list = []
 
-    def _capture(path, cli_overrides=None, *, execution_defaults=None):
+    def _capture(path, cli_overrides=None, *, execution_defaults=None, overrides=None):
         captured.append(execution_defaults)
         mock = MagicMock()
         mock.experiments = [MagicMock()]

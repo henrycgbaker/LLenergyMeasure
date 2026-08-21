@@ -276,7 +276,7 @@ class TestExpandGridSweepGroups:
                 ],
             },
         }
-        valid, _skipped = expand_grid(raw)
+        valid, _skipped, _swept = expand_grid(raw)
         assert len(valid) == 6  # 2 dtype x 3 compilation variants
         # Check that compile variants are present
         compile_values = [c.transformers.llem_execution.torch_compile for c in valid]
@@ -296,7 +296,7 @@ class TestExpandGridSweepGroups:
                 ],
             },
         }
-        valid, _skipped = expand_grid(raw)
+        valid, _skipped, _swept = expand_grid(raw)
         assert len(valid) == 2
         # One has load_in_8bit, one doesn't
         quant_flags = [
@@ -325,7 +325,7 @@ class TestExpandGridSweepGroups:
                 ],
             },
         }
-        valid, _skipped = expand_grid(raw)
+        valid, _skipped, _swept = expand_grid(raw)
         assert len(valid) == 4  # 2 compilation x 2 quantisation
 
     def test_groups_crossed_with_axes(self):
@@ -345,7 +345,7 @@ class TestExpandGridSweepGroups:
                 ],
             },
         }
-        valid, _skipped = expand_grid(raw)
+        valid, _skipped, _swept = expand_grid(raw)
         assert len(valid) == 4  # 2 dtype x 2 compilation
 
     def test_cross_section_group_overlay(self):
@@ -365,7 +365,7 @@ class TestExpandGridSweepGroups:
                 ],
             },
         }
-        valid, _skipped = expand_grid(raw)
+        valid, _skipped, _swept = expand_grid(raw)
         assert len(valid) == 2
         beam_config = next(
             c
@@ -402,7 +402,7 @@ class TestExpandGridSweepGroups:
                 },
             ],
         }
-        valid, _skipped = expand_grid(raw)
+        valid, _skipped, _swept = expand_grid(raw)
         # 2 dtype x 2 compilation = 4 from sweep, + 1 explicit = 5
         assert len(valid) == 5
 
@@ -424,7 +424,7 @@ class TestExpandGridSweepGroups:
                 ],
             },
         }
-        valid, _skipped = expand_grid(raw)
+        valid, _skipped, _swept = expand_grid(raw)
         pytorch_configs = [c for c in valid if c.engine == "transformers"]
         vllm_configs = [c for c in valid if c.engine == "vllm"]
         # PyTorch: 2 dtype x 2 compilation = 4
@@ -448,7 +448,7 @@ class TestExpandGridSweepGroups:
                 ],
             },
         }
-        valid, _skipped = expand_grid(raw)
+        valid, _skipped, _swept = expand_grid(raw)
         # 1 baseline + 2 from mini-grid = 3
         assert len(valid) == 3
         quant_types = [
@@ -475,7 +475,7 @@ class TestExpandGridSweepGroups:
                 ],
             },
         }
-        valid, _skipped = expand_grid(raw)
+        valid, _skipped, _swept = expand_grid(raw)
         assert len(valid) == 2
 
 
@@ -502,7 +502,7 @@ class TestExpandGridSweepGroupsMultiBackend:
                 ],
             },
         }
-        valid, _skipped = expand_grid(raw)
+        valid, _skipped, _swept = expand_grid(raw)
         pytorch_configs = [c for c in valid if c.engine == "transformers"]
         vllm_configs = [c for c in valid if c.engine == "vllm"]
         # PyTorch: 2 dtype x 2 compilation = 4
@@ -550,7 +550,7 @@ class TestCombinatorialWarnings:
             },
         }
         with caplog.at_level(logging.INFO, logger="llenergymeasure.config.grid"):
-            valid, _ = expand_grid(raw)
+            valid, _, _swept = expand_grid(raw)
         assert len(valid) == 120
         assert any("Large study" in r.message for r in caplog.records)
 
@@ -580,8 +580,8 @@ class TestHashStabilityWithGroups:
                 ],
             },
         }
-        valid1, _ = expand_grid(raw)
-        valid2, _ = expand_grid(raw)
+        valid1, _, _swept = expand_grid(raw)
+        valid2, _, _swept = expand_grid(raw)
         h1 = compute_study_design_hash(valid1)
         h2 = compute_study_design_hash(valid2)
         assert h1 == h2

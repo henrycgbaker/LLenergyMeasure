@@ -1,13 +1,17 @@
-"""Unit tests for runner resolution precedence chain.
+"""Unit tests for runner resolution, end to end.
+
+Which config layer wins is decided by the precedence chain and the mechanics then
+turn the winning pin into a runner, so these tests drive both together through
+``_resolve`` / ``_resolve_study`` below - the same two steps a real run takes.
 
 Tests cover:
   - parse_runner_value: "process", "container", "container:image" forms, plus the
     clean-break rejection of the legacy "local"/"docker"/"docker:image" vocabulary
   - is_docker_available: PATH inspection for docker + NVIDIA CT tools
   - is_running_in_container / is_container_socket_available: file-existence detection
-  - resolve_runner: full precedence chain (env > yaml > user_config > auto > default),
+  - the full precedence chain (env > yaml > user_config > auto > default),
     including the container-self-aware auto-detection branch
-  - resolve_study_runners: multi-engine resolution
+  - multi-engine resolution
 """
 
 from __future__ import annotations
@@ -16,9 +20,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from llenergymeasure.config.runner_spec import RunnerSpec
+from llenergymeasure.config.precedence import resolve_study_settings
+from llenergymeasure.config.runner_spec import RunnerPin, RunnerSpec, pins_from_resolved
 from llenergymeasure.config.ssot import ENV_RUNNER_PREFIX
-from llenergymeasure.config.user_config import UserRunnersConfig
+from llenergymeasure.config.user_config import UserConfig, UserRunnersConfig
 from llenergymeasure.infra.runner_resolution import (
     is_container_socket_available,
     is_docker_available,
@@ -27,6 +32,39 @@ from llenergymeasure.infra.runner_resolution import (
     resolve_runner,
     resolve_study_runners,
 )
+
+
+def _pins(
+    yaml_runners: dict[str, str] | None = None,
+    user_config: UserRunnersConfig | None = None,
+) -> dict[str, RunnerPin]:
+    """The runner pins the precedence chain resolves from these layers."""
+    settings = resolve_study_settings(
+        study_output={},
+        study_execution={},
+        study_runners=yaml_runners,
+        study_images=None,
+        user_config=UserConfig(runners=user_config) if user_config is not None else None,
+    )
+    return pins_from_resolved(settings.runners, settings.provenance, section="runners")
+
+
+def _resolve(
+    engine: str,
+    yaml_runners: dict[str, str] | None = None,
+    user_config: UserRunnersConfig | None = None,
+) -> RunnerSpec:
+    """Resolve one engine's runner the way a run does: chain, then mechanics."""
+    return resolve_runner(engine, _pins(yaml_runners, user_config).get(engine))
+
+
+def _resolve_study(
+    engines: list[str],
+    yaml_runners: dict[str, str] | None = None,
+    user_config: UserRunnersConfig | None = None,
+) -> dict[str, RunnerSpec]:
+    """Resolve a whole study's runners the way a run does."""
+    return resolve_study_runners(engines, _pins(yaml_runners, user_config))
 
 
 @pytest.fixture(autouse=True)
@@ -181,7 +219,7 @@ class TestResolveRunner:
         yaml_runners = {"vllm": "process"}
         user_config = UserRunnersConfig(vllm="process")
 
-        spec = resolve_runner("vllm", yaml_runners=yaml_runners, user_config=user_config)
+        spec = _resolve("vllm", yaml_runners=yaml_runners, user_config=user_config)
 
         assert spec.source == "env"
         assert spec.mode == "container"
@@ -191,7 +229,7 @@ class TestResolveRunner:
         """LLEM_RUNNER_TRANSFORMERS=container (bare) sets mode=container, image=None."""
         monkeypatch.setenv(f"{ENV_RUNNER_PREFIX}TRANSFORMERS", "container")
 
-        spec = resolve_runner("transformers")
+        spec = _resolve("transformers")
 
         assert spec.source == "env"
         assert spec.mode == "container"
@@ -200,7 +238,7 @@ class TestResolveRunner:
     def test_env_var_process_overrides_yaml_container(self, monkeypatch):
         """Env var 'process' takes precedence even when yaml says 'container'."""
         monkeypatch.setenv(f"{ENV_RUNNER_PREFIX}TRANSFORMERS", "process")
-        spec = resolve_runner("transformers", yaml_runners={"transformers": "container"})
+        spec = _resolve("transformers", yaml_runners={"transformers": "container"})
         assert spec.source == "env"
         assert spec.mode == "process"
 
@@ -210,7 +248,7 @@ class TestResolveRunner:
         """yaml_runners={'transformers': 'container'} wins over user_config with 'process'."""
         user_config = UserRunnersConfig(transformers="process")
 
-        spec = resolve_runner(
+        spec = _resolve(
             "transformers", yaml_runners={"transformers": "container"}, user_config=user_config
         )
 
@@ -220,7 +258,7 @@ class TestResolveRunner:
 
     def test_yaml_runners_container_with_image(self):
         """yaml_runners with container:image resolves image correctly."""
-        spec = resolve_runner(
+        spec = _resolve(
             "vllm",
             yaml_runners={"vllm": "container:ghcr.io/myorg/vllm:latest"},
         )
@@ -231,7 +269,7 @@ class TestResolveRunner:
     def test_yaml_runners_legacy_docker_rejected_with_migration_hint(self):
         """A legacy YAML 'docker' value is rejected with a migration error (clean break)."""
         with pytest.raises(ValueError, match=r"'docker' was renamed in v0.7 - use 'container'"):
-            resolve_runner("vllm", yaml_runners={"vllm": "docker"})
+            _resolve("vllm", yaml_runners={"vllm": "docker"})
 
     def test_yaml_runners_missing_engine_falls_through(self):
         """If engine not in yaml_runners, falls through to lower layers."""
@@ -239,7 +277,7 @@ class TestResolveRunner:
             "llenergymeasure.infra.runner_resolution.is_docker_available",
             return_value=False,
         ):
-            spec = resolve_runner(
+            spec = _resolve(
                 "tensorrt",
                 yaml_runners={"transformers": "container"},  # tensorrt not listed
             )
@@ -251,7 +289,7 @@ class TestResolveRunner:
             "llenergymeasure.infra.runner_resolution.is_docker_available",
             return_value=False,
         ):
-            spec = resolve_runner("transformers", yaml_runners=None)
+            spec = _resolve("transformers", yaml_runners=None)
         assert spec.source == "default"
 
     # --- User config ---
@@ -264,7 +302,7 @@ class TestResolveRunner:
             "llenergymeasure.infra.runner_resolution.is_docker_available",
             return_value=True,
         ):
-            spec = resolve_runner("transformers", user_config=user_config)
+            spec = _resolve("transformers", user_config=user_config)
 
         assert spec.source == "user_config"
         assert spec.mode == "container"
@@ -278,7 +316,7 @@ class TestResolveRunner:
             "llenergymeasure.infra.runner_resolution.is_docker_available",
             return_value=True,
         ):
-            spec = resolve_runner("transformers", user_config=user_config)
+            spec = _resolve("transformers", user_config=user_config)
 
         assert spec.source == "user_config"
         assert spec.mode == "process"
@@ -291,7 +329,7 @@ class TestResolveRunner:
             "llenergymeasure.infra.runner_resolution.is_docker_available",
             return_value=False,
         ):
-            spec = resolve_runner("vllm", user_config=user_config)
+            spec = _resolve("vllm", user_config=user_config)
 
         assert spec.source == "user_config"
         assert spec.mode == "container"
@@ -305,7 +343,7 @@ class TestResolveRunner:
             "llenergymeasure.infra.runner_resolution.is_docker_available",
             return_value=True,
         ):
-            spec = resolve_runner("transformers")  # no yaml_runners, no user_config
+            spec = _resolve("transformers")  # no yaml_runners, no user_config
 
         assert spec.source == "auto_detected"
         assert spec.mode == "container"
@@ -319,7 +357,7 @@ class TestResolveRunner:
             "llenergymeasure.infra.runner_resolution.is_docker_available",
             return_value=True,
         ):
-            spec = resolve_runner("transformers", user_config=user_config)
+            spec = _resolve("transformers", user_config=user_config)
 
         # "auto" falls through - Docker auto-detection applies
         assert spec.source == "auto_detected"
@@ -333,7 +371,7 @@ class TestResolveRunner:
             "llenergymeasure.infra.runner_resolution.is_docker_available",
             return_value=True,
         ):
-            spec = resolve_runner("transformers", user_config=user_config)
+            spec = _resolve("transformers", user_config=user_config)
 
         assert spec.source == "auto_detected"
         assert spec.mode == "container"
@@ -346,7 +384,7 @@ class TestResolveRunner:
             "llenergymeasure.infra.runner_resolution.is_docker_available",
             return_value=False,
         ):
-            spec = resolve_runner("transformers", user_config=user_config)
+            spec = _resolve("transformers", user_config=user_config)
 
         assert spec.source == "default"
         assert spec.mode == "process"
@@ -359,7 +397,7 @@ class TestResolveRunner:
             "llenergymeasure.infra.runner_resolution.is_docker_available",
             return_value=False,
         ):
-            spec = resolve_runner("transformers")
+            spec = _resolve("transformers")
 
         assert spec.source == "default"
         assert spec.mode == "process"
@@ -370,7 +408,7 @@ class TestResolveRunner:
     def test_parse_runner_value_integration_container_custom_image(self, monkeypatch):
         """parse_runner_value integration: 'container:ghcr.io/custom:v1' resolves image."""
         monkeypatch.setenv(f"{ENV_RUNNER_PREFIX}TRANSFORMERS", "container:ghcr.io/custom:v1")
-        spec = resolve_runner("transformers")
+        spec = _resolve("transformers")
         assert spec.mode == "container"
         assert spec.image == "ghcr.io/custom:v1"
         assert spec.source == "env"
@@ -388,7 +426,7 @@ class TestResolveStudyRunners:
             "llenergymeasure.infra.runner_resolution.is_docker_available",
             return_value=False,
         ):
-            result = resolve_study_runners(["transformers", "vllm"])
+            result = _resolve_study(["transformers", "vllm"])
 
         assert set(result.keys()) == {"transformers", "vllm"}
         assert all(isinstance(v, RunnerSpec) for v in result.values())
@@ -401,7 +439,7 @@ class TestResolveStudyRunners:
             "llenergymeasure.infra.runner_resolution.is_docker_available",
             return_value=False,
         ):
-            result = resolve_study_runners(["transformers", "vllm"], yaml_runners=yaml_runners)
+            result = _resolve_study(["transformers", "vllm"], yaml_runners=yaml_runners)
 
         assert result["transformers"].mode == "process"
         assert result["transformers"].source == "yaml"
@@ -409,7 +447,7 @@ class TestResolveStudyRunners:
         assert result["vllm"].image == "myimg"
 
     def test_empty_engines_list_returns_empty_dict(self):
-        result = resolve_study_runners([])
+        result = _resolve_study([])
         assert result == {}
 
     def test_single_engine(self):
@@ -417,7 +455,7 @@ class TestResolveStudyRunners:
             "llenergymeasure.infra.runner_resolution.is_docker_available",
             return_value=True,
         ):
-            result = resolve_study_runners(["tensorrt"])
+            result = _resolve_study(["tensorrt"])
 
         assert "tensorrt" in result
         assert result["tensorrt"].source == "auto_detected"
@@ -434,9 +472,7 @@ class TestResolveStudyRunners:
             "llenergymeasure.infra.runner_resolution.is_docker_available",
             return_value=True,
         ):
-            result = resolve_study_runners(
-                ["transformers", "vllm", "tensorrt"], user_config=user_config
-            )
+            result = _resolve_study(["transformers", "vllm", "tensorrt"], user_config=user_config)
 
         # transformers: explicit "process" -> user_config source
         assert result["transformers"].mode == "process"
@@ -531,7 +567,7 @@ class TestContainerSelfAwareAutoDetection:
             "llenergymeasure.infra.runner_resolution.is_docker_available",
             return_value=True,
         ):
-            spec = resolve_runner("vllm")
+            spec = _resolve("vllm")
         assert spec.mode == "container"
         assert spec.source == "auto_detected"
 
@@ -553,7 +589,7 @@ class TestContainerSelfAwareAutoDetection:
             ),
             caplog.at_level("INFO", logger="llenergymeasure.infra.runner_resolution"),
         ):
-            spec = resolve_runner("vllm")
+            spec = _resolve("vllm")
         assert spec.mode == "process"
         # A positive detection ran and chose process -> auto_detected, not default.
         assert spec.source == "auto_detected"
@@ -580,7 +616,7 @@ class TestContainerSelfAwareAutoDetection:
                 return_value=False,  # NVIDIA CT not on PATH inside llem's container
             ),
         ):
-            spec = resolve_runner("vllm")
+            spec = _resolve("vllm")
         assert spec.mode == "container"
         assert spec.source == "auto_detected"
 
@@ -600,7 +636,7 @@ class TestContainerSelfAwareAutoDetection:
                 return_value=True,
             ),
         ):
-            spec = resolve_runner("vllm")
+            spec = _resolve("vllm")
         assert spec.mode == "process"
         assert spec.source == "env"
 
@@ -618,7 +654,7 @@ class TestContainerSelfAwareAutoDetection:
                 return_value=False,
             ),
         ):
-            spec = resolve_runner("vllm", user_config=user_config)
+            spec = _resolve("vllm", user_config=user_config)
         assert spec.mode == "container"
         assert spec.image == "ghcr.io/org/vllm:v1"
         assert spec.source == "user_config"
@@ -635,6 +671,6 @@ class TestContainerSelfAwareAutoDetection:
                 return_value=False,
             ),
         ):
-            spec = resolve_runner("vllm", yaml_runners={"vllm": "container"})
+            spec = _resolve("vllm", yaml_runners={"vllm": "container"})
         assert spec.mode == "container"
         assert spec.source == "yaml"

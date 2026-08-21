@@ -69,12 +69,19 @@ def _write_study(tmp_path: Path, study: dict) -> Path:
     return path
 
 
-def _capture_orchestrated(monkeypatch) -> list[StudyConfig]:
-    """Capture the studies handed to the orchestrator instead of running them.
+def _pin_default_user_config(monkeypatch) -> None:
+    """Pin the user config to the built-in defaults.
 
-    Also pins the user config to the built-in defaults, so what a test asserts
-    does not depend on the user config of the machine running it.
+    What a test asserts about a resolved study must not depend on the user config
+    of the machine running it.
     """
+    monkeypatch.setattr(
+        "llenergymeasure.config.user_config.load_user_config", lambda **_kw: UserConfig()
+    )
+
+
+def _capture_orchestrated(monkeypatch) -> list[StudyConfig]:
+    """Capture the studies handed to the orchestrator instead of running them."""
     import llenergymeasure.study.orchestration as orchestration
 
     captured: list[StudyConfig] = []
@@ -84,9 +91,7 @@ def _capture_orchestrated(monkeypatch) -> list[StudyConfig]:
         return make_study_result()
 
     monkeypatch.setattr(orchestration, "orchestrate_study", _capture)
-    monkeypatch.setattr(
-        "llenergymeasure.config.user_config.load_user_config", lambda **_kw: UserConfig()
-    )
+    _pin_default_user_config(monkeypatch)
     return captured
 
 
@@ -367,12 +372,12 @@ def test_execution_defaults_fill_only_what_the_study_left_unset() -> None:
 
 
 def test_bad_execution_defaults_raise_a_config_error() -> None:
-    """A typo in the caller's defaults names the parameter, not a study block."""
+    """A typo in a caller-supplied execution layer names the bad key, not a traceback."""
     with pytest.raises(ConfigError) as exc:
         resolve_study(_raw(), execution_defaults={"n_cyles": 3})
 
     msg = str(exc.value)
-    assert "execution_defaults" in msg
+    assert "execution settings" in msg
     assert "n_cyles" in msg
     assert "n_cycles" in msg  # the valid field names are listed
 
@@ -505,9 +510,181 @@ def test_runner_skips_a_zero_gap(monkeypatch) -> None:
     assert gaps == []
 
 
-def test_hermetic_resolution_leaves_gaps_unset() -> None:
-    """Without a user config, resolution invents no machine default."""
+def test_hermetic_resolution_applies_machine_default_gaps() -> None:
+    """Without a user config, unset gaps resolve to the built-in machine defaults.
+
+    The machine defaults are the chain's bottom layer, so no resolution path can
+    leave a gap as None (which the runner would wait zero seconds on). The
+    provenance says so: the gaps are labelled ``default``, not claimed by a user
+    config that was never there.
+    """
     resolved = resolve_study(_raw())
 
-    assert resolved.study_execution.experiment_gap_seconds is None
-    assert resolved.study_execution.cycle_gap_seconds is None
+    assert resolved.study_execution.experiment_gap_seconds == _DEFAULT_EXPERIMENT_GAP
+    assert resolved.study_execution.cycle_gap_seconds == _DEFAULT_CYCLE_GAP
+    assert resolved.settings_provenance["study_execution.experiment_gap_seconds"] == "default"
+    assert resolved.settings_provenance["study_execution.cycle_gap_seconds"] == "default"
+
+
+# ---------------------------------------------------------------------------
+# Per-experiment provenance is emitted by the merges, formatted at resolution
+# ---------------------------------------------------------------------------
+
+
+def test_provenance_logs_label_swept_and_overridden_fields(tmp_path, monkeypatch):
+    """The sidecar provenance labels come from the merges that resolved the study.
+
+    The sweep expansion emits the paths it varied and the CLI-override merge
+    records the paths it overlaid; resolve_study formats them into per-experiment
+    logs keyed by declared hash. No post-hoc diffing decides a label.
+    """
+    _pin_default_user_config(monkeypatch)
+    path = _write_study(
+        tmp_path,
+        {
+            "study_name": "prov",
+            "task": {"model": "gpt2"},
+            "engine": "transformers",
+            "serving_mode": "offline",
+            "sweep": {"transformers.llem_execution.batch_size": [1, 8]},
+        },
+    )
+    study = load_study(path, cli_overrides={"task": {"dataset": {"n_prompts": 7}}})
+
+    assert len(study.provenance_logs) == 2
+    for log in study.provenance_logs.values():
+        assert log["transformers.llem_execution.batch_size"]["source"] == "sweep"
+        assert log["task.dataset.n_prompts"]["source"] == "call_site"
+        assert log["task.dataset.n_prompts"]["effective"] == 7
+        assert log["task.model"]["source"] == "yaml"
+
+
+def test_provenance_logs_keyed_by_declared_hash(tmp_path, monkeypatch):
+    """Each unique declared config gets one log, keyed by its declared hash."""
+    from llenergymeasure.domain.experiment import compute_declared_config_hash
+
+    _pin_default_user_config(monkeypatch)
+    path = _write_study(
+        tmp_path,
+        {
+            "study_name": "prov-keys",
+            "task": {"model": "gpt2"},
+            "engine": "transformers",
+            "serving_mode": "offline",
+        },
+    )
+    study = load_study(path)
+
+    assert set(study.provenance_logs) == {
+        compute_declared_config_hash(exp) for exp in study.experiments
+    }
+
+
+def test_object_path_studies_get_yaml_labelled_provenance():
+    """A study built from objects has no sweep or CLI merges - fields label as yaml."""
+    resolved = resolve_study(_raw([_experiment()]))
+    (log,) = resolved.provenance_logs.values()
+    assert log["task.model"] == {"effective": "gpt2", "source": "yaml"}
+
+
+# ---------------------------------------------------------------------------
+# Layer order and provenance truth for the study settings (FIX B, PR #937)
+# ---------------------------------------------------------------------------
+
+
+def test_execution_defaults_beat_user_config_gaps() -> None:
+    """Caller execution defaults rank above the user config: file > defaults > user.
+
+    A caller's execution_defaults gap wins over the user config's machine-local
+    preference; a gap the caller's defaults leave unset still falls through to
+    the user config.
+    """
+    user = UserConfig(
+        execution=UserExecutionConfig(experiment_gap_seconds=123.0, cycle_gap_seconds=456.0)
+    )
+    resolved = resolve_study(
+        _raw(),
+        user_config=user,
+        execution_defaults={"experiment_gap_seconds": 77.0},
+    )
+
+    assert resolved.study_execution.experiment_gap_seconds == 77.0
+    assert resolved.study_execution.cycle_gap_seconds == 456.0
+    assert (
+        resolved.settings_provenance["study_execution.experiment_gap_seconds"]
+        == "call_site_default"
+    )
+    assert resolved.settings_provenance["study_execution.cycle_gap_seconds"] == "user_config"
+
+
+def test_silent_user_config_claims_no_provenance() -> None:
+    """A user config whose file wrote nothing labels nothing as user_config.
+
+    Resolved values are the built-in defaults either way; the label must say so.
+    """
+    resolved = resolve_study(_raw(), user_config=UserConfig())
+
+    assert resolved.output.results_dir == "./results"
+    assert resolved.settings_provenance["output.results_dir"] == "default"
+    assert resolved.settings_provenance["study_execution.experiment_gap_seconds"] == "default"
+    assert "user_config" not in set(resolved.settings_provenance.values())
+
+
+def test_written_user_config_values_are_labelled_user_config() -> None:
+    """Fields the user config file actually wrote carry the user_config label."""
+    user = UserConfig.model_validate(
+        {"output": {"results_dir": "/uc/results"}, "execution": {"cycle_gap_seconds": 200.0}}
+    )
+    resolved = resolve_study(_raw(), user_config=user)
+
+    assert resolved.output.results_dir == "/uc/results"
+    assert resolved.settings_provenance["output.results_dir"] == "user_config"
+    assert resolved.settings_provenance["study_execution.cycle_gap_seconds"] == "user_config"
+    # The gap the file did not write stays a built-in default.
+    assert resolved.settings_provenance["study_execution.experiment_gap_seconds"] == "default"
+
+
+def test_yaml_null_gap_falls_through_to_execution_defaults() -> None:
+    """A study-file explicit null gap defers to the caller's execution defaults.
+
+    Ratified corner (PR #937): an explicit ``null`` means "use the machine
+    default", and the caller's effective defaults now sit directly below the file,
+    so they catch it before the user config does.
+    """
+    raw = _raw(execution=ExecutionConfig(experiment_gap_seconds=None))
+    user = UserConfig(execution=UserExecutionConfig(experiment_gap_seconds=123.0))
+    resolved = resolve_study(
+        raw,
+        user_config=user,
+        execution_defaults={"experiment_gap_seconds": 77.0},
+    )
+
+    assert resolved.study_execution.experiment_gap_seconds == 77.0
+
+
+def test_provenance_keeps_labelled_fields_at_default_value(tmp_path, monkeypatch):
+    """An override or swept axis equal to the pydantic default keeps its entry.
+
+    The sidecar trim is presentation only; it must never erase a label the merges
+    emitted. n_prompts is overridden to its own default here - the provenance
+    still records the call_site override.
+    """
+    _pin_default_user_config(monkeypatch)
+    path = _write_study(
+        tmp_path,
+        {
+            "study_name": "prov-default-equal",
+            "task": {"model": "gpt2"},
+            "engine": "transformers",
+            "serving_mode": "offline",
+        },
+    )
+    from llenergymeasure.config.models import DatasetConfig
+
+    default_value = DatasetConfig().n_prompts
+    study = load_study(path, cli_overrides={"task": {"dataset": {"n_prompts": default_value}}})
+
+    (log,) = study.provenance_logs.values()
+    entry = log["task.dataset.n_prompts"]
+    assert entry["source"] == "call_site"
+    assert entry["effective"] == default_value

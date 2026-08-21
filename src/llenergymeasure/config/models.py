@@ -1455,7 +1455,8 @@ class OutputConfig(BaseModel):
     is an operational concern, not part of the scientific specification.
 
     Resolution chain (highest wins):
-        study YAML output.results_dir > user_config.output.results_dir > "./results"
+        call-site override (-o / output_dir) > study YAML output.results_dir >
+        user_config.output.results_dir > "./results"
     """
 
     model_config = {"extra": "forbid"}
@@ -1694,6 +1695,25 @@ class StudyConfig(BaseModel):
             "Written by study resolution for every study it resolves, whichever route it "
             "arrived by; None until then. Never set this by hand - a study carrying it is "
             "taken as resolved and dispatched as-is."
+        ),
+    )
+    provenance_logs: dict[str, dict[str, Any]] = Field(
+        default_factory=dict,
+        description=(
+            "Per-experiment provenance for the config.json sidecars, keyed by "
+            "declared-config hash. Each entry maps dotted field paths to "
+            "{'effective', 'source', 'default'}, with sources from the merges that "
+            "resolved the experiment ('call_site' / 'sweep' / 'yaml')."
+        ),
+    )
+    settings_provenance: dict[str, str] = Field(
+        default_factory=dict,
+        description=(
+            "Which precedence layer supplied each study-wide setting, keyed by "
+            "study-file path ('output.results_dir', 'study_execution.n_cycles', "
+            "'runners.vllm', 'images.vllm'). Values are the source vocabulary "
+            "'call_site' / 'env' / 'yaml' / 'user_config' / 'default'. Emitted by "
+            "the resolution merge itself, so it records which layer actually won."
         ),
     )
     skipped_configs: list[dict[str, Any]] = Field(

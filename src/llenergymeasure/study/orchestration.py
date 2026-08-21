@@ -70,11 +70,9 @@ def orchestrate_study(
     skip_preflight: bool = False,
     progress: ProgressCallback | None = None,
     resume_dir: Path | None = None,
-    results_dir_override: Path | None = None,
     skip_set: set[tuple[str, int]] | None = None,
     no_lock: bool = False,
     config_path: Path | None = None,
-    cli_overrides: dict[str, Any] | None = None,
     preresolved: tuple[dict[str, RunnerSpec], dict[str, dict[str, str]]] | None = None,
 ) -> StudyResult:
     """Dispatcher: single experiment runs in-process; multi-experiment uses StudyRunner.
@@ -88,11 +86,11 @@ def orchestrate_study(
     Single-experiment / n_cycles=1:  runs in-process or via DockerRunner directly.
     Otherwise:                         delegates to StudyRunner.
 
-    The two directory parameters are single-purpose (the ``api`` adapter maps the
-    overloaded public ``output_dir`` onto them):
-    - ``resume_dir``: an explicit study directory to reattach and resume into.
-    - ``results_dir_override``: the results-dir override for a fresh run
-      (precedence head, above YAML ``output.results_dir`` and user config).
+    ``resume_dir`` is an explicit study directory to reattach and resume into. A
+    fresh run writes to the study's already-resolved ``output.results_dir``: the
+    results-dir precedence chain (a ``-o`` flag or ``output_dir`` argument over the
+    study file over the user config over the built-in default) was settled when the
+    study was resolved, so there is nothing to re-decide here.
 
     Requires an ALREADY-RESOLVED study and asserts as much: resolution (the warmup
     overlay, dedup, the design hash, cycle expansion, equivalence groups) belongs
@@ -100,7 +98,6 @@ def orchestrate_study(
     entry routes through. Orchestration dispatches and assembles; it never
     resolves, so the two cannot drift apart.
     """
-    from llenergymeasure.config.user_config import load_user_config
     from llenergymeasure.study.manifest import ManifestWriter, create_study_dir
 
     _require_resolved(study)
@@ -110,16 +107,12 @@ def orchestrate_study(
     if preresolved is not None and not skip_preflight:
         raise ValueError("preresolved requires skip_preflight=True")
 
-    # Load user config first so runner context can be forwarded to preflight,
-    # ensuring preflight uses the same runner resolution as the actual dispatch path.
-    user_config = load_user_config()
-
     runner_specs, system_overrides = _resolve_runner_specs(
-        study, user_config, preresolved, skip_preflight, progress
+        study, preresolved, skip_preflight, progress
     )
 
-    # Resolve results_dir: resume_dir takes priority, then the fresh-run chain
-    # (CLI -o override > YAML output.results_dir > user config > built-in default).
+    # The results directory: a resume reattaches its existing study directory,
+    # otherwise the study's already-resolved results_dir is used as given.
     if resume_dir is not None:
         study_dir = resume_dir
         # Resume: load the existing manifest written by prepare_resume_manifest()
@@ -129,21 +122,19 @@ def orchestrate_study(
         loaded_manifest, _ = load_resume_state(study_dir)
         manifest = ManifestWriter.from_existing(study_dir, loaded_manifest)
     else:
-        if results_dir_override is not None:
-            results_dir_str = str(results_dir_override)
-        else:
-            results_dir_str = (
-                study.output.results_dir or user_config.output.results_dir or "./results"
-            )
-        study_dir = create_study_dir(study.study_name, Path(results_dir_str))
+        # A resolved study always carries a results_dir; the fallback only guards a
+        # hand-assembled study that bypassed resolution with a hand-written hash.
+        from llenergymeasure.config.ssot import DEFAULT_RESULTS_DIR
+
+        study_dir = create_study_dir(
+            study.study_name, Path(study.output.results_dir or DEFAULT_RESULTS_DIR)
+        )
         manifest = ManifestWriter(study, study_dir)
 
     # Create _study-artefacts/ once for config copy, skipped log, and study-level env.
     artefacts_dir = _ensure_study_artefacts_dir(study_dir)
 
     _write_study_artefacts(study, artefacts_dir, system_overrides, config_path)
-
-    resolution_logs = _build_resolution_logs(study, cli_overrides)
 
     wall_start = time.monotonic()
     # Server experiments always route through StudyRunner (the single server call
@@ -157,7 +148,7 @@ def orchestrate_study(
 
     if is_single:
         result_files, experiment_results, warnings = _run_single_experiment_dispatch(
-            study, manifest, study_dir, runner_specs, progress, resolution_logs
+            study, manifest, study_dir, runner_specs, progress, study.provenance_logs
         )
     else:
         result_files, experiment_results, warnings = _run_via_runner(
@@ -168,7 +159,7 @@ def orchestrate_study(
             progress=progress,
             skip_set=skip_set,
             no_lock=no_lock,
-            resolution_logs=resolution_logs,
+            resolution_logs=study.provenance_logs,
         )
 
     wall_time = time.monotonic() - wall_start
@@ -224,7 +215,6 @@ def orchestrate_study(
 
 def _resolve_runner_specs(
     study: StudyConfig,
-    user_config: Any,
     preresolved: tuple[dict[str, RunnerSpec], dict[str, dict[str, str]]] | None,
     skip_preflight: bool,
     progress: ProgressCallback | None,
@@ -249,12 +239,7 @@ def _resolve_runner_specs(
             t0_pf = time.perf_counter()
         try:
             runner_specs, system_overrides = run_study_preflight(
-                study,
-                skip_preflight=skip_preflight,
-                yaml_runners=study.runners,
-                user_config=user_config.runners,
-                yaml_images=study.images,
-                user_config_images=user_config.images or None,
+                study, skip_preflight=skip_preflight
             )
         except Exception:
             if progress:
@@ -375,37 +360,6 @@ def _write_study_artefacts(
         logger.info("Study-level system snapshot written to %s", env_path)
     except Exception as exc:
         logger.warning("Failed to write study-level system.json: %s", exc)
-
-
-def _build_resolution_logs(
-    study: StudyConfig, cli_overrides: dict[str, Any] | None
-) -> dict[str, dict[str, Any]]:
-    """Build per-experiment resolution logs keyed by declared-config hash.
-
-    Computed once here so runners don't need to know about resolution logic.
-    Best-effort: returns whatever was built before any failure.
-    """
-    resolution_logs: dict[str, dict[str, Any]] = {}
-    try:
-        from llenergymeasure.config.introspection import get_swept_field_paths
-        from llenergymeasure.config.resolution import build_resolution_log
-        from llenergymeasure.domain.experiment import compute_declared_config_hash
-
-        swept_fields = get_swept_field_paths(study.experiments)
-        seen_hashes: set[str] = set()
-        for exp in study.experiments:
-            h = compute_declared_config_hash(exp)
-            if h in seen_hashes:
-                continue
-            seen_hashes.add(h)
-            resolution_logs[h] = build_resolution_log(
-                exp.model_dump(),
-                cli_overrides=cli_overrides,
-                swept_fields=swept_fields,
-            )
-    except Exception as exc:
-        logger.debug("Failed to build resolution logs: %s", exc)
-    return resolution_logs
 
 
 def _run_single_experiment_dispatch(

@@ -36,6 +36,7 @@ from llenergymeasure.study.library_resolution import resolve_library_effective
 from llenergymeasure.utils.exceptions import ConfigError
 
 if TYPE_CHECKING:
+    from llenergymeasure.config.precedence import ResolvedStudySettings
     from llenergymeasure.config.user_config import UserConfig
 
 __all__ = ["resolve_study", "resolve_study_objects"]
@@ -48,6 +49,7 @@ def resolve_study(
     *,
     user_config: UserConfig | None = None,
     execution_defaults: Mapping[str, Any] | None = None,
+    overrides: Mapping[str, Any] | None = None,
 ) -> StudyConfig:
     """Resolve parsed study material into the StudyConfig the runner executes.
 
@@ -59,9 +61,11 @@ def resolve_study(
 
     Steps, in this order:
       0. Reject a study that mixes serving_mode values (a staging restriction of
-         this release), then resolve the execution block: caller-supplied
-         effective defaults beneath the study file, then the machine-local
-         thermal gaps for gaps the study left unset.
+         this release), then resolve every study-wide setting through the
+         precedence chain: the results directory, the execution block (cycles,
+         ordering, thermal gaps) and the per-engine runner and image pins. The
+         resolved study carries the answers, so nothing downstream re-reads the
+         user config or re-implements a fall-through.
       1. Overlay the tool-wide user-config server warmup onto each declared server
          config, BEFORE dedup, so the resolved-config hash binds on the
          realised warmup protocol.
@@ -70,20 +74,24 @@ def resolve_study(
       3. compute_study_design_hash() over the post-dedup configs - the hash
          identifies the *unique* measurement set, not duplicate declarations.
       4. apply_cycles() to produce the execution sequence.
-      5. Serialise pre-run equivalence groups for the sidecar writer.
+      5. Serialise pre-run equivalence groups and the per-experiment provenance
+         logs for the sidecar writers.
 
     Args:
         raw: Parsed + sweep-expanded study material.
-        user_config: Tool-wide user config supplying the ``server.warmup``
-            overlay and the machine-local thermal gap defaults. ``None`` (the
-            default) applies NEITHER - callers hand in a config at the production
-            edge, keeping the resolution step hermetic for the unit tests that
+        user_config: Tool-wide user config: the chain's user-config layer (results
+            directory, thermal gap defaults, runner and image pins) and the
+            ``server.warmup`` overlay. ``None`` (the default) supplies NO user
+            layer, keeping the resolution step hermetic for the unit tests that
             construct one directly.
         execution_defaults: Execution-block defaults that sit BENEATH the study
             file: a field the file wrote always wins, a field it left unset takes
             this value instead of the conservative built-in default. This is how
             the CLI applies its research-appropriate defaults (3 cycles, shuffle)
             without re-reading the study file to find out what it declared.
+        overrides: Study-file-shaped values pinned by the caller, the TOP layer of
+            the chain (e.g. ``{"output": {"results_dir": "/data"}}`` for a ``-o``
+            flag or an ``output_dir`` argument). They win over the study file.
 
     Returns:
         Resolved StudyConfig with ordered experiments, study_design_hash, dedup
@@ -95,11 +103,13 @@ def resolve_study(
     """
     _validate_homogeneous_serving_mode(raw.valid_experiments)
 
-    execution = _resolve_execution(
-        raw.execution,
+    settings = _resolve_settings(
+        raw,
         user_config=user_config,
         execution_defaults=execution_defaults,
+        overrides=overrides,
     )
+    execution = _validated_execution(settings.execution, settings.provenance)
 
     # Overlay the tool-wide user-config server warmup onto each declared
     # server config BEFORE dedup, so the resolved-config hash - and hence dedup -
@@ -157,6 +167,20 @@ def resolve_study(
     from llenergymeasure.domain.experiment import compute_declared_config_hash
 
     experiment_ids = [compute_declared_config_hash(exp) for exp in raw.valid_experiments]
+
+    # Per-experiment provenance for the config.json sidecars, keyed by declared
+    # hash. The labels were emitted by the merges that resolved the experiment
+    # (the CLI-override merge, the sweep expansion); this only formats them.
+    from llenergymeasure.config.provenance_log import format_experiment_provenance
+
+    provenance_logs: dict[str, dict[str, Any]] = {}
+    for exp, exp_id in zip(raw.valid_experiments, experiment_ids, strict=True):
+        if exp_id not in provenance_logs:
+            provenance_logs[exp_id] = format_experiment_provenance(
+                exp.model_dump(),
+                cli_override_paths=raw.cli_override_paths,
+                swept_paths=raw.swept_paths,
+            )
     pre_run_groups: list[dict[str, Any]] = [
         {
             "resolved_config_hash": g.resolved_config_hash,
@@ -173,10 +197,15 @@ def resolve_study(
     return StudyConfig(
         experiments=ordered,
         study_name=raw.study_name,
-        output=raw.output,
+        output=raw.output.model_copy(update={"results_dir": settings.results_dir}),
         study_execution=execution,
-        runners=raw.runners,
-        images=raw.images,
+        # The chain-resolved pins, not the study file's raw sections: an engine
+        # appears only when some layer pinned it, so an absent engine still
+        # auto-detects its runner and takes the smart image default.
+        runners=settings.runners or None,
+        images=settings.images or None,
+        settings_provenance=settings.provenance,
+        provenance_logs=provenance_logs,
         study_design_hash=study_hash,
         skipped_configs=[s.to_dict() for s in raw.skipped],
         dedup_mode=dedup_mode,
@@ -190,6 +219,7 @@ def resolve_study_objects(
     study: StudyConfig,
     *,
     user_config: UserConfig | None = None,
+    overrides: Mapping[str, Any] | None = None,
 ) -> StudyConfig:
     """Resolve a StudyConfig a caller built in memory, touching no file.
 
@@ -227,7 +257,7 @@ def resolve_study_objects(
         runners=study.runners,
         images=study.images,
     )
-    resolved = resolve_study(raw, user_config=user_config)
+    resolved = resolve_study(raw, user_config=user_config, overrides=overrides)
     if study.skipped_configs:
         resolved = resolved.model_copy(update={"skipped_configs": study.skipped_configs})
     return resolved
@@ -263,65 +293,76 @@ def _validate_homogeneous_serving_mode(experiments: list[ExperimentConfig]) -> N
         )
 
 
-def _resolve_execution(
-    declared: ExecutionConfig,
+def _resolve_settings(
+    raw: LoadedStudyRaw,
     *,
     user_config: UserConfig | None,
     execution_defaults: Mapping[str, Any] | None,
+    overrides: Mapping[str, Any] | None,
+) -> ResolvedStudySettings:
+    """Resolve the study-wide settings through the precedence chain.
+
+    Delegates to :func:`llenergymeasure.config.precedence.resolve_study_settings`,
+    handing it the study file's explicitly-set fields as the file layer. Only the
+    fields the file actually wrote (``model_fields_set``) enter that layer, so a
+    field the file omitted defers to the layers below instead of pinning a
+    pydantic default over them.
+
+    This is the ONE place a study's results directory, execution block, runner pins
+    and image pins are decided. Nothing downstream re-resolves them: the runner and
+    image mechanics consume the pins this produced, and the orchestrator reads the
+    results directory as given (#886).
+    """
+    from llenergymeasure.config.precedence import fields_set_layer, resolve_study_settings
+
+    return resolve_study_settings(
+        study_output=fields_set_layer(raw.output),
+        study_execution=fields_set_layer(raw.execution),
+        study_runners=raw.runners,
+        study_images=raw.images,
+        execution_defaults=execution_defaults,
+        user_config=user_config,
+        call_site=overrides,
+    )
+
+
+def _validated_execution(
+    resolved: dict[str, Any], provenance: Mapping[str, str]
 ) -> ExecutionConfig:
-    """Resolve the study execution block through the precedence layers.
-
-    Two resolutions happen here, both of which the runner would otherwise have to
-    guess at:
-
-    - ``execution_defaults`` sit BENEATH the study file. Only the fields the file
-      actually wrote (``model_fields_set``) enter the winning layer, so a caller
-      default fills a field the file omitted and never overrides one it declared.
-    - ``experiment_gap_seconds`` / ``cycle_gap_seconds`` are documented as
-      "None = use machine default from user config", and this is where that
-      default is applied. Leaving them None made the runner read them as zero, so
-      experiments ran back-to-back and thermal state bled between measurements
-      for anyone relying on their machine defaults (#886).
+    """Validate the chain's resolved execution block back into an ExecutionConfig.
 
     Raises:
-        ConfigError: ``execution_defaults`` names a field the execution block does
-            not have, or gives one a value it will not take.
+        ConfigError: A caller-supplied layer named a field the execution block does
+            not have, or gave one a value it will not take. The error names the
+            PARAMETER that supplied the offending value (``execution_defaults`` or
+            ``overrides``), read from the provenance the merge emitted, so the
+            caller knows which argument to fix.
     """
-    execution = declared
+    try:
+        return ExecutionConfig.model_validate(resolved)
+    except ValidationError as exc:
+        # The study file's own execution block was already validated at parse time,
+        # so a failure here comes from a caller-supplied layer (execution_defaults
+        # or an override). Name the parameter rather than emitting a bare pydantic
+        # traceback about a study block the caller never wrote.
+        from llenergymeasure.config.ssot import SOURCE_CALL_SITE, SOURCE_CALL_SITE_DEFAULT
 
-    if execution_defaults:
-        from llenergymeasure.config.precedence import fields_set_layer, resolve_layers
+        param_names = {
+            SOURCE_CALL_SITE_DEFAULT: "execution_defaults",
+            SOURCE_CALL_SITE: "overrides",
+        }
 
-        try:
-            execution = ExecutionConfig.model_validate(
-                resolve_layers(
-                    ExecutionConfig().model_dump(mode="python"),
-                    dict(execution_defaults),
-                    fields_set_layer(declared),
-                )
-            )
-        except ValidationError as exc:
-            # execution_defaults is caller-supplied, so a typo here is a caller
-            # mistake and deserves a message that names the parameter rather than
-            # a bare pydantic traceback about a study block the caller never wrote.
-            details = "; ".join(
-                f"{'.'.join(str(p) for p in e['loc'])}: {e['msg']}" for e in exc.errors()
-            )
-            raise ConfigError(
-                f"Invalid execution_defaults: {details}. Keys must be "
-                f"study_execution fields ({', '.join(sorted(ExecutionConfig.model_fields))})."
-            ) from exc
+        def _blame(loc: tuple[Any, ...]) -> str:
+            field_path = ".".join(str(p) for p in loc)
+            source = provenance.get(f"study_execution.{field_path}")
+            supplied_by = param_names.get(source or "", source)
+            return f"{field_path} (from {supplied_by}): " if supplied_by else f"{field_path}: "
 
-    if user_config is not None:
-        gaps: dict[str, Any] = {}
-        if execution.experiment_gap_seconds is None:
-            gaps["experiment_gap_seconds"] = user_config.execution.experiment_gap_seconds
-        if execution.cycle_gap_seconds is None:
-            gaps["cycle_gap_seconds"] = user_config.execution.cycle_gap_seconds
-        if gaps:
-            execution = execution.model_copy(update=gaps)
-
-    return execution
+        details = "; ".join(f"{_blame(e['loc'])}{e['msg']}" for e in exc.errors())
+        raise ConfigError(
+            f"Invalid execution settings: {details}. Keys must be study_execution "
+            f"fields ({', '.join(sorted(ExecutionConfig.model_fields))})."
+        ) from exc
 
 
 def _maybe_hint_sequential_server_singletons(

@@ -83,7 +83,7 @@ CLI flag vs YAML vs sweep):
 ```json
 {
   "provenance": {
-    "batching.batch_size": { "effective": 8, "source": "cli_flag", "default": 1 }
+    "batching.batch_size": { "effective": 8, "source": "call_site", "default": 1 }
   }
 }
 ```
@@ -717,7 +717,7 @@ Each experiment directory ships sidecars for full reproducibility next to `resul
   "bundle_version": "2.0",
   "provenance": {
     "task.model": { "effective": "meta-llama/Llama-2-7b-hf", "source": "yaml" },
-    "batching.batch_size": { "effective": 8, "source": "cli_flag", "default": 1 }
+    "batching.batch_size": { "effective": 8, "source": "call_site", "default": 1 }
   }
 }
 ```
