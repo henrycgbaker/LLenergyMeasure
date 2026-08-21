@@ -447,6 +447,34 @@ def _resolve_runner_specs(user_cfg: UserConfig | None) -> dict[str, RunnerSpec]:
     }
 
 
+def show_image_resolution() -> None:
+    """Print which Docker image each engine will resolve to.
+
+    Shows the pin source (env var / user config) or local vs registry default for
+    each engine. Used by ``make docker-images`` for quick diagnostics. Lives at
+    the api resolution edge because it READS THE USER CONFIG: it derives the pins
+    from the same precedence chain a run uses (no study file in play here), so an
+    ``LLEM_IMAGE_<ENGINE>`` override shows exactly what a run would use.
+    """
+    from llenergymeasure.config.precedence import resolve_study_settings
+    from llenergymeasure.config.runner_spec import pins_from_resolved
+    from llenergymeasure.config.ssot import ALL_ENGINES
+    from llenergymeasure.infra.image_registry import resolve_image
+
+    settings = resolve_study_settings(
+        study_output={},
+        study_execution={},
+        study_runners=None,
+        study_images=None,
+        user_config=load_user_config(),
+    )
+    pins = pins_from_resolved(settings.images, settings.provenance, section="images")
+    print("=== Image resolution ===")
+    for engine in sorted(ALL_ENGINES):
+        image, source = resolve_image(engine, pin=pins.get(engine))
+        print(f"  {engine:10s} -> {image}  ({source})")
+
+
 def _run_image_checks_safe() -> DoctorReport | None:
     try:
         return run_doctor_checks()

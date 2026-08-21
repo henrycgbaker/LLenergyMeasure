@@ -300,7 +300,7 @@ class TestShowImageResolution:
 
     def test_env_pin_shows_what_a_run_would_use(self, capsys, monkeypatch):
         """LLEM_IMAGE_<ENGINE> shows in the diagnostic exactly as a run resolves it."""
-        from llenergymeasure.infra.image_registry import show_image_resolution
+        from llenergymeasure.api.health import show_image_resolution
 
         monkeypatch.setenv("LLEM_IMAGE_VLLM", "pinned/vllm:diag")
         show_image_resolution()
@@ -310,7 +310,7 @@ class TestShowImageResolution:
         assert "(env)" in output
 
     def test_prints_all_engines(self, capsys):
-        from llenergymeasure.infra.image_registry import show_image_resolution
+        from llenergymeasure.api.health import show_image_resolution
 
         with patch("llenergymeasure.infra.image_registry._image_exists_locally", return_value=True):
             show_image_resolution()
@@ -321,7 +321,7 @@ class TestShowImageResolution:
         assert "tensorrt" in output
 
     def test_shows_local_source(self, capsys):
-        from llenergymeasure.infra.image_registry import show_image_resolution
+        from llenergymeasure.api.health import show_image_resolution
 
         with patch("llenergymeasure.infra.image_registry._image_exists_locally", return_value=True):
             show_image_resolution()
@@ -330,7 +330,7 @@ class TestShowImageResolution:
         assert "(local_build)" in output
 
     def test_shows_registry_source(self, capsys):
-        from llenergymeasure.infra.image_registry import show_image_resolution
+        from llenergymeasure.api.health import show_image_resolution
 
         with patch(
             "llenergymeasure.infra.image_registry._image_exists_locally", return_value=False

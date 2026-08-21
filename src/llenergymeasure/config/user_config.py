@@ -22,6 +22,8 @@ from pydantic_core import ErrorDetails
 from llenergymeasure.config.models import EnergySamplerName, ServerWarmupConfig
 from llenergymeasure.config.ssot import (
     ALL_ENGINES,
+    DEFAULT_CYCLE_GAP_SECONDS,
+    DEFAULT_EXPERIMENT_GAP_SECONDS,
     legacy_runner_migration_message,
     legacy_runner_replacement,
 )
@@ -110,10 +112,12 @@ class UserExecutionConfig(BaseModel):
     model_config = {"extra": "forbid"}
 
     experiment_gap_seconds: float = Field(
-        default=60.0, ge=0.0, description="Thermal gap between experiments"
+        default=DEFAULT_EXPERIMENT_GAP_SECONDS,
+        ge=0.0,
+        description="Thermal gap between experiments",
     )
     cycle_gap_seconds: float = Field(
-        default=300.0, ge=0.0, description="Thermal gap between cycles"
+        default=DEFAULT_CYCLE_GAP_SECONDS, ge=0.0, description="Thermal gap between cycles"
     )
 
 

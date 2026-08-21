@@ -53,7 +53,6 @@ from typing import Final
 
 from llenergymeasure.config.runner_spec import RunnerPin
 from llenergymeasure.config.ssot import (
-    ALL_ENGINES,
     ENGINES,
     RUNNER_CONTAINER,
     RUNNER_PROCESS,
@@ -80,7 +79,6 @@ __all__ = [
     "resolve_image",
     "resolve_image_digest",
     "shadowed_default_image",
-    "show_image_resolution",
 ]
 
 # ---------------------------------------------------------------------------
@@ -441,32 +439,6 @@ def resolve_image(
     else:
         source = "registry"
     return (image, source)
-
-
-def show_image_resolution() -> None:
-    """Print which Docker image each engine will resolve to.
-
-    Shows the pin source (env var / user config) or local vs registry default for
-    each engine. Used by ``make docker-images`` for quick diagnostics. Derives the
-    pins from the same precedence chain a run uses (no study file in play here),
-    so an ``LLEM_IMAGE_<ENGINE>`` override shows exactly what a run would use.
-    """
-    from llenergymeasure.config.precedence import resolve_study_settings
-    from llenergymeasure.config.runner_spec import pins_from_resolved
-    from llenergymeasure.config.user_config import load_user_config
-
-    settings = resolve_study_settings(
-        study_output={},
-        study_execution={},
-        study_runners=None,
-        study_images=None,
-        user_config=load_user_config(),
-    )
-    pins = pins_from_resolved(settings.images, settings.provenance, section="images")
-    print("=== Image resolution ===")
-    for engine in sorted(ALL_ENGINES):
-        image, source = resolve_image(engine, pin=pins.get(engine))
-        print(f"  {engine:10s} -> {image}  ({source})")
 
 
 def parse_runner_value(value: str) -> tuple[RunnerMode, str | None]:

@@ -69,6 +69,12 @@ def engine_str(engine: Any) -> str:
 # Runner mode constants
 # ---------------------------------------------------------------------------
 
+#: Machine-local thermal gap defaults (seconds). Single source of truth: the
+#: user-config schema's field defaults and the precedence chain's bottom layer both
+#: read these, so the chain never has to import the user-config module to know them.
+DEFAULT_EXPERIMENT_GAP_SECONDS: Final = 60.0
+DEFAULT_CYCLE_GAP_SECONDS: Final = 300.0
+
 RUNNER_PROCESS: Final = "process"
 RUNNER_CONTAINER: Final = "container"
 CONTAINER_EXCHANGE_DIR: Final = "/run/llem"
@@ -382,6 +388,8 @@ ENGINE_PACKAGES: dict[Engine, str] = {
 __all__ = [
     "ALL_ENGINES",
     "CONTAINER_EXCHANGE_DIR",
+    "DEFAULT_CYCLE_GAP_SECONDS",
+    "DEFAULT_EXPERIMENT_GAP_SECONDS",
     "DOCKER_PULL_TIMEOUT",
     "ENGINES",
     "ENGINE_PACKAGES",

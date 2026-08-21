@@ -59,6 +59,8 @@ from pydantic import BaseModel
 from llenergymeasure.config._dict_utils import deep_merge
 from llenergymeasure.config.ssot import (
     ALL_ENGINES,
+    DEFAULT_CYCLE_GAP_SECONDS,
+    DEFAULT_EXPERIMENT_GAP_SECONDS,
     ENV_IMAGE_PREFIX,
     ENV_RUNNER_PREFIX,
     SOURCE_CALL_SITE,
@@ -412,12 +414,10 @@ def _defaults_layer() -> dict[str, Any]:
     being claimed by a layer the user never touched.
     """
     from llenergymeasure.config.models import ExecutionConfig
-    from llenergymeasure.config.user_config import UserExecutionConfig
 
     execution = ExecutionConfig().model_dump(mode="python")
-    machine = UserExecutionConfig()
-    execution["experiment_gap_seconds"] = machine.experiment_gap_seconds
-    execution["cycle_gap_seconds"] = machine.cycle_gap_seconds
+    execution["experiment_gap_seconds"] = DEFAULT_EXPERIMENT_GAP_SECONDS
+    execution["cycle_gap_seconds"] = DEFAULT_CYCLE_GAP_SECONDS
     return {
         "output": {"results_dir": DEFAULT_RESULTS_DIR},
         "study_execution": execution,
