@@ -531,6 +531,13 @@ def build_server_container_argv(
     shares the host network namespace. See :func:`build_container_argv` for why
     each of those is the right call for this shape.
 
+    This shape carries NO package-dispatch bootstrap, unlike the other two. The
+    process it starts is the engine's own upstream server binary (``vllm serve``,
+    ``trtllm-serve``), never llenergymeasure code, so the framework has nothing to
+    make importable inside the container: no source bind-mount, no requirements
+    priming, no ``--entrypoint`` override. The measurement code stays on the host
+    and talks to the server over HTTP.
+
     ``serve_args`` are the engine command appended after the image. For vLLM the
     upstream ``vllm/vllm-openai`` image's ``ENTRYPOINT`` is ``["vllm", "serve"]``,
     so the adapter passes ``[<model>, "--port", <port>]`` and the entrypoint
