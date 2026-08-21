@@ -4,7 +4,7 @@ These tests run on real GPU hardware (A100) inside Docker containers.
 They validate the complete pipeline: config -> preflight -> inference -> energy -> result.
 
 Run: pytest tests/integration/ -m gpu -v
-Requires: Docker with --gpus all, gpt2 model access
+Requires: Docker with a single GPU attached (--gpus 1), gpt2 model access
 """
 
 from pathlib import Path

@@ -284,6 +284,13 @@ ci-docker: ## Run ci inside a clean Ubuntu container (matches GitHub Actions env
 #   Requires: Docker, NVIDIA GPUs, nvidia-container-toolkit. When additional
 #   engines get first-party Dockerfiles, fan out the build + test steps below
 #   (or extract a per-engine sub-recipe).
+#
+#   The test containers request `--gpus 1`, matching the workflow: this target
+#   exercises one engine on one device, and a whole-host `--gpus all` request is
+#   charged against the account's entire GPU quota on a shared box, starving any
+#   measurement run going on beside it. Keep it a bare COUNT, not a device
+#   index: the host's allocation wrapper rewrites the count into whichever
+#   device it has allocated.
 # =============================================================================
 
 gpu-ci: ## GPU integration tests (mirrors gpu-ci.yml; transformers engine)
@@ -293,12 +300,12 @@ gpu-ci: ## GPU integration tests (mirrors gpu-ci.yml; transformers engine)
 	docker commit llem-ci-setup llenergymeasure-ci:transformers
 	docker rm llem-ci-setup
 	mkdir -p results/
-	docker run --rm --gpus all \
+	docker run --rm --gpus 1 \
 		-v "$(CURDIR)/tests":/app/tests:ro \
 		-v "$(CURDIR)/results":/app/results \
 		llenergymeasure-ci:transformers \
 		python3 -m pytest tests/ -v --tb=short -o "addopts="
-	docker run --rm --gpus all \
+	docker run --rm --gpus 1 \
 		-v "$(CURDIR)/tests":/app/tests:ro \
 		-v "$(CURDIR)/results":/app/results \
 		llenergymeasure-ci:transformers \
