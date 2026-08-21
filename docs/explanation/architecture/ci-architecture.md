@@ -271,6 +271,15 @@ containers to a free device via docker-level restriction, so the shared box's
 foreign workloads are untouched and in-container CUDA/NVML indices stay
 consistent. The value is host-specific runner config.
 
+The `transformers` job launches its two test containers itself rather than
+through llem, so it carries its own request: `--gpus 1`, never `--gpus all`. It
+exercises one engine on one device, and the runner host's allocation wrapper
+charges a whole-host request against the account's entire GPU quota, so an `all`
+request starves concurrent measurement runs on the same box for the length of
+the job. The request is a bare COUNT rather than a device index because the
+wrapper is the device authority: it rewrites a count into whichever device it
+has allocated, so CI never picks an index of its own.
+
 The GPU jobs serialize because the shared runner guarantees at most two free
 devices, so concurrent GPU jobs collide on device allocation. `engine-smoke`
 therefore `needs` the `transformers` job (waiting for it to finish and release
