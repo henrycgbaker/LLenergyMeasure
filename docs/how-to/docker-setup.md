@@ -584,9 +584,9 @@ both are set the env wins and `llem` logs a one-line warning; the config indices
 Because the env fully overrides the config, the two never compose - there is no "config indices
 index into the env-restricted set" case to reason about. Pick one lever per run.
 
-For tensor-parallel runs, `llem` also forwards every `NCCL_*` host variable into every container
-it launches - the experiment container, the baseline container, and the engine-server container
-in server mode; see
+For tensor-parallel runs, `llem` also forwards every non-empty `NCCL_*` host variable into each
+workload container it launches - the experiment container, the baseline container, and the
+engine-server container in server mode; see
 [multi-GPU with TensorRT-LLM](/how-to/run-with-tensorrt-llm#multi-gpu-tensor-parallelism).
 
 `LLEM_DOCKER_GPUS` also accepts a Multi-Instance GPU (MIG) instance UUID

@@ -243,12 +243,12 @@ no error, process does not return.
 - For genuine inference hangs: raise `study_execution.experiment_timeout_seconds` or
   reduce `max_new_tokens`.
 - For a multi-GPU NCCL hang: set the NCCL tuning/workaround var on the host and
-  re-run - llem forwards every `NCCL_*` host variable into every container it
-  launches (experiment, baseline, and the engine-server container in server
-  mode), so `NCCL_P2P_DISABLE=1 llem run ...` (or exporting it first) applies
-  inside the container. On a PCIe box without working P2P this is the standard
-  fix. In server mode the same hang shows up as a server that never becomes
-  ready: `docker logs <container>` stops at the NCCL init line.
+  re-run - llem forwards every non-empty `NCCL_*` host variable into each
+  workload container it launches (experiment, baseline, and the engine-server
+  container in server mode), so `NCCL_P2P_DISABLE=1 llem run ...` (or exporting
+  it first) applies inside the container. On a PCIe box without working P2P this
+  is the standard fix. In server mode the same hang shows up as a server that
+  never becomes ready: `docker logs <container>` stops at the NCCL init line.
 
 ---
 
