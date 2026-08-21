@@ -195,6 +195,19 @@ def _detect_steady_state(powers: list[float], times: list[float]) -> float | Non
     No heavy change-point library is used: change-point detectors (PELT, ruptures,
     BOCPD) are fragile on short, noisy, autocorrelated series, so this is a direct
     ~40-line stability test.
+
+    COST CONSTRAINT - read before calling this in a loop. The stable-through-end
+    requirement makes the cost SUPER-QUADRATIC in ``len(powers)``: each candidate onset
+    re-tests every window from itself to the end of the series, and each test is
+    linear in the window size, which is itself a fraction of the series. The worst case
+    is a series that is stable for a long stretch and then stops being stable at the
+    very END, because then no candidate can exit early. That is fine for the one-shot
+    offline call this module makes (once per run, on a finished series), but a caller
+    that re-evaluates a GROWING series - the server-mode warmup gate - must feed it a
+    DOWNSAMPLED view, or a single evaluation eventually costs minutes. The gate
+    therefore evaluates a 1 Hz view of the power series (``harness/server_warmup.py``,
+    ``_gate_view``) while the capture keeps the sampler's full cadence; do not point it
+    back at the raw series.
     """
     n = len(powers)
     if n < _AUTO_MIN_WINDOW_SAMPLES * 2:
