@@ -284,6 +284,31 @@ class TestShadowedDefaultImage:
 
 
 class TestShowImageResolution:
+    @pytest.fixture(autouse=True)
+    def _hermetic_chain(self, monkeypatch):
+        """Pin the chain inputs: no user config file, no ambient LLEM_IMAGE_* pins."""
+        from llenergymeasure.config.ssot import ALL_ENGINES as _ENGINES
+        from llenergymeasure.config.ssot import ENV_IMAGE_PREFIX
+        from llenergymeasure.config.user_config import UserConfig
+
+        monkeypatch.setattr(
+            "llenergymeasure.config.user_config.load_user_config",
+            lambda config_path=None: UserConfig(),
+        )
+        for engine in _ENGINES:
+            monkeypatch.delenv(f"{ENV_IMAGE_PREFIX}{engine.upper()}", raising=False)
+
+    def test_env_pin_shows_what_a_run_would_use(self, capsys, monkeypatch):
+        """LLEM_IMAGE_<ENGINE> shows in the diagnostic exactly as a run resolves it."""
+        from llenergymeasure.infra.image_registry import show_image_resolution
+
+        monkeypatch.setenv("LLEM_IMAGE_VLLM", "pinned/vllm:diag")
+        show_image_resolution()
+
+        output = capsys.readouterr().out
+        assert "pinned/vllm:diag" in output
+        assert "(env)" in output
+
     def test_prints_all_engines(self, capsys):
         from llenergymeasure.infra.image_registry import show_image_resolution
 
