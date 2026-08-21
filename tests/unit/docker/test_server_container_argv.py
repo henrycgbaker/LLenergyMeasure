@@ -165,8 +165,15 @@ def test_container_argv_carries_no_nccl_when_host_sets_none(no_host_nccl):
 
 
 def test_non_nccl_host_var_not_forwarded(monkeypatch):
-    """A non-NCCL host var must not ride into the server container."""
+    """A non-NCCL host var must not ride into the server container.
+
+    ``NCCLX_FAKE`` is the near-miss half: an unrelated var is caught by any
+    forwarding filter at all, but only a prefix that keeps the underscore
+    (``NCCL_``, not ``NCCL``) excludes a var whose name merely starts with the
+    same four letters.
+    """
     monkeypatch.setenv("SOME_UNRELATED_VAR", "leak")
+    monkeypatch.setenv("NCCLX_FAKE", "1")
 
     argv = build_server_container_argv(
         image="img:v1",
@@ -176,6 +183,7 @@ def test_non_nccl_host_var_not_forwarded(monkeypatch):
     )
 
     assert not any("SOME_UNRELATED_VAR" in token for token in argv)
+    assert not any("NCCLX_FAKE" in token for token in argv)
 
 
 def test_container_argv_is_pinned_exactly(monkeypatch, no_host_nccl):
