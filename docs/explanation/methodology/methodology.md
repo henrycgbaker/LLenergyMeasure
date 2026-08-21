@@ -404,6 +404,37 @@ than silently passing. `mode: fixed` is the explicit opt-out - the same
 issuer-driven traffic path with no gate, for a fixed `duration_seconds`
 (default 300 s); a duration of 0 skips warmup traffic entirely.
 
+The gate is evaluated off the loop that issues the warmup traffic, and its
+power-plateau observable reads a 1 Hz view of the sampler's power series rather than
+the raw one. Both details are load-bearing. Steady-state detection costs
+super-quadratically in the sample count, and the gate re-evaluates a series that
+grows for as long as warmup lasts, so at the sampler's full 100 ms cadence a single
+evaluation eventually costs more than the interval between evaluations; on the
+issuing loop, that stalls the warmup traffic, which lets the GPU fall to idle, which
+makes the next evaluation slower still. Evaluating off the loop keeps the traffic
+flowing and keeps the failsafe deadline enforceable however long one evaluation
+takes. Downsampling re-bases the detector's cost on `timeout_seconds` rather than on
+the capture cadence: it is about 3.9 s per evaluation at the 900 s default on one
+GPU. The view carries one decimated series per monitored GPU and the plateau pools
+them into a single detection, so the detector's input - and the same cost curve -
+grows with GPU count times timeout: roughly 30 s per evaluation with two GPUs at
+the default, about 4 min with four, and it scales up sharply if the timeout is set
+far above the default.
+
+The downsampling applies to the plateau observable alone. Its thresholds are
+duration-based and survive it: the plateau window is a fraction of the series, so it
+covers the same wall-clock stretch at either cadence. Two sample-count constants in
+its pipeline do shift their time footprint, and both are accepted - the dropout
+median filter smooths over 3 s of the view rather than 0.3 s of the raw series, and
+the detector's 8-sample history floor becomes 8 s rather than 0.8 s, which never
+binds because the gate already requires about 90 s of history before it can pass.
+The temperature and throttle observables are deliberately NOT downsampled: both are
+extreme-value statistics over a trailing window, so a decimated series would be
+systematically blind to a short throttle episode or temperature spike that ought to
+veto the window, and both are cheap enough at full cadence to leave alone. The
+capture is untouched either way, and energy is integrated over the full-cadence
+series.
+
 Warmup re-runs before *every* rate level. This fails safe: a level that is
 already at equilibrium from the previous level exits the gate quickly, while a
 level that shifted the operating point re-converges before it is measured.

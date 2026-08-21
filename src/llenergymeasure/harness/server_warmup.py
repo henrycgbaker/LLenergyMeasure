@@ -22,8 +22,14 @@ safe; an already-equilibrated later level exits fast). Two modes:
     (the per-sample ``thermal_throttle`` flag = the "while active" reading of
     ``ThrottleInfo.thermal.any``).
 
-  A hard ``timeout_seconds`` failsafe (default 900s) PROCEEDS with a loud
-  ``timed_out`` stamp rather than hanging or silently passing.
+  The gate is evaluated off the event loop, and the POWER PLATEAU observable reads a
+  1 Hz view of the poll rather than the raw series: steady-state detection costs
+  super-quadratically in the sample count, so on a series that grows for as long as
+  warmup lasts it has to be given a bounded view. The other two observables are
+  extreme-value statistics that a decimated series would go blind to, so they read the
+  poll at the sampler's full cadence, as does the energy integration (``_gate_view``,
+  ``_evaluate_off_loop``). A hard ``timeout_seconds`` failsafe (default 900s) PROCEEDS
+  with a loud ``timed_out`` stamp rather than hanging or silently passing.
 
 - **fixed** (explicit opt-out): the same issuer-driven traffic path, no gate, for
   ``duration_seconds`` (default 300s; 0 skips warmup traffic entirely).
@@ -43,6 +49,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -63,6 +70,8 @@ if TYPE_CHECKING:
     from llenergymeasure.harness.window_manager import WarmupContext
     from llenergymeasure.serving.transport import RequestShape
     from llenergymeasure.serving.types import ProbeRequest
+
+logger = logging.getLogger(__name__)
 
 
 @runtime_checkable
@@ -164,12 +173,90 @@ _TEMP_SETTLED_DELTA_C = 2.0
 _THROTTLE_ACTIVE_WINDOW_S = _TEMP_CONFIRM_WINDOW_S
 #: Default gate-evaluation cadence.
 _GATE_POLL_INTERVAL_S = 2.0
+#: Cadence of the DOWNSAMPLED series view the POWER PLATEAU observable is computed over.
+#: The throttle and temperature observables, and the energy integration, all keep the
+#: sampler's own (100ms) cadence. See :func:`_gate_view` for why the split.
+_GATE_VIEW_INTERVAL_S = 1.0
 
 
 # ---------------------------------------------------------------------------
 # Gate observables (each computed from one PowerThermalSampler poll, in the
 # sampler's own perf_counter clock; each gates independently).
 # ---------------------------------------------------------------------------
+
+
+def _gate_view(samples: list[PowerThermalSample]) -> list[PowerThermalSample]:
+    """Decimate one poll to at most one sample per GPU per ``_GATE_VIEW_INTERVAL_S``.
+
+    Feeds the POWER PLATEAU observable only. The other two observables are extreme-value
+    statistics over a trailing window - ``any()`` over the throttle bit, max-minus-min
+    over temperature - and a decimated series is systematically blind to a short-lived
+    extreme: a 100ms throttle episode survives sub-sampling to 1 Hz about one time in
+    ten. They therefore stay at the sampler's full cadence, which costs nothing worth
+    counting because both are linear in the sample count (about 2ms together at the
+    9000 samples a 900s warmup collects, against ~1.4s for the plateau).
+
+    WHY the plateau observable needs a downsampled view: it runs
+    ``windowing._detect_steady_state``, whose cost grows super-quadratically with the
+    sample count (it slides a window over the series and, from every candidate onset,
+    re-tests every window through to the end). The gate re-evaluates on a series that
+    GROWS for as long as warmup lasts, so at the sampler's full cadence a single
+    evaluation eventually costs more than the whole poll interval, and its worst case
+    is exactly a series that stops being stable at the very end - which is what a
+    stalled issuing loop produces. Decimating the view does not make the cost flat; it
+    re-bases the same curve on the warmup's failsafe timeout in SECONDS instead of on
+    the capture cadence, which is ~3.9s per evaluation at the 900s default on ONE gpu.
+    The view holds one decimated series per monitored gpu and the plateau pools them
+    into a single detection, so the curve's input is gpu count x timeout: ~30s at the
+    default with two gpus, ~4min with four. The timeout carries no upper bound either,
+    so the cost still runs away if it is set far above the default (~30s per
+    evaluation at 1800s on one gpu); the loop stays responsive throughout
+    because the evaluation runs off it, but an abandoned worker thread does keep
+    burning a core until it finishes.
+
+    WHAT the decimation changes, deliberately, for the plateau observable. Its
+    thresholds are duration-based and so survive unchanged: the plateau window is a
+    FRACTION of the series, so it spans the same wall-clock stretch at either cadence,
+    and sub-sampling a stationary series leaves its coefficient of variation unchanged
+    in expectation. Two SAMPLE-COUNT constants in the same pipeline do not survive
+    unchanged, and both are accepted:
+
+    * ``windowing._MEDIAN_KERNEL`` = 3 smooths over 3 samples, so its dropout filter
+      spans 3s of the view rather than 0.3s of the raw series. It exists to kill
+      single-sample NVML transients, and a 1 Hz view has no sub-second transients left
+      to kill.
+    * ``windowing._AUTO_MIN_WINDOW_SAMPLES`` = 4 makes this observable need 8 samples,
+      so its own history floor becomes 8s rather than 0.8s. It is never the binding
+      floor: the temperature observable already requires ~90s of history before the
+      gate can pass, which is 90 samples of the view, 22x the detector's 4-sample
+      minimum.
+
+    The view is also blind to power ripple faster than its own Nyquist frequency, where
+    the raw series would read the ripple as instability. That is the acceptable
+    direction here: the plateau question is whether the series has settled at a level
+    over a trailing window, not whether consecutive samples differ.
+
+    Decimation is per GPU (the plateau pools per GPU), and the NEWEST sample of each GPU
+    is always kept, so the view never lags the series it summarises. The MEASUREMENT is
+    untouched by all of this - ``_integrate_sampler_energy`` integrates the sampler's
+    own full series, not this view.
+    """
+    by_gpu: dict[int, list[PowerThermalSample]] = {}
+    for s in samples:
+        by_gpu.setdefault(s.gpu_index, []).append(s)
+
+    view: list[PowerThermalSample] = []
+    for gpu_samples in by_gpu.values():
+        ordered = sorted(gpu_samples, key=lambda s: s.timestamp)
+        last_index = len(ordered) - 1
+        kept_at: float | None = None
+        for i, s in enumerate(ordered):
+            due = kept_at is None or s.timestamp - kept_at >= _GATE_VIEW_INTERVAL_S
+            if due or i == last_index:
+                view.append(s)
+                kept_at = s.timestamp
+    view.sort(key=lambda s: s.timestamp)
+    return view
 
 
 def _power_plateau(samples: list[PowerThermalSample]) -> bool:
@@ -249,11 +336,33 @@ class ObservableState:
 
 
 def _evaluate_observables(samples: list[PowerThermalSample]) -> ObservableState:
+    """The three observables from one raw poll; only the plateau reads a decimated view.
+
+    The split is the whole point (see :func:`_gate_view`): the plateau observable is the
+    one whose cost forces a bounded view, and the throttle and temperature observables
+    are the two that must not lose a short-lived extreme, so they read the poll as
+    captured. Applying the view HERE keeps the decision in one place instead of leaving
+    each observable to pick a cadence. This runs off the event loop - keep it free of
+    anything but the observables.
+    """
     return ObservableState(
-        power_plateau=_power_plateau(samples),
+        power_plateau=_power_plateau(_gate_view(samples)),
         temperature_settled=_temperature_settled(samples),
         throttle_clear=_throttle_clear(samples),
     )
+
+
+async def _evaluate_off_loop(samples: list[PowerThermalSample]) -> ObservableState:
+    """Evaluate the gate in a worker thread, so the issuing loop keeps running.
+
+    The gate's cost is bounded by the decimated view, but "bounded" is not "small
+    enough to block the loop that issues the warmup traffic": a stalled loop stops the
+    traffic, the GPU falls to idle, and the series tail becomes the detector's worst
+    case - a self-reinforcing stall that also starves the failsafe deadline, because
+    the deadline is checked by that same loop. Evaluating off the loop keeps traffic
+    flowing and keeps the deadline enforceable whatever one evaluation costs.
+    """
+    return await asyncio.to_thread(_evaluate_observables, samples)
 
 
 # ---------------------------------------------------------------------------
@@ -313,8 +422,10 @@ def describe_server_warmup_protocol(config: ServerWarmupConfig) -> str:
         "server convergence-composite warmup: issuer-driven traffic at the target rate "
         f"until GPU power plateaus (CoV <= {_AUTO_CV_THRESHOLD:g}), temperature settles "
         f"(trailing-{_TEMP_SETTLE_WINDOW_S:g}s range < {_TEMP_SETTLED_DELTA_C:g}C held "
-        f"+{_TEMP_CONFIRM_WINDOW_S:g}s), and no thermal throttle is active; failsafe "
-        f"timeout {config.timeout_seconds:g}s (proceeds with timed_out on expiry)"
+        f"+{_TEMP_CONFIRM_WINDOW_S:g}s), and no thermal throttle is active; the plateau "
+        f"is evaluated on a {1.0 / _GATE_VIEW_INTERVAL_S:g} Hz view of the sampler series "
+        "and the other two observables at its full cadence; failsafe timeout "
+        f"{config.timeout_seconds:g}s (proceeds with timed_out on expiry)"
     )
 
 
@@ -391,6 +502,11 @@ class ServerWarmup:
     async def _warm_composite(self, context: WarmupContext) -> ServerWarmupResult:
         """Composite gate: issuer-driven traffic until all three observables hold.
 
+        The gate is evaluated OFF this loop (see :func:`_evaluate_off_loop`) and the
+        loop only ever polls the in-flight evaluation for a verdict, so neither the
+        warmup traffic nor the failsafe deadline can be starved by an evaluation that
+        turns out slow: every iteration reaches the deadline check.
+
         Fails fast if the traffic dies before the gate resolves (a dead warmup
         mechanism is not disclosed uncertainty) or if warmup delivered zero
         completed requests.
@@ -414,6 +530,10 @@ class ServerWarmup:
 
         sampler.start()
         traffic_task: asyncio.Task[Any] = asyncio.create_task(source.run(counting))
+        # At most ONE gate evaluation is ever in flight: a poll that finds the previous
+        # one still running does not queue another (which would pile threads up behind
+        # a slow evaluation), it just re-checks the deadline and sleeps.
+        eval_task: asyncio.Task[ObservableState] | None = None
         try:
             while True:
                 # Watch the traffic each poll. A completion strictly BEFORE the
@@ -428,14 +548,23 @@ class ServerWarmup:
                     traffic_died = True
                     cause = _traffic_cause(traffic_task)
                     break
-                observables = _evaluate_observables(sampler.get_samples())
-                if observables.all_hold:
-                    break
+                # Harvest a finished verdict BEFORE starting the replacement, so a poll
+                # is never spent on an evaluation that has already answered (checking
+                # after would halve the gate's effective cadence).
+                if eval_task is not None and eval_task.done():
+                    finished, eval_task = eval_task, None
+                    observables = finished.result()
+                    if observables.all_hold:
+                        break
+                if eval_task is None:
+                    eval_task = asyncio.create_task(_evaluate_off_loop(sampler.get_samples()))
                 if self._clock() >= deadline:
                     timed_out = True
                     break
                 await self._sleep(self._poll_interval)
         finally:
+            if eval_task is not None:
+                await self._discard_evaluation(eval_task)
             await self._stop_traffic(traffic_task)
             sampler.stop()
             energy_j = _integrate_sampler_energy(sampler.get_samples())
@@ -528,6 +657,24 @@ class ServerWarmup:
             pre_window_protocol=protocol,
             energy_j=energy_j,
         )
+
+    @staticmethod
+    async def _discard_evaluation(eval_task: asyncio.Task[ObservableState]) -> None:
+        """Drop the wait on an in-flight gate evaluation, without losing its failure.
+
+        Abandoning the wait leaves the worker thread to run itself out, which is only
+        acceptable because the plateau's view bounds what one evaluation can cost. The
+        verdict is genuinely not wanted any more, but an EXCEPTION is: swallowing it
+        would let a detector bug surface as whatever the loop was already reporting -
+        typically a traffic failure - and send the reader after the wrong defect.
+        """
+        eval_task.cancel()
+        try:
+            await eval_task
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            logger.exception("server warmup gate evaluation raised; discarding its verdict")
 
     @staticmethod
     async def _stop_traffic(traffic_task: asyncio.Task[Any]) -> None:
