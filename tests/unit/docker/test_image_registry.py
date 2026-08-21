@@ -9,7 +9,7 @@ import pytest
 
 from llenergymeasure.config.precedence import resolve_study_settings
 from llenergymeasure.config.runner_spec import pins_from_resolved
-from llenergymeasure.config.ssot import ENV_IMAGE_PREFIX, Engine
+from llenergymeasure.config.ssot import ALL_ENGINES, ENV_IMAGE_PREFIX, Engine
 from llenergymeasure.config.user_config import UserConfig
 
 
@@ -287,15 +287,11 @@ class TestShowImageResolution:
     @pytest.fixture(autouse=True)
     def _hermetic_chain(self, monkeypatch):
         """Pin the chain inputs: no user config file, no ambient LLEM_IMAGE_* pins."""
-        from llenergymeasure.config.ssot import ALL_ENGINES as _ENGINES
-        from llenergymeasure.config.ssot import ENV_IMAGE_PREFIX
-        from llenergymeasure.config.user_config import UserConfig
-
         monkeypatch.setattr(
             "llenergymeasure.config.user_config.load_user_config",
             lambda config_path=None: UserConfig(),
         )
-        for engine in _ENGINES:
+        for engine in ALL_ENGINES:
             monkeypatch.delenv(f"{ENV_IMAGE_PREFIX}{engine.upper()}", raising=False)
 
     def test_env_pin_shows_what_a_run_would_use(self, capsys, monkeypatch):
@@ -382,7 +378,6 @@ class TestResolveImage:
         assert source == "runner_override"
 
     def test_user_config_images_fourth_precedence(self):
-
         with patch(
             "llenergymeasure.infra.image_registry._image_exists_locally", return_value=False
         ):
@@ -421,7 +416,6 @@ class TestResolveImage:
         assert source == "env"
 
     def test_yaml_images_ignores_other_engines(self):
-
         with patch("llenergymeasure.infra.image_registry._image_exists_locally", return_value=True):
             image, source = _resolve_image(
                 "vllm",
