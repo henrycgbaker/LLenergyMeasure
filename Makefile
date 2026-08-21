@@ -383,7 +383,7 @@ docker-pull: ## Pull the versioned transformers image from GHCR
 	docker pull "ghcr.io/henrycgbaker/llenergymeasure/transformers:v$$version"
 
 docker-images: ## Show which images llem will use (local vs registry)
-	@python3 -c "from llenergymeasure.infra.image_registry import show_image_resolution; show_image_resolution()"
+	@python3 -c "from llenergymeasure.api.health import show_image_resolution; show_image_resolution()"
 
 docker-check: ## Validate the docker-compose config parses cleanly
 	@docker compose config -q || (echo "Error: Invalid docker-compose config"; exit 1)

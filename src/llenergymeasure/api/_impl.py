@@ -51,6 +51,7 @@ def load_study(
     cli_overrides: dict[str, Any] | None = None,
     *,
     execution_defaults: dict[str, Any] | None = None,
+    overrides: dict[str, Any] | None = None,
 ) -> StudyConfig:
     """Load a study YAML and resolve it into a runnable StudyConfig.
 
@@ -73,10 +74,15 @@ def load_study(
         path: Path to study YAML file.
         cli_overrides: Optional dict of overrides applied ON TOP of the study file
             (e.g. {"study_execution": {"n_cycles": 5}}) - they win over what the
-            file declares.
+            file declares. This is the call-site layer of the precedence chain, so
+            a study setting resolved from here is recorded with a ``call_site``
+            provenance label.
         execution_defaults: Optional execution-block defaults applied BENEATH the
             study file: a field the file wrote wins, a field it omitted takes this
             value (e.g. {"n_cycles": 3}).
+        overrides: Optional study-file-shaped call-site overrides for the settings
+            the precedence chain owns (e.g. {"output": {"results_dir": "/data"}}).
+            Wins over ``cli_overrides`` where both name the same setting.
 
     Returns:
         Resolved StudyConfig with ordered experiments, study_design_hash, dedup
@@ -88,6 +94,7 @@ def load_study(
         ValidationError: Pydantic structural errors pass through unchanged.
     """
     from llenergymeasure.config.loader import load_study_config
+    from llenergymeasure.config.precedence import resolve_layers
     from llenergymeasure.config.user_config import load_user_config
     from llenergymeasure.study.loading import resolve_study
 
@@ -96,6 +103,7 @@ def load_study(
         load_study_config(path, cli_overrides=cli_overrides),
         user_config=load_user_config(),
         execution_defaults=execution_defaults,
+        overrides=resolve_layers(cli_overrides or {}, overrides or {}),
     )
 
 
@@ -183,9 +191,7 @@ def run_experiment(
     study = _to_study_config(
         config, model=model, engine=engine, n_prompts=n_prompts, dataset=dataset, **kwargs
     )
-    if output_dir is not None:
-        study.output = study.output.model_copy(update={"results_dir": str(output_dir)})
-    study = _resolve_objects(study)
+    study = _resolve_objects(study, overrides=_results_dir_override(output_dir))
     study_result = orchestrate_study(study, skip_preflight=skip_preflight, progress=progress)
     if not study_result.experiments:
         from llenergymeasure.utils.exceptions import ExperimentError
@@ -246,7 +252,9 @@ def run_study(
             resumable study in ``output_dir`` (default ``results/``).
         output_dir: Dual role by run mode. For a fresh run it is the results-dir
             override (precedence: ``output_dir`` > YAML ``output.results_dir`` >
-            user config > ``./results``). For an auto-detect resume it is the base
+            user config > ``./results``). Applies to an already-resolved
+            StudyConfig input too - redirecting where results land never touches
+            the resolved identity. For an auto-detect resume it is the base
             directory searched for the most recent resumable study. Ignored when
             ``resume_dir`` is given explicitly.
         skip_set: Set of (config_hash, cycle) pairs to skip (already completed in a
@@ -256,9 +264,16 @@ def run_study(
         config_path: Original YAML config file path for copying to study artefacts.
             When config is a StudyConfig object, callers should pass the original
             path separately so the YAML is preserved for reproducibility.
-        cli_overrides: Flat dict of CLI flag overrides (e.g. {"model": "gpt2"}).
-            Used to build the per-experiment config.json ``provenance`` section
-            showing which fields were overridden by CLI flags vs YAML vs sweep.
+        cli_overrides: Overrides applied on top of the study file when ``config``
+            is a path (forwarded to :func:`load_study` as its call-site layer, so
+            they win over what the file declares and are recorded as ``call_site``
+            in the provenance). Study-file-shaped and nested only, e.g.
+            ``{"task": {"model": "gpt2"}}`` or ``{"study_execution":
+            {"n_cycles": 5}}`` - flat or dotted keys (``{"model": ...}``,
+            ``{"task.model": ...}``) are not study-file keys and fail loudly at
+            load. An ``n_cycles`` override really multiplies the dispatched
+            experiment list, like any resolved cycle count. Ignored for a
+            StudyConfig input, which the caller has already built.
         preresolved: Optional ``(runner_specs, system_overrides)`` already
             computed by a prior ``run_study_preflight`` call (e.g. the CLI runs
             preflight to render the panel). When supplied, the orchestrator reuses
@@ -277,27 +292,25 @@ def run_study(
     """
     from llenergymeasure.study.orchestration import orchestrate_study
 
+    # The public ``output_dir`` is overloaded (#842): for an auto-detect resume it
+    # is the base directory searched for the most recent resumable study, and for a
+    # fresh run it is the results-dir override. A resume consumes it below to
+    # locate the study, so only a fresh run feeds it into resolution.
+    resume_search_base = output_dir
+    is_resume = resume_dir is not None or resume
+    overrides = None if is_resume else _results_dir_override(output_dir)
+
     if isinstance(config, (str, Path)):
         config_path = config_path or Path(config).resolve()
-        study = load_study(config_path)
+        study = load_study(config_path, cli_overrides=cli_overrides, overrides=overrides)
     elif isinstance(config, StudyConfig):
         # config_path may have been passed by caller (e.g. CLI pre-loads config)
-        study = _resolve_objects(config)
+        study = _resolve_objects(config, overrides=overrides)
     else:
         raise ConfigError(f"Expected str, Path, or StudyConfig; got {type(config).__name__}")
 
-    # #842 adapter mapping: the public ``output_dir`` is overloaded, so split it
-    # into the orchestrator's two single-purpose internal roles:
-    #   - resume_search_base: base dir scanned for the most recent resumable
-    #     study (auto-detect resume only; ignored when resume_dir is explicit).
-    #   - results_dir_override: results-dir override for a fresh run.
-    # A resume consumes resume_search_base here (to locate the study) and hands
-    # the orchestrator results_dir_override=None; a fresh run does the reverse.
-    resume_search_base = output_dir
-    results_dir_override = output_dir
-
     # Resolve resume state if requested.
-    if resume_dir is not None or resume:
+    if is_resume:
         from llenergymeasure.study.resume import (
             find_resumable_study,
             load_resume_state,
@@ -325,13 +338,9 @@ def run_study(
         skip_preflight=skip_preflight,
         progress=progress,
         resume_dir=resume_dir,
-        # Fresh runs (resume_dir is None) apply results_dir_override; a resume
-        # already consumed output_dir as the search base above, so pass None.
-        results_dir_override=results_dir_override if resume_dir is None else None,
         skip_set=skip_set,
         no_lock=no_lock,
         config_path=config_path,
-        cli_overrides=cli_overrides,
         preresolved=preresolved,
     )
 
@@ -341,7 +350,14 @@ def run_study(
 # ---------------------------------------------------------------------------
 
 
-def _resolve_objects(study: StudyConfig) -> StudyConfig:
+def _results_dir_override(output_dir: str | Path | None) -> dict[str, Any] | None:
+    """The call-site results-dir layer for an explicit ``output_dir`` argument."""
+    if output_dir is None:
+        return None
+    return {"output": {"results_dir": str(output_dir)}}
+
+
+def _resolve_objects(study: StudyConfig, *, overrides: dict[str, Any] | None = None) -> StudyConfig:
     """Route a caller-built StudyConfig through the single resolution entry point.
 
     A StudyConfig assembled in memory - by ``run_study(StudyConfig(...))``, by
@@ -352,19 +368,62 @@ def _resolve_objects(study: StudyConfig) -> StudyConfig:
     the resolution a YAML study gets, with no file touched (#886).
 
     An already-resolved study (one that carries a ``study_design_hash``, i.e. it
-    came from ``load_study``) is returned untouched, before the user config is
-    even read: its experiment list is already cycle-expanded, so resolving twice
-    would re-expand it. A study whose hash was written by hand rather than by
-    resolution is therefore NOT quietly resolved here - the orchestrator refuses
-    it, which is the louder outcome.
+    came from ``load_study``) is NOT re-resolved: its experiment list is already
+    cycle-expanded, so resolving twice would re-expand it. A results-dir override
+    (the ``output_dir`` argument) still applies to it - directly, recorded as a
+    call-site value in the provenance - because redirecting where results land
+    never touches the study's identity. Any OTHER override on an already-resolved
+    study raises: silently dropping it would break the documented contract, and
+    quietly re-resolving would re-expand the cycles. A study whose hash was
+    written by hand rather than by resolution is likewise NOT quietly resolved
+    here - the orchestrator refuses it, which is the louder outcome.
     """
     if study.study_design_hash is not None:
-        return study
+        return _apply_overrides_to_resolved(study, overrides)
 
     from llenergymeasure.config.user_config import load_user_config
     from llenergymeasure.study.loading import resolve_study_objects
 
-    return resolve_study_objects(study, user_config=load_user_config())
+    return resolve_study_objects(study, user_config=load_user_config(), overrides=overrides)
+
+
+def _apply_overrides_to_resolved(
+    study: StudyConfig, overrides: dict[str, Any] | None
+) -> StudyConfig:
+    """Apply call-site overrides to a study that already went through resolution.
+
+    Only ``output.results_dir`` is applicable: it redirects where results land
+    without touching the resolved identity, so it is applied directly and recorded
+    as a call-site value. Anything else must enter through resolution proper -
+    raising here is the loud alternative to silently ignoring it.
+    """
+    if not overrides:
+        return study
+
+    from llenergymeasure.config._dict_utils import dotted_leaf_paths
+
+    flat = set(dotted_leaf_paths(overrides))
+    if flat != {"output.results_dir"}:
+        unexpected = sorted(flat - {"output.results_dir"})
+        raise ConfigError(
+            "This study is already resolved (it carries a study_design_hash), so "
+            f"overrides cannot be applied to it: {', '.join(unexpected)}. Pass "
+            "overrides to load_study()/run_study(path, ...) so they enter "
+            "resolution, or rebuild the StudyConfig with the values you want."
+        )
+
+    from llenergymeasure.config.ssot import SOURCE_CALL_SITE
+
+    results_dir = overrides["output"]["results_dir"]
+    return study.model_copy(
+        update={
+            "output": study.output.model_copy(update={"results_dir": results_dir}),
+            "settings_provenance": {
+                **study.settings_provenance,
+                "output.results_dir": SOURCE_CALL_SITE,
+            },
+        }
+    )
 
 
 def _to_study_config(

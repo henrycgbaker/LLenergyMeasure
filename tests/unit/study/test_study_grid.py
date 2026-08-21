@@ -168,7 +168,7 @@ class TestExpandGridSweep:
                 "task.dataset.n_prompts": [50, 100],
             },
         }
-        valid, skipped = expand_grid(raw)
+        valid, skipped, _swept = expand_grid(raw)
         assert len(valid) == 4
         assert len(skipped) == 0
         dtypes_set = {c.transformers.engine_params.dtype for c in valid}
@@ -188,7 +188,7 @@ class TestExpandGridSweep:
                 "measurement.latency_profiling": [False, True],
             },
         }
-        valid, skipped = expand_grid(raw)
+        valid, skipped, _swept = expand_grid(raw)
         assert len(valid) == 2
         assert len(skipped) == 0
         flags = {c.measurement.latency_profiling for c in valid}
@@ -206,7 +206,7 @@ class TestExpandGridSweep:
                 "transformers.llem_execution.batch_size": [1, 8],
             },
         }
-        valid, skipped = expand_grid(raw)
+        valid, skipped, _swept = expand_grid(raw)
         assert len(valid) == 2
         assert len(skipped) == 0
         batch_sizes = {c.transformers.llem_execution.batch_size for c in valid}
@@ -225,7 +225,7 @@ class TestExpandGridSweep:
                 "vllm.engine_params.max_num_seqs": [64, 256],
             },
         }
-        valid, skipped = expand_grid(raw)
+        valid, skipped, _swept = expand_grid(raw)
         # transformers: 2 dtypes x 2 batch_sizes = 4
         # vllm: 2 dtypes x 2 max_num_seqs = 4
         # total = 8
@@ -260,7 +260,7 @@ class TestExpandGridSweep:
                 "vllm.engine_params.max_num_seqs": [64, 256],
             },
         }
-        valid, skipped = expand_grid(raw)
+        valid, skipped, _swept = expand_grid(raw)
         assert skipped == []
         engines = {c.engine for c in valid}
         assert engines == {"transformers", "vllm"}
@@ -281,7 +281,7 @@ class TestExpandGridSweep:
                 "vllm.engine_params.max_num_seqs": [64, 256],
             },
         }
-        valid, skipped = expand_grid(raw)
+        valid, skipped, _swept = expand_grid(raw)
         assert skipped == []
         assert {c.engine for c in valid} == {"vllm"}
 
@@ -299,7 +299,7 @@ class TestExpandGridExplicit:
                 {"task": {"model": "gpt2"}, "engine": "vllm", "serving_mode": "offline"},
             ]
         }
-        valid, _skipped = expand_grid(raw)
+        valid, _skipped, _swept = expand_grid(raw)
         assert len(valid) == 2
         assert valid[0].engine == "transformers"
         assert valid[1].engine == "vllm"
@@ -324,7 +324,7 @@ class TestExpandGridCombined:
                 {"task": {"model": "gpt2-xl"}, "engine": "transformers"},
             ],
         }
-        valid, _skipped = expand_grid(raw)
+        valid, _skipped, _swept = expand_grid(raw)
         # 2 sweep + 1 explicit = 3
         assert len(valid) == 3
         # Sweep configs first
@@ -346,7 +346,7 @@ class TestExpandGridInlineBaseline:
     def test_inline_model_form_yields_single_baseline(self):
         """No sweep, no experiments, top-level task.model -> exactly one baseline."""
         raw = {"study_name": "inline", "task": {"model": "gpt2"}, "serving_mode": "offline"}
-        valid, _skipped = expand_grid(raw)
+        valid, _skipped, _swept = expand_grid(raw)
         assert len(valid) == 1
         assert valid[0].engine == "transformers"
         assert valid[0].task.model == "gpt2"
@@ -365,7 +365,7 @@ class TestExpandGridInlineBaseline:
                 {"engine": "vllm"},
             ],
         }
-        valid, _skipped = expand_grid(raw)
+        valid, _skipped, _swept = expand_grid(raw)
         assert len(valid) == 2
         assert [c.engine for c in valid] == ["transformers", "vllm"]
         # None of them is a synthesized baseline: every entry carries the engine
@@ -395,7 +395,7 @@ class TestExpandGridBase:
             },
         }
         study_yaml = tmp_path / "study.yaml"
-        valid, _skipped = expand_grid(raw, study_yaml_path=study_yaml)
+        valid, _skipped, _swept = expand_grid(raw, study_yaml_path=study_yaml)
         assert len(valid) == 2
         for c in valid:
             assert c.task.model == "gpt2"
@@ -424,7 +424,7 @@ class TestExpandGridBase:
             },
         }
         study_yaml = tmp_path / "study.yaml"
-        valid, _skipped = expand_grid(raw, study_yaml_path=study_yaml)
+        valid, _skipped, _swept = expand_grid(raw, study_yaml_path=study_yaml)
         assert len(valid) == 1
         assert valid[0].transformers.engine_params.dtype == "float16"
         assert valid[0].task.model == "gpt2"
@@ -453,7 +453,7 @@ class TestExpandGridBase:
             "images": {"transformers": "ghcr.io/org/img:tag"},
             "sweep": {"task.dataset.n_prompts": [10, 20]},
         }
-        valid, skipped = expand_grid(raw)
+        valid, skipped, _swept = expand_grid(raw)
         assert len(skipped) == 0
         assert len(valid) == 2
         assert {c.task.dataset.n_prompts for c in valid} == {10, 20}
@@ -479,7 +479,7 @@ class TestExpandGridInvalidHandling:
                 {"task": {"model": "gpt2"}, "engine": "transformers", "vllm": {"max_num_seqs": 64}},
             ],
         }
-        valid, skipped = expand_grid(raw)
+        valid, skipped, _swept = expand_grid(raw)
         # The two sweep configs are valid; the explicit one fails cross-validation
         assert len(valid) == 2
         assert len(skipped) == 1
@@ -543,7 +543,7 @@ class TestExpandGridInvalidHandling:
             "experiments": None,
             "sweep": {"transformers.engine_params.dtype": ["float16", "bfloat16"]},
         }
-        valid, skipped = expand_grid(raw)
+        valid, skipped, _swept = expand_grid(raw)
         assert len(valid) == 2
         assert skipped == []
 
@@ -563,7 +563,7 @@ class TestExpandGridInvalidHandling:
             "transformers": {"engine_params": {"num_beams": 2}},
             "sweep": {"transformers.sampling_params.num_return_sequences": [1, 4]},
         }
-        _valid, skipped = expand_grid(raw)
+        _valid, skipped, _swept = expand_grid(raw)
         assert len(skipped) == 1
         # rule_id was still extracted before ctx was dropped.
         assert skipped[0].rule_id is not None
@@ -589,7 +589,7 @@ class TestSkippedConfigRuleAttribution:
             "transformers": {"engine_params": {"num_beams": 2}},
             "sweep": {"transformers.sampling_params.num_return_sequences": [1, 4]},
         }
-        valid, skipped = expand_grid(raw)
+        valid, skipped, _swept = expand_grid(raw)
 
         assert len(valid) == 1
         assert len(skipped) == 1
@@ -609,7 +609,7 @@ class TestSkippedConfigRuleAttribution:
                 {"task": {"model": "gpt2"}, "engine": "transformers", "vllm": {"max_num_seqs": 64}},
             ],
         }
-        valid, skipped = expand_grid(raw)
+        valid, skipped, _swept = expand_grid(raw)
 
         assert len(valid) == 1
         assert len(skipped) == 1
@@ -649,7 +649,7 @@ class TestMultiBackendSectionStripping:
                 "tensorrt.engine_params.max_batch_size": [4],
             },
         }
-        valid, skipped = expand_grid(raw)
+        valid, skipped, _swept = expand_grid(raw)
         assert len(skipped) == 0, f"Expected 0 skipped, got: {[s.reason for s in skipped]}"
         # One pytorch config, one tensorrt config
         pytorch_configs = [c for c in valid if c.engine == "transformers"]
@@ -678,7 +678,7 @@ class TestMultiBackendSectionStripping:
                 },
             ],
         }
-        valid, skipped = expand_grid(raw)
+        valid, skipped, _swept = expand_grid(raw)
         assert len(valid) == 1
         assert valid[0].engine == "transformers"
         assert valid[0].tensorrt is None
@@ -697,7 +697,7 @@ class TestMultiBackendSectionStripping:
                 "tensorrt.engine_params.max_batch_size": [4],
             },
         }
-        valid, skipped = expand_grid(raw)
+        valid, skipped, _swept = expand_grid(raw)
         assert len(skipped) == 0, f"Unexpected skips: {[s.reason for s in skipped]}"
         engines = sorted(c.engine for c in valid)
         assert engines == ["tensorrt", "transformers", "vllm"]

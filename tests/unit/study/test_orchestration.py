@@ -31,7 +31,6 @@ def _resolve(study: StudyConfig, runner_specs: dict[str, RunnerSpec]):
     """Drive the choke point with a preresolved plan (skips preflight entirely)."""
     return _resolve_runner_specs(
         study,
-        user_config=None,
         preresolved=(runner_specs, {}),
         skip_preflight=True,
         progress=None,

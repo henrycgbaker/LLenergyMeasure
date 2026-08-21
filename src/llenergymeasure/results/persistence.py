@@ -174,8 +174,8 @@ def save_config_sidecar(
     - ``resolved_config_hash`` - carried forward from sweep expansion.
     - ``provenance`` - the per-field resolution log (``{source, effective,
       default}`` per non-default field) built by
-      :func:`llenergymeasure.config.resolution.build_resolution_log`, whose
-      ``cli_flag``/``sweep``/``yaml`` source labels are only known in the
+      :func:`llenergymeasure.config.provenance_log.format_experiment_provenance`, whose
+      ``call_site``/``sweep``/``yaml`` source labels are only known in the
       parent process. This replaces the retired ``_resolution.json`` sidecar.
 
     Any missing optional field is omitted from the sidecar (not written as

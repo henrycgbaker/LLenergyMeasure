@@ -541,6 +541,7 @@ def test_run_study_resume_uses_output_dir_as_search_base(monkeypatch, tmp_path):
     captured: dict = {}
 
     def _capture_run(study, **kw):
+        captured["study"] = study
         captured.update(kw)
         return make_study_result()
 
@@ -552,7 +553,9 @@ def test_run_study_resume_uses_output_dir_as_search_base(monkeypatch, tmp_path):
 
     assert search_bases == [search_base]
     assert captured["resume_dir"] == fake_resume_dir
-    assert captured["results_dir_override"] is None
+    # output_dir was consumed as the search base, not as a results-dir override:
+    # the resolved study keeps its own results_dir.
+    assert captured["study"].output.results_dir != str(search_base)
 
 
 def test_run_preresolved_without_skip_preflight_raises():
@@ -1373,3 +1376,53 @@ def test_run_study_partial_failure_returns_partial_results(monkeypatch):
     assert result.experiments[0].experiment_id == "partial-ok"
     assert result.summary.completed == 1
     assert result.summary.failed == 1
+
+
+def test_run_study_resolved_study_honors_output_dir(monkeypatch, tmp_path):
+    """output_dir applies to an ALREADY-RESOLVED study (load_study output) too.
+
+    The resolved branch of _resolve_objects must not silently drop the override
+    (docs/reference/library/run_study.md documents output_dir as winning for any
+    fresh run). It is applied directly and recorded as call_site provenance.
+    """
+    from llenergymeasure.api import load_study
+
+    captured = _capture_results_base(monkeypatch, tmp_path)
+
+    study_yaml = tmp_path / "study.yaml"
+    study_yaml.write_text(
+        "study_name: resolved-override\n"
+        "experiments:\n"
+        "  - task:\n"
+        "      model: gpt2\n"
+        "    engine: transformers\n"
+        "    serving_mode: offline\n"
+    )
+    resolved = load_study(study_yaml)
+    assert resolved.study_design_hash is not None
+
+    custom = tmp_path / "resolved-out"
+    run_study(resolved, skip_preflight=True, output_dir=custom)
+
+    assert captured["base"] == custom
+
+
+def test_run_study_resolved_study_rejects_other_overrides(monkeypatch, tmp_path):
+    """Non-results-dir overrides on an already-resolved study raise, never drop."""
+    from llenergymeasure.api import load_study
+    from llenergymeasure.api._impl import _resolve_objects
+    from llenergymeasure.utils.exceptions import ConfigError
+
+    study_yaml = tmp_path / "study.yaml"
+    study_yaml.write_text(
+        "study_name: resolved-reject\n"
+        "experiments:\n"
+        "  - task:\n"
+        "      model: gpt2\n"
+        "    engine: transformers\n"
+        "    serving_mode: offline\n"
+    )
+    resolved = load_study(study_yaml)
+
+    with pytest.raises(ConfigError, match=r"already resolved.*study_execution\.n_cycles"):
+        _resolve_objects(resolved, overrides={"study_execution": {"n_cycles": 5}})

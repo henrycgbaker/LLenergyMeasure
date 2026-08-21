@@ -15,35 +15,66 @@ small, principled core that expresses exactly that:
   (lowest first), reusing :func:`llenergymeasure.config._dict_utils.deep_merge`.
 - :class:`PrecedenceChain` names the precedence order - call-site > env > study YAML >
   user config > pydantic defaults - so a resolution reads as the chain it is.
+- :func:`resolve_labelled_layers` merges the layers AND emits per-value provenance,
+  so which layer won is recorded by the merge rather than guessed afterwards. The
+  labels are the ``SOURCE_*`` vocabulary in :mod:`llenergymeasure.config.ssot`, the
+  same one ``RunnerSpec.source`` uses.
 
-Not to be confused with :mod:`llenergymeasure.config.resolution`, which is the
-post-hoc provenance LOG (which value won, and why) - this module is the forward
-resolution that decides which value wins in the first place.
+Two resolvers are wired on top of the core:
 
-v0.7 SCOPE: this is the resolution CORE, the warmup-protocol
-RESOLVER (:func:`resolve_server_warmup`), and its WIRING for the server warmup
-overlay (:func:`apply_server_warmup_overlay`). The ``UserConfig`` now carries a
-``server.warmup`` home (``config.user_config.UserServerConfig``), and the
-resolved-vs-declared split lives on ``ExperimentConfig``: the overlay output is
-attached as side-channel state (``attach_resolved_server_warmup``) that
-``mode_section_identity`` projects into the resolved/observed hashes, while the
-declared hash stays a wholesale dump of the DECLARED fields (user intent, no
-user-config leak). The overlay is applied during study resolution, before dedup, so
-dedup binds on the realised protocol. Env/call-site chain layers stay
-supported-but-unfed at v0.7. The full setup UX (llem init flow, .env
-rationalisation, routing every user-config field through the chain) stays with the
-setup-and-user-config workstream (#886).
+- :func:`resolve_study_settings` resolves the study-wide settings in one merge: the
+  results directory, the execution block (cycles, ordering, thermal gaps), and the
+  per-engine runner and image pins. Every entry point resolves these here, before
+  the study is dispatched, so nothing downstream re-reads the user config or
+  re-implements a fall-through (#886).
+- :func:`resolve_server_warmup` resolves the server warmup protocol, wired through
+  :func:`apply_server_warmup_overlay`. The ``UserConfig`` carries a
+  ``server.warmup`` home (``config.user_config.UserServerConfig``), and the
+  resolved-vs-declared split lives on ``ExperimentConfig``: the overlay output is
+  attached as side-channel state (``attach_resolved_server_warmup``) that
+  ``mode_section_identity`` projects into the resolved/observed hashes, while the
+  declared hash stays a wholesale dump of the DECLARED fields (user intent, no
+  user-config leak). The overlay is applied during study resolution, before dedup,
+  so dedup binds on the realised protocol.
+
+Not to be confused with :mod:`llenergymeasure.config.provenance_log`, which formats
+provenance for the per-experiment record - this module is the forward resolution
+that decides which value wins in the first place.
+
+Env-layer coverage is per-setting, not universal: the runner and image pins read
+their ``LLEM_*`` overrides, and settings with no env var simply have no env layer.
+Widening that coverage, and the offline warmup protocol, stay with #886.
 """
 
 from __future__ import annotations
 
+import functools
+import os
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Final
 
 from pydantic import BaseModel
 
-from llenergymeasure.config._dict_utils import deep_merge
+from llenergymeasure.config._dict_utils import deep_merge, dotted_leaf_paths
+from llenergymeasure.config.ssot import (
+    ALL_ENGINES,
+    DEFAULT_CYCLE_GAP_SECONDS,
+    DEFAULT_EXPERIMENT_GAP_SECONDS,
+    DEFAULT_RESULTS_DIR,
+    ENV_IMAGE_PREFIX,
+    ENV_RUNNER_PREFIX,
+    SOURCE_CALL_SITE,
+    SOURCE_CALL_SITE_DEFAULT,
+    SOURCE_DEFAULT,
+    SOURCE_ENV,
+    SOURCE_USER_CONFIG,
+    SOURCE_YAML,
+    engine_str,
+)
+
+#: Engine names in a stable order, for the per-engine runner and image layers.
+ENGINE_NAMES: Final[tuple[str, ...]] = tuple(sorted(engine_str(e) for e in ALL_ENGINES))
 
 if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig, ServerWarmupConfig
@@ -51,13 +82,18 @@ if TYPE_CHECKING:
 
 __all__ = [
     "UNSET",
+    "Layer",
     "PrecedenceChain",
+    "Resolution",
+    "ResolvedStudySettings",
     "apply_server_warmup_overlay",
     "fields_set_layer",
     "is_unset",
     "prune_unset",
+    "resolve_labelled_layers",
     "resolve_layers",
     "resolve_server_warmup",
+    "resolve_study_settings",
 ]
 
 
@@ -133,6 +169,87 @@ def resolve_layers(*layers: Mapping[str, Any]) -> dict[str, Any]:
 
 
 @dataclass(frozen=True)
+class Layer:
+    """One precedence layer: the values it supplies, and what to call their source.
+
+    ``source`` is a provenance tag from
+    :mod:`llenergymeasure.config.ssot`'s ``SOURCE_*`` vocabulary - the same
+    vocabulary ``RunnerSpec.source`` uses, so one label names one layer everywhere.
+    """
+
+    source: str
+    values: Mapping[str, Any]
+
+
+@dataclass(frozen=True)
+class Resolution:
+    """A resolved mapping plus the provenance of every value in it.
+
+    ``provenance`` maps each dotted leaf path in ``values`` to the ``source`` of the
+    layer that supplied the winning value. It is emitted BY the merge, so it says
+    which layer actually won rather than inferring it afterwards by comparing the
+    result against defaults.
+    """
+
+    values: dict[str, Any]
+    provenance: dict[str, str]
+
+
+def resolve_labelled_layers(*layers: Layer) -> Resolution:
+    """Merge ``layers`` in ASCENDING precedence, emitting per-value provenance.
+
+    The values are merged exactly as :func:`resolve_layers` merges them. Alongside,
+    each layer records itself as the source of every leaf it supplies, so the
+    highest layer to set a leaf is the one named in the result's provenance. A leaf
+    that replaces a lower layer's whole subtree (or vice versa) takes that subtree's
+    provenance with it, so the provenance keys always match the merged values.
+    """
+    values: dict[str, Any] = {}
+    provenance: dict[str, str] = {}
+    for layer in layers:
+        pruned = prune_unset(layer.values)
+        # Record against the accumulator as it stands BEFORE this layer merges, so
+        # the walk sees the same dict-versus-value shapes deep_merge will see.
+        _record_provenance(pruned, values, layer.source, provenance)
+        values = deep_merge(values, pruned)
+    return Resolution(values=values, provenance=provenance)
+
+
+def _record_provenance(
+    layer: Mapping[str, Any],
+    accumulated: Mapping[str, Any],
+    source: str,
+    provenance: dict[str, str],
+    prefix: str = "",
+) -> None:
+    """Mark every value ``layer`` contributes with ``source``, mirroring deep_merge.
+
+    ``deep_merge`` recurses only where BOTH sides are dicts; everywhere else the
+    layer's value replaces what was there. This walk follows exactly that rule, so a
+    key the layer merges into (rather than replaces) keeps the provenance of the
+    siblings it did not touch.
+    """
+    for key, value in layer.items():
+        path = f"{prefix}{key}"
+        existing = accumulated.get(key) if isinstance(accumulated, Mapping) else None
+        if isinstance(value, dict) and isinstance(existing, Mapping):
+            _record_provenance(value, existing, source, provenance, f"{path}.")
+            continue
+        # A replacement: drop whatever was recorded for the subtree it overwrites,
+        # and for any ancestor value it is now nested under.
+        for stale in [p for p in provenance if p == path or p.startswith(f"{path}.")]:
+            del provenance[stale]
+        parts = path.split(".")
+        for depth in range(1, len(parts)):
+            provenance.pop(".".join(parts[:depth]), None)
+        if isinstance(value, dict) and value:
+            for leaf in dotted_leaf_paths(value, f"{path}."):
+                provenance[leaf] = source
+        else:
+            provenance[path] = source
+
+
+@dataclass(frozen=True)
 class PrecedenceChain:
     """The precedence chain, named by layer (call-site highest, defaults lowest).
 
@@ -140,6 +257,8 @@ class PrecedenceChain:
     pydantic defaults. Each layer is a mapping that may carry :data:`UNSET` values
     ('defer to the layer below'); :meth:`resolve` prunes them and deep-merges low ->
     high. Secrets are env-only by policy and never travel a study/user layer.
+
+    Use :meth:`resolve_labelled` when the caller needs to record WHICH layer won.
     """
 
     defaults: Mapping[str, Any]
@@ -157,6 +276,231 @@ class PrecedenceChain:
             self.env,
             self.call_site,
         )
+
+    def resolve_labelled(self) -> Resolution:
+        """Resolve the chain, tagging each value with the layer that supplied it."""
+        return resolve_labelled_layers(*self._layers())
+
+    def _layers(self) -> tuple[Layer, ...]:
+        """The chain's layers in ascending precedence, each with its SOURCE_* tag."""
+        return (
+            Layer(SOURCE_DEFAULT, self.defaults),
+            Layer(SOURCE_USER_CONFIG, self.user_config),
+            Layer(SOURCE_YAML, self.study_yaml),
+            Layer(SOURCE_ENV, self.env),
+            Layer(SOURCE_CALL_SITE, self.call_site),
+        )
+
+
+@dataclass(frozen=True)
+class ResolvedStudySettings:
+    """The study-wide settings the precedence chain owns, plus their provenance.
+
+    ``provenance`` is keyed by study-file path (``output.results_dir``,
+    ``study_execution.n_cycles``, ``runners.vllm``, ``images.vllm``) so a label can
+    be read back against the file a researcher actually wrote.
+
+    ``runners`` and ``images`` carry only the engines something explicitly pinned.
+    An engine absent from them has no pin at any layer, which is what lets the
+    runner auto-detection and the smart image default run: absence is the signal.
+    """
+
+    results_dir: str
+    execution: dict[str, Any]
+    runners: dict[str, str]
+    images: dict[str, str]
+    provenance: dict[str, str]
+
+
+def resolve_study_settings(
+    *,
+    study_output: Mapping[str, Any],
+    study_execution: Mapping[str, Any],
+    study_runners: Mapping[str, str] | None,
+    study_images: Mapping[str, str] | None,
+    execution_defaults: Mapping[str, Any] | None = None,
+    user_config: UserConfig | None = None,
+    call_site: Mapping[str, Any] | None = None,
+    env: Mapping[str, Any] | None = None,
+) -> ResolvedStudySettings:
+    """Resolve every study-wide setting the chain owns, in ONE merge.
+
+    Precedence (high to low): call-site override > env > study file >
+    caller-supplied effective defaults > user config > built-in defaults. The
+    caller's effective defaults sit BELOW the study file on purpose - they fill
+    what the file omitted (this is how the CLI applies 3 cycles and shuffle)
+    rather than overriding what it declared - and ABOVE the user config, so a
+    caller's defaults beat machine-local preferences while anything the file
+    itself declares still wins. A call-site override sits above everything (a
+    ``-o`` results directory, an explicit API argument).
+
+    The settings resolved here are the results directory, the whole execution block
+    (cycles, ordering, thermal gaps), the per-engine runner pins and the per-engine
+    image pins. Resolving them together in one merge is the point: there is one
+    precedence order for study settings, not one per field, and the provenance the
+    merge emits says which layer actually won.
+
+    Args:
+        study_output: The study file's ``output`` block, as explicitly-set fields.
+        study_execution: The study file's ``study_execution`` block, as
+            explicitly-set fields.
+        study_runners: The study file's ``runners`` section, or None.
+        study_images: The study file's ``images`` section, or None.
+        execution_defaults: Effective defaults for the execution block, applied
+            beneath the study file.
+        user_config: Tool-wide user config. ``None`` supplies no user layer, so a
+            unit test resolving without one gets the built-in defaults untouched.
+        call_site: Study-file-shaped overrides from the caller (highest layer).
+        env: Environment mapping to read the ``LLEM_*`` overrides from. Defaults to
+            ``os.environ``; tests pass their own.
+
+    Returns:
+        :class:`ResolvedStudySettings`.
+    """
+    resolution = resolve_labelled_layers(
+        Layer(SOURCE_DEFAULT, _defaults_layer()),
+        Layer(SOURCE_USER_CONFIG, _user_config_layer(user_config)),
+        # The caller's effective defaults are caller values that deliberately rank
+        # below the study file (they fill, not override) but above the user config,
+        # and they carry their own label: they are caller defaults, not caller pins.
+        Layer(SOURCE_CALL_SITE_DEFAULT, {"study_execution": dict(execution_defaults or {})}),
+        Layer(
+            SOURCE_YAML,
+            _study_file_layer(study_output, study_execution, study_runners, study_images),
+        ),
+        Layer(SOURCE_ENV, _env_layer(env)),
+        Layer(SOURCE_CALL_SITE, dict(call_site or {})),
+    )
+
+    values = resolution.values
+    # Only the four sections the chain owns are read back out; anything else a
+    # call-site layer carried (an experiment-level key, say) is not this chain's
+    # business and is left to the loader that merged it into the study file.
+    return ResolvedStudySettings(
+        results_dir=values["output"]["results_dir"],
+        execution=values["study_execution"],
+        runners={k: v for k, v in values.get("runners", {}).items() if isinstance(v, str)},
+        images={k: v for k, v in values.get("images", {}).items() if isinstance(v, str)},
+        provenance={
+            path: source
+            for path, source in resolution.provenance.items()
+            if path.split(".")[0] in {"output", "study_execution", "runners", "images"}
+        },
+    )
+
+
+def _defaults_layer() -> dict[str, Any]:
+    """The built-in bottom layer: pydantic defaults, results-dir default, machine gaps.
+
+    The thermal-gap machine defaults live HERE, not in the user-config layer: the
+    user config only contributes what its file actually wrote, so when it is silent
+    the gaps resolve to these built-ins with ``default`` provenance rather than
+    being claimed by a layer the user never touched.
+    """
+    from llenergymeasure.config.models import ExecutionConfig
+
+    execution = ExecutionConfig().model_dump(mode="python")
+    execution["experiment_gap_seconds"] = DEFAULT_EXPERIMENT_GAP_SECONDS
+    execution["cycle_gap_seconds"] = DEFAULT_CYCLE_GAP_SECONDS
+    return {
+        "output": {"results_dir": DEFAULT_RESULTS_DIR},
+        "study_execution": execution,
+        "runners": {},
+        "images": {},
+    }
+
+
+def _user_config_layer(user_config: UserConfig | None) -> dict[str, Any]:
+    """The user config's contribution: ONLY the fields its file actually wrote.
+
+    Built from ``model_fields_set`` so a silent config file (or a missing one)
+    contributes nothing and the built-in defaults keep their ``default``
+    provenance. A field the file wrote enters the layer even when its value equals
+    the built-in default - written is written.
+    """
+    if user_config is None:
+        return {}
+    output = fields_set_layer(user_config.output)
+    return {
+        # A results_dir the file did not write reads as None here, which _deferring
+        # maps onto UNSET - the same "defer to the layer below" as an empty section.
+        "output": {"results_dir": _deferring(output.get("results_dir"))},
+        "study_execution": fields_set_layer(user_config.execution),
+        # "auto" is the user config's way of saying "no preference" for a runner, so
+        # it defers to auto-detection rather than pinning the engine.
+        "runners": {
+            engine: value
+            for engine, value in fields_set_layer(user_config.runners).items()
+            if value != "auto"
+        },
+        "images": dict(user_config.images),
+    }
+
+
+def _study_file_layer(
+    study_output: Mapping[str, Any],
+    study_execution: Mapping[str, Any],
+    study_runners: Mapping[str, str] | None,
+    study_images: Mapping[str, str] | None,
+) -> dict[str, Any]:
+    """The study file's contribution, with its documented absences mapped onto UNSET."""
+    execution = dict(study_execution)
+    for gap in ("experiment_gap_seconds", "cycle_gap_seconds"):
+        if gap in execution and execution[gap] is None:
+            # The execution block documents an unset gap as "use the machine
+            # default", so a null here defers rather than pinning zero seconds.
+            execution[gap] = UNSET
+    return {
+        "output": {"results_dir": _deferring(study_output.get("results_dir"))},
+        "study_execution": execution,
+        "runners": {k: v for k, v in (study_runners or {}).items() if v is not None},
+        "images": {k: v for k, v in (study_images or {}).items() if v is not None},
+    }
+
+
+@functools.cache
+def _load_dotenv() -> None:
+    """Load ``.env`` from the working directory if present.
+
+    Uses ``override=False`` so shell environment variables always win. Cached so the
+    filesystem scan happens at most once per process. The CLI also loads ``.env`` at
+    import time; this covers the library entry points, which never import the CLI.
+    """
+    try:
+        from dotenv import load_dotenv
+
+        load_dotenv(override=False)
+    except ImportError:
+        pass
+
+
+def _env_layer(env: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Per-engine runner and image overrides from ``LLEM_RUNNER_*`` / ``LLEM_IMAGE_*``.
+
+    A ``.env`` file in the working directory counts as environment, so it is loaded
+    before the layer is read.
+    """
+    if env is None:
+        _load_dotenv()
+    environ = os.environ if env is None else env
+    runners = {}
+    images = {}
+    for engine in ENGINE_NAMES:
+        if value := environ.get(f"{ENV_RUNNER_PREFIX}{engine.upper()}"):
+            runners[engine] = value
+        if value := environ.get(f"{ENV_IMAGE_PREFIX}{engine.upper()}"):
+            images[engine] = value
+    return {"runners": runners, "images": images}
+
+
+def _deferring(value: Any) -> Any:
+    """Map a documented "absent means defer to the layer below" value onto UNSET.
+
+    ``None`` and the empty string both mean "not set" for the settings that use this
+    (the results directory), matching the behaviour of the ``or`` fall-throughs this
+    chain replaces. A real value passes through unchanged.
+    """
+    return UNSET if value is None or value == "" else value
 
 
 def resolve_server_warmup(

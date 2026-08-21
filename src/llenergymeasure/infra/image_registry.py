@@ -47,16 +47,18 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import subprocess
 from functools import cache, lru_cache
+from typing import Final
 
+from llenergymeasure.config.runner_spec import RunnerPin
 from llenergymeasure.config.ssot import (
-    ALL_ENGINES,
     ENGINES,
-    ENV_IMAGE_PREFIX,
     RUNNER_CONTAINER,
     RUNNER_PROCESS,
+    SOURCE_CALL_SITE,
+    SOURCE_ENV,
+    SOURCE_YAML,
     TIMEOUT_DOCKER_CLI,
     Engine,
     RunnerMode,
@@ -77,7 +79,6 @@ __all__ = [
     "resolve_image",
     "resolve_image_digest",
     "shadowed_default_image",
-    "show_image_resolution",
 ]
 
 # ---------------------------------------------------------------------------
@@ -370,68 +371,65 @@ def resolve_image_digest(image: str) -> str | None:
     return None
 
 
+#: Pin sources that outrank the ``container:<image>`` runner shorthand. A machine-wide
+#: user-config image does not: the shorthand names an image for this study, which is
+#: more specific than a default set once per machine.
+_OUTRANKS_RUNNER_SHORTHAND: Final[frozenset[str]] = frozenset(
+    {SOURCE_CALL_SITE, SOURCE_ENV, SOURCE_YAML}
+)
+
+
 def resolve_image(
     engine: str,
     *,
     spec_image: str | None = None,
-    yaml_images: dict[str, str] | None = None,
-    user_config_images: dict[str, str] | None = None,
+    pin: RunnerPin | None = None,
 ) -> tuple[str, str]:
-    """Resolve the Docker image for *engine* using the full precedence chain.
+    """Resolve the Docker image for *engine* from its pin, or the smart default.
 
     This is the **image axis** of the orthogonal runner/image resolution system.
-    The runner axis (local vs docker) is handled by ``resolve_runner()`` in
+    The runner axis (process vs container) is handled by ``resolve_runner()`` in
     ``runner_resolution.py``.
 
-    Precedence (highest to lowest):
+    Which config layer wins - env var versus study file versus user config - is
+    settled before this is called, by the precedence chain in
+    :mod:`llenergymeasure.config.precedence`; ``pin`` carries that answer and the
+    layer that gave it. What is left here is where the pin sits relative to the
+    ``container:<image>`` runner shorthand, and the smart default when nothing
+    pinned the engine at all:
 
-    1. ``LLEM_IMAGE_{ENGINE}`` env var (from shell or ``.env`` file)
-    2. Study YAML ``images:`` section
-    3. Explicit image from runner spec (``container:<image>`` shorthand)
-    4. User config ``images:`` section
-    5. Smart default: local image → registry fallback
+    1. A pin from the env or the study file (it outranks the runner shorthand)
+    2. The runner shorthand ``container:<image>`` - source ``"runner_override"``
+    3. A pin from the user config (the shorthand is more specific than a
+       machine-wide default, so it wins over one)
+    4. Smart default: local image -> registry fallback
 
     Args:
-        engine:              Engine name (e.g. ``"vllm"``).
-        spec_image:          Image override from ``container:<image>`` runner
-                             shorthand.  None when runner was bare ``"container"``.
-        yaml_images:         ``images:`` dict from the study YAML (optional).
-        user_config_images:  ``images:`` dict from user config (optional).
+        engine: Engine name (e.g. ``"vllm"``).
+        spec_image: Image from the ``container:<image>`` runner shorthand. None
+            when the runner was a bare ``"container"``.
+        pin: The image the chain resolved for this engine, with the layer that
+            supplied it, or None when no layer pinned one.
 
     Returns:
         ``(image, image_source)`` tuple where *image_source* indicates provenance:
-        ``"env"``, ``"yaml"``, ``"runner_override"``, ``"user_config"``,
-        ``"local_build"``, or ``"registry"``.
+        the pin's own source (``"env"``, ``"yaml"``, ``"user_config"``,
+        ``"call_site"``), or ``"runner_override"``, ``"local_build"``,
+        ``"registry_cached"``, ``"registry"``.
     """
-    # Load .env so LLEM_IMAGE_* vars are available
-    from llenergymeasure.infra.runner_resolution import _load_dotenv
+    if pin is not None and pin.source in _OUTRANKS_RUNNER_SHORTHAND:
+        logger.info("Image for %s resolved from %s: %s", engine, pin.source, pin.value)
+        return (pin.value, pin.source)
 
-    _load_dotenv()
-
-    # 1. Env var (includes .env via python-dotenv)
-    env_key = f"{ENV_IMAGE_PREFIX}{engine.upper()}"
-    if env_val := os.environ.get(env_key):
-        logger.info("Image for %s resolved from env var %s: %s", engine, env_key, env_val)
-        return (env_val, "env")
-
-    # 2. Study YAML images: section
-    if yaml_images and engine in yaml_images:
-        img = yaml_images[engine]
-        logger.info("Image for %s resolved from study YAML images: %s", engine, img)
-        return (img, "yaml")
-
-    # 3. Explicit image from runner spec (container:<image> shorthand)
     if spec_image is not None:
         logger.info("Image for %s resolved from runner override: %s", engine, spec_image)
         return (spec_image, "runner_override")
 
-    # 4. User config images: section
-    if user_config_images and engine in user_config_images:
-        img = user_config_images[engine]
-        logger.info("Image for %s resolved from user config images: %s", engine, img)
-        return (img, "user_config")
+    if pin is not None:
+        logger.info("Image for %s resolved from %s: %s", engine, pin.source, pin.value)
+        return (pin.value, pin.source)
 
-    # 5. Smart default: delegate to get_default_image() (local build → registry)
+    # Smart default: delegate to get_default_image() (local build -> registry)
     image = get_default_image(engine)
     local_image = local_image_for(engine)
     if image == local_image:
@@ -441,18 +439,6 @@ def resolve_image(
     else:
         source = "registry"
     return (image, source)
-
-
-def show_image_resolution() -> None:
-    """Print which Docker image each engine will resolve to.
-
-    Shows local vs registry source for each engine.  Used by
-    ``make docker-images`` for quick diagnostics.
-    """
-    print("=== Image resolution ===")
-    for engine in sorted(ALL_ENGINES):
-        image, source = resolve_image(engine)
-        print(f"  {engine:10s} -> {image}  ({source})")
 
 
 def parse_runner_value(value: str) -> tuple[RunnerMode, str | None]:

@@ -19,7 +19,7 @@ import os
 import shutil
 import sys
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from llenergymeasure.api import probe_energy_sampler
 from llenergymeasure.api.doctor import DoctorReport, run_doctor_checks
@@ -51,6 +51,9 @@ from llenergymeasure.infra.image_registry import get_default_image, image_presen
 from llenergymeasure.infra.runner_resolution import is_docker_available, resolve_runner
 from llenergymeasure.infra.version_handshake import SchemaStatus
 from llenergymeasure.utils.exceptions import ConfigError
+
+if TYPE_CHECKING:
+    from llenergymeasure.config.precedence import ResolvedStudySettings
 
 __all__ = [
     "CheckLine",
@@ -428,12 +431,55 @@ def _load_user_config_safe() -> tuple[UserConfig | None, str | None]:
         return None, str(exc)
 
 
+def _settings_without_a_study(user_cfg: UserConfig | None) -> ResolvedStudySettings:
+    """Resolve the study-wide settings with no study file in play.
+
+    What the diagnostics report on: the same precedence chain a run resolves
+    through, minus the study layer, so an env var or user-config pin shows exactly
+    what a run would pick up.
+    """
+    from llenergymeasure.config.precedence import resolve_study_settings
+
+    return resolve_study_settings(
+        study_output={},
+        study_execution={},
+        study_runners=None,
+        study_images=None,
+        user_config=user_cfg,
+    )
+
+
 def _resolve_runner_specs(user_cfg: UserConfig | None) -> dict[str, RunnerSpec]:
-    runners = user_cfg.runners if user_cfg is not None else None
+    """The runner each engine would resolve to, via the same chain a run uses."""
+    from llenergymeasure.config.runner_spec import pins_from_resolved
+
+    settings = _settings_without_a_study(user_cfg)
+    pins = pins_from_resolved(settings.runners, settings.provenance, section="runners")
     return {
-        engine_str(engine): resolve_runner(engine_str(engine), user_config=runners)
+        engine_str(engine): resolve_runner(engine_str(engine), pins.get(engine_str(engine)))
         for engine in ENGINE_PACKAGES
     }
+
+
+def show_image_resolution() -> None:
+    """Print which Docker image each engine will resolve to.
+
+    Shows the pin source (env var / user config) or local vs registry default for
+    each engine. Used by ``make docker-images`` for quick diagnostics. Lives at
+    the api resolution edge because it READS THE USER CONFIG: it derives the pins
+    from the same precedence chain a run uses (no study file in play here), so an
+    ``LLEM_IMAGE_<ENGINE>`` override shows exactly what a run would use.
+    """
+    from llenergymeasure.config.runner_spec import pins_from_resolved
+    from llenergymeasure.config.ssot import ALL_ENGINES
+    from llenergymeasure.infra.image_registry import resolve_image
+
+    settings = _settings_without_a_study(load_user_config())
+    pins = pins_from_resolved(settings.images, settings.provenance, section="images")
+    print("=== Image resolution ===")
+    for engine in sorted(ALL_ENGINES):
+        image, source = resolve_image(engine, pin=pins.get(engine))
+        print(f"  {engine:10s} -> {image}  ({source})")
 
 
 def _run_image_checks_safe() -> DoctorReport | None:
