@@ -25,12 +25,17 @@ read as a deliberate asymmetry but was an omission. A tensor-parallel server run
 needs the same host NCCL workarounds a multi-GPU offline run needs - on a PCIe
 host without functional GPU peer-to-peer, a server started without
 ``NCCL_P2P_DISABLE=1`` hangs at its first NCCL collective exactly as an offline
-run does.
+run does. Note what does NOT hold that parity: the forwarding is three separate
+``append_nccl_env`` calls, one per shape, not one line inside the shared core -
+which is precisely how a shape came to be missing it. What guards it is a test,
+the cross-shape assertion in ``tests/unit/docker/test_container_argv_shapes.py``
+that every shape forwards a host ``NCCL_*`` var, so a new shape or a moved call
+site has to keep the parity deliberately.
 
 Their remaining divergences are real and each is stated where it is chosen, but
 nothing they have in common is written more than once, so the shapes cannot drift
-apart on the removal policy, the GPU selector, the ownership labels, the host
-NCCL forwarding, or the rule that every flag precedes the image. Consumed by
+apart on the removal policy, the GPU selector, the ownership labels, or the rule
+that every flag precedes the image. Consumed by
 ``DockerRunner._build_docker_cmd``, ``study.baseline_container``, and each
 engine's server adapter, which passes the argv it builds here to the serving
 layer's launcher.
@@ -414,12 +419,18 @@ def append_nccl_env(cmd: list[str]) -> None:
 
     Uses explicit ``-e KEY=VALUE`` (matching the ``LLEM_*`` forwarding idiom in
     ``build_docker_cmd``) and iterates keys in sorted order so the built command
-    is deterministic (tests assert on argv). Shared by all three container
-    shapes - the experiment dispatch (:func:`build_docker_cmd`), the baseline
-    dispatch (:func:`build_baseline_container_argv`) and the engine server
-    (:func:`build_server_container_argv`) - so their env-forwarding setups cannot
-    drift. A tensor-parallel server run reaches the same first-collective hang
-    as a tensor-parallel offline run, so no shape may skip this.
+    is deterministic (tests assert on argv). An exported-but-empty ``NCCL_*`` var
+    is skipped rather than forwarded as an empty value.
+
+    Called by all three container shapes - the experiment dispatch
+    (:func:`build_docker_cmd`), the baseline dispatch
+    (:func:`build_baseline_container_argv`) and the engine server
+    (:func:`build_server_container_argv`). The forwarding rule is written once
+    here, but that each shape actually calls it is enforced by the cross-shape
+    test rather than by construction: a shape that forgets the call still builds
+    a valid argv, which is how the server shape went without it. A
+    tensor-parallel server run reaches the same first-collective hang as a
+    tensor-parallel offline run, so no shape may skip this.
 
     Args:
         cmd: Docker command list to mutate in place (env appended before the
