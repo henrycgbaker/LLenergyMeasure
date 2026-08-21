@@ -888,7 +888,7 @@ class TestWiring:
         # 'from' import. Patch it at the source module.
         received_skip: list[bool] = []
 
-        def fake_docker_preflight(skip: bool = False) -> None:
+        def fake_docker_preflight(skip: bool = False, gpu_indices: list[int] | None = None) -> None:
             received_skip.append(skip)
 
         with (
@@ -919,7 +919,7 @@ class TestWiring:
 
         call_count = 0
 
-        def fake_docker_preflight(skip: bool = False) -> None:
+        def fake_docker_preflight(skip: bool = False, gpu_indices: list[int] | None = None) -> None:
             nonlocal call_count
             call_count += 1
 
@@ -944,7 +944,7 @@ class TestWiring:
 
         received_skip: list[bool] = []
 
-        def fake_docker_preflight(skip: bool = False) -> None:
+        def fake_docker_preflight(skip: bool = False, gpu_indices: list[int] | None = None) -> None:
             received_skip.append(skip)
 
         with (
@@ -981,7 +981,7 @@ class TestWiring:
 
         received_skip: list[bool] = []
 
-        def fake_docker_preflight(skip: bool = False) -> None:
+        def fake_docker_preflight(skip: bool = False, gpu_indices: list[int] | None = None) -> None:
             received_skip.append(skip)
 
         with (
@@ -1019,7 +1019,7 @@ class TestWiring:
 
         received_skip: list[bool] = []
 
-        def fake_docker_preflight(skip: bool = False) -> None:
+        def fake_docker_preflight(skip: bool = False, gpu_indices: list[int] | None = None) -> None:
             received_skip.append(skip)
 
         with (
@@ -1074,3 +1074,48 @@ class TestCLIFlag:
 
         config = ExecutionConfig(skip_preflight=True)
         assert config.skip_preflight is True
+
+
+# ---------------------------------------------------------------------------
+# TestTier2ProbeSelector
+# ---------------------------------------------------------------------------
+
+
+class TestTier2ProbeSelector:
+    """The probe must ask about the devices the run will actually use."""
+
+    def _which_all_present(self, name: str) -> str | None:
+        known = {"docker", "nvidia-container-runtime", "nvidia-smi"}
+        return f"/usr/bin/{name}" if name in known else None
+
+    def _probe_argv(self, gpu_indices: list[int] | None) -> list[str]:
+        with (
+            patch(
+                "llenergymeasure.infra.docker_preflight.shutil.which",
+                side_effect=self._which_all_present,
+            ),
+            patch("llenergymeasure.infra.docker_preflight.subprocess.run") as mock_run,
+        ):
+            mock_run.side_effect = [_make_nvidia_smi_result(), _make_successful_probe()]
+            run_docker_preflight(gpu_indices=gpu_indices)
+            return list(mock_run.call_args_list[1].args[0])
+
+    def test_probe_defaults_to_all(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Unscoped run: the historical `--gpus all` probe, unchanged."""
+        monkeypatch.delenv("LLEM_DOCKER_GPUS", raising=False)
+        argv = self._probe_argv(None)
+        assert argv[argv.index("--gpus") + 1] == "all"
+
+    def test_probe_uses_the_config_selector(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A scoped run probes exactly its own devices, quoted as docker requires."""
+        monkeypatch.delenv("LLEM_DOCKER_GPUS", raising=False)
+        single = self._probe_argv([2])
+        assert single[single.index("--gpus") + 1] == "device=2"
+        multi = self._probe_argv([2, 3])
+        assert multi[multi.index("--gpus") + 1] == '"device=2,3"'
+
+    def test_probe_honours_the_env_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """LLEM_DOCKER_GPUS wins in the probe too, matching real dispatch."""
+        monkeypatch.setenv("LLEM_DOCKER_GPUS", "device=5")
+        argv = self._probe_argv([2, 3])
+        assert argv[argv.index("--gpus") + 1] == "device=5"

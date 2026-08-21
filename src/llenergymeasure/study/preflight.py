@@ -49,7 +49,12 @@ def run_study_preflight(
     only required when an auto-resolved engine actually needs elevating.
 
     When any experiment in the study will use a Docker runner, runs Docker
-    pre-flight checks (GPU visibility, CUDA/driver compat) unless skipped.
+    pre-flight checks (GPU visibility, CUDA/driver compat) unless skipped. The
+    container GPU probe uses the study's own ``--gpus`` selector, so it validates
+    the devices the run will actually use.
+
+    Also warns, for every runner mode, when ``study_execution.gpu_indices`` names
+    a device this host does not appear to have.
 
     After runner mode resolution, resolves Docker images for all Docker engines
     on the orthogonal image axis: the study's resolved image pin, the
@@ -115,15 +120,50 @@ def run_study_preflight(
                 image_source=image_source,
             )
 
+    # Physical GPU scope: warn (never fail) when it names devices this host does
+    # not have. Runs for every runner mode, unlike the Docker probe below.
+    _warn_if_gpu_scope_exceeds_host(study.study_execution.gpu_indices)
+
     # Docker pre-flight: run once if any engine resolves to a Docker runner.
     # Effective skip = CLI flag (skip_preflight param) OR YAML config value.
     effective_skip = skip_preflight or study.study_execution.skip_preflight
     if any(spec.mode == RUNNER_CONTAINER for spec in runner_specs.values()):
         from llenergymeasure.infra.docker_preflight import run_docker_preflight
 
-        run_docker_preflight(skip=effective_skip)
+        run_docker_preflight(skip=effective_skip, gpu_indices=study.study_execution.gpu_indices)
 
     return runner_specs, system_overrides
+
+
+def _warn_if_gpu_scope_exceeds_host(gpu_indices: list[int] | None) -> None:
+    """Warn when the GPU scope names devices the host does not appear to have.
+
+    Fail-soft on purpose, in both directions. It is a WARNING, not an error: the
+    scope is placement metadata and the run may still be entirely valid (a remote
+    Docker daemon has its own GPUs, and MIG or a driver quirk can make the local
+    count misleading). And an unreadable device count means "cannot check", so
+    nothing is said at all rather than a false alarm - which is what happens on a
+    host with no NVIDIA driver, exactly the remote-daemon case.
+    """
+    if not gpu_indices:
+        return
+    from llenergymeasure.device.gpu_info import host_gpu_count
+
+    count = host_gpu_count()
+    if count is None or count <= 0:
+        return
+    beyond = [i for i in gpu_indices if i >= count]
+    if beyond:
+        logger.warning(
+            "GPU scope %s names device(s) %s that this host does not have "
+            "(NVML reports %d GPU(s), so valid indices are 0-%d). Proceeding: the "
+            "count can be wrong for a remote Docker daemon or under MIG. Fix the "
+            "indices if the run then fails to place work.",
+            gpu_indices,
+            beyond,
+            count,
+            count - 1,
+        )
 
 
 def _apply_multi_engine_precedence(

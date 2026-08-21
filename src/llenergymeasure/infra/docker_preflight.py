@@ -10,7 +10,8 @@ Tiered execution model:
     3. Host nvidia-smi - warns if missing, does NOT hard-block (remote daemon support)
 
   Tier 2 (requires a running container - only reached if Tier 1 passes):
-    4. GPU visibility inside container (docker run --gpus all nvidia-smi)
+    4. GPU visibility inside container (docker run --gpus <effective> nvidia-smi,
+       using the same selector the study's own containers will get)
     5. CUDA/driver compatibility (parsed from the same container probe)
 
 Multiple failures within a tier are reported together as a numbered list before
@@ -139,12 +140,23 @@ def _get_host_driver_version() -> str | None:
     return None
 
 
-def _probe_container_gpu(host_driver_version: str | None) -> list[str]:
+def _probe_container_gpu(
+    host_driver_version: str | None,
+    gpu_indices: list[int] | None = None,
+) -> list[str]:
     """Run a lightweight container probe to validate GPU visibility and CUDA compat.
 
     Combines GPU name and driver version queries into a single docker run invocation.
     Returns a list of error strings (empty = all OK).
+
+    The probe uses the SAME ``--gpus`` selector the study's own containers will get
+    (``LLEM_DOCKER_GPUS`` env, else ``gpu_indices``, else ``all``). Probing ``all``
+    while the run is pinned to two devices asks the wrong question twice over: it
+    can pass on a host where the pinned devices are unusable, and it can fail on a
+    host where an unrelated device is broken.
     """
+    from llenergymeasure.utils.env_config import docker_gpus_arg
+
     errors: list[str] = []
 
     try:
@@ -154,7 +166,7 @@ def _probe_container_gpu(host_driver_version: str | None) -> list[str]:
                 "run",
                 "--rm",
                 "--gpus",
-                "all",
+                docker_gpus_arg(gpu_indices),
                 _PROBE_IMAGE,
                 "nvidia-smi",
                 "--query-gpu=name,driver_version",
@@ -257,7 +269,7 @@ def _probe_container_gpu(host_driver_version: str | None) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-def run_docker_preflight(skip: bool = False) -> None:
+def run_docker_preflight(skip: bool = False, gpu_indices: list[int] | None = None) -> None:
     """Run tiered Docker pre-flight checks before any container is launched.
 
     Validates:
@@ -270,6 +282,9 @@ def run_docker_preflight(skip: bool = False) -> None:
 
     Args:
         skip: If True, log a warning and return immediately without running any checks.
+        gpu_indices: Host GPU indices the run is scoped to. The tier-2 probe uses
+            the same effective ``--gpus`` selector the real containers will get,
+            so it validates the devices that will actually be used.
 
     Raises:
         DockerPreFlightError: One or more tier-1 or tier-2 checks failed.
@@ -325,7 +340,7 @@ def run_docker_preflight(skip: bool = False) -> None:
     # -----------------------------------------------------------------------
     # Tier 2: container-level checks (only reached if tier 1 passes)
     # -----------------------------------------------------------------------
-    tier2_failures = _probe_container_gpu(host_driver_version)
+    tier2_failures = _probe_container_gpu(host_driver_version, gpu_indices)
 
     if tier2_failures:
         n = len(tier2_failures)
