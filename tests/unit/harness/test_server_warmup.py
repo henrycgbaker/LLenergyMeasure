@@ -400,7 +400,8 @@ class TestGateView:
             replace(s, temperature_c=58.0 if 1100.1 <= s.timestamp <= 1100.4 else 55.0)
             for s in _series(n=1200, dt=0.1)
         ]
-        view_temps = [s.temperature_c for s in _gate_view(samples)]
+        view_temps = [s.temperature_c for s in _gate_view(samples) if s.temperature_c is not None]
+        assert len(view_temps) == len(_gate_view(samples))
         assert max(view_temps) - min(view_temps) == 0.0  # invisible
         assert _evaluate_observables(samples).temperature_settled is False
 
