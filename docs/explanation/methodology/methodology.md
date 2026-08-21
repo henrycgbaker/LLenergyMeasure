@@ -404,6 +404,19 @@ than silently passing. `mode: fixed` is the explicit opt-out - the same
 issuer-driven traffic path with no gate, for a fixed `duration_seconds`
 (default 300 s); a duration of 0 skips warmup traffic entirely.
 
+The gate's three observables are evaluated on a 1 Hz view of the sampler's power
+series, off the loop that issues the warmup traffic. Both details are load-bearing.
+Steady-state detection costs super-quadratically in the sample count, and the gate
+re-evaluates a series that grows for as long as warmup lasts, so at the sampler's
+full 100 ms cadence a single evaluation eventually costs more than the interval
+between evaluations; on the issuing loop, that stalls the warmup traffic, which lets
+the GPU fall to idle, which makes the next evaluation slower still. Every gate
+threshold is defined over a duration rather than a sample count, so the decimated
+view asks the same question of the same span; the capture is untouched and energy is
+integrated over the full-cadence series. Evaluating off the loop keeps the traffic
+flowing and keeps the failsafe deadline enforceable however long one evaluation
+takes.
+
 Warmup re-runs before *every* rate level. This fails safe: a level that is
 already at equilibrium from the previous level exits the gate quickly, while a
 level that shifted the operating point re-converges before it is measured.
