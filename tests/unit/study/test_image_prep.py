@@ -32,6 +32,7 @@ from llenergymeasure.study.image_prep import (
     _classify_pull_failure,
     _ImageMixin,
 )
+from tests.helpers.docker_cli import fake_docker_pull_cli
 
 # =============================================================================
 # Harness + helpers
@@ -68,29 +69,12 @@ def _missing() -> CompletedProcess[bytes]:
 def _fake_docker_cli(
     pull: Callable[[str], CompletedProcess[bytes]],
 ) -> Callable[..., CompletedProcess[bytes]]:
-    """Return a ``subprocess.run`` stand-in that behaves like the docker CLI.
+    """The shared docker-CLI fake; only the ``subprocess.run`` stand-in is needed.
 
-    Tracks which images are present locally, so the inspect that guards each
-    pull answers "absent" beforehand and "present" after a successful pull -
-    the sequence a real daemon would produce. *pull* decides what
-    ``docker pull`` does for a given image (return a result, or raise
-    ``TimeoutExpired``).
+    These tests drive the study's reading of each pull outcome, not the argv the
+    container layer issued, so the fake's call log is discarded here.
     """
-    present: set[str] = set()
-    lock = threading.Lock()
-
-    def run(argv: list[str], **_kwargs: object) -> CompletedProcess[bytes]:
-        if argv[:3] == ["docker", "image", "inspect"]:
-            with lock:
-                return _cached() if argv[3] in present else _missing()
-        assert argv[:2] == ["docker", "pull"], argv
-        image = argv[2]
-        result = pull(image)
-        if result.returncode == 0:
-            with lock:
-                present.add(image)
-        return result
-
+    run, _calls = fake_docker_pull_cli(pull)
     return run
 
 

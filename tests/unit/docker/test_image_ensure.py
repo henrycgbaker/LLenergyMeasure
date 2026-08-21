@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import subprocess
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from subprocess import CompletedProcess
 from unittest.mock import MagicMock
 
@@ -19,6 +19,7 @@ import pytest
 
 from llenergymeasure.infra.docker import lifecycle
 from llenergymeasure.infra.docker_errors import DockerImagePullError
+from tests.helpers.docker_cli import fake_docker_pull_cli
 
 _INSPECT_JSON = b'[{"Id": "sha256:abc"}]'
 
@@ -26,32 +27,10 @@ _INSPECT_JSON = b'[{"Id": "sha256:abc"}]'
 def _fake_docker_cli(
     pull: Callable[[str], CompletedProcess[bytes]],
     *,
-    present: set[str] | None = None,
+    present: Iterable[str] = (),
 ) -> tuple[Callable[..., CompletedProcess[bytes]], list[list[str]]]:
-    """Return a ``subprocess.run`` stand-in plus the argv log it records.
-
-    Behaves like the real CLI: ``docker image inspect`` reports absence until a
-    successful pull lands, so the guard answers truthfully before and after.
-    """
-    have = set(present or ())
-    lock = threading.Lock()
-    calls: list[list[str]] = []
-
-    def run(argv: list[str], **_kwargs: object) -> CompletedProcess[bytes]:
-        with lock:
-            calls.append(list(argv))
-        if argv[:3] == ["docker", "image", "inspect"]:
-            with lock:
-                cached = argv[3] in have
-            return CompletedProcess(argv, 0 if cached else 1, _INSPECT_JSON if cached else b"", b"")
-        assert argv[:2] == ["docker", "pull"], argv
-        result = pull(argv[2])
-        if result.returncode == 0:
-            with lock:
-                have.add(argv[2])
-        return result
-
-    return run, calls
+    """The shared docker-CLI fake, pinned to this module's inspect payload."""
+    return fake_docker_pull_cli(pull, present=present, inspect_stdout=_INSPECT_JSON)
 
 
 def _pull_ok(image: str) -> CompletedProcess[bytes]:
