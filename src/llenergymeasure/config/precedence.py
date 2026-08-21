@@ -422,9 +422,9 @@ def _user_config_layer(user_config: UserConfig | None) -> dict[str, Any]:
         return {}
     output = fields_set_layer(user_config.output)
     return {
-        "output": {"results_dir": _deferring(output["results_dir"])}
-        if "results_dir" in output
-        else {},
+        # A results_dir the file did not write reads as None here, which _deferring
+        # maps onto UNSET - the same "defer to the layer below" as an empty section.
+        "output": {"results_dir": _deferring(output.get("results_dir"))},
         "study_execution": fields_set_layer(user_config.execution),
         # "auto" is the user config's way of saying "no preference" for a runner, so
         # it defers to auto-detection rather than pinning the engine.

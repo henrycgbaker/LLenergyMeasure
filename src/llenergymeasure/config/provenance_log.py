@@ -87,7 +87,7 @@ def format_experiment_provenance(
         # unless a merge DID label it (an override or swept axis that happens to
         # equal the default is still an override), in which case it stays.
         labelled = key in cli_override_paths or key in swept_paths
-        if not labelled and key in flat_defaults and _values_equal(value, flat_defaults[key]):
+        if not labelled and key in flat_defaults and value == flat_defaults[key]:
             continue
 
         if key in cli_override_paths:
@@ -147,8 +147,3 @@ def _get_defaults_flat(model_cls: type[BaseModel], prefix: str = "") -> dict[str
             defaults[key] = val
 
     return defaults
-
-
-def _values_equal(a: Any, b: Any) -> bool:
-    """Compare two values for equality, handling common edge cases."""
-    return bool(a == b)
