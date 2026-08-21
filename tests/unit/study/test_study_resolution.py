@@ -680,9 +680,9 @@ def test_provenance_keeps_labelled_fields_at_default_value(tmp_path, monkeypatch
             "serving_mode": "offline",
         },
     )
-    from llenergymeasure.config.models import TaskConfig
+    from llenergymeasure.config.models import DatasetConfig
 
-    default_value = TaskConfig.model_fields["dataset"].default_factory().n_prompts
+    default_value = DatasetConfig().n_prompts
     study = load_study(path, cli_overrides={"task": {"dataset": {"n_prompts": default_value}}})
 
     (log,) = study.provenance_logs.values()
