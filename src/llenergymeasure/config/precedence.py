@@ -62,6 +62,7 @@ from llenergymeasure.config.ssot import (
     ENV_IMAGE_PREFIX,
     ENV_RUNNER_PREFIX,
     SOURCE_CALL_SITE,
+    SOURCE_CALL_SITE_DEFAULT,
     SOURCE_DEFAULT,
     SOURCE_ENV,
     SOURCE_USER_CONFIG,
@@ -338,12 +339,14 @@ def resolve_study_settings(
 ) -> ResolvedStudySettings:
     """Resolve every study-wide setting the chain owns, in ONE merge.
 
-    Precedence (high to low): call-site override > env > study file > user config >
-    caller-supplied effective defaults > built-in defaults. The caller's effective
-    defaults sit BELOW the study file on purpose - they fill what the file omitted
-    (this is how the CLI applies 3 cycles and shuffle) rather than overriding what
-    it declared - while a call-site override sits above everything (a ``-o``
-    results directory, an explicit API argument).
+    Precedence (high to low): call-site override > env > study file >
+    caller-supplied effective defaults > user config > built-in defaults. The
+    caller's effective defaults sit BELOW the study file on purpose - they fill
+    what the file omitted (this is how the CLI applies 3 cycles and shuffle)
+    rather than overriding what it declared - and ABOVE the user config, so a
+    caller's defaults beat machine-local preferences while anything the file
+    itself declares still wins. A call-site override sits above everything (a
+    ``-o`` results directory, an explicit API argument).
 
     The settings resolved here are the results directory, the whole execution block
     (cycles, ordering, thermal gaps), the per-engine runner pins and the per-engine
@@ -370,10 +373,11 @@ def resolve_study_settings(
     """
     resolution = resolve_labelled_layers(
         Layer(SOURCE_DEFAULT, _defaults_layer()),
-        # The caller's effective defaults are the caller's values, so they carry the
-        # call-site label; they simply sit below the study file rather than above it.
-        Layer(SOURCE_CALL_SITE, {"study_execution": dict(execution_defaults or {})}),
         Layer(SOURCE_USER_CONFIG, _user_config_layer(user_config)),
+        # The caller's effective defaults are caller values that deliberately rank
+        # below the study file (they fill, not override) but above the user config,
+        # and they carry their own label: they are caller defaults, not caller pins.
+        Layer(SOURCE_CALL_SITE_DEFAULT, {"study_execution": dict(execution_defaults or {})}),
         Layer(
             SOURCE_YAML,
             _study_file_layer(study_output, study_execution, study_runners, study_images),
@@ -400,36 +404,50 @@ def resolve_study_settings(
 
 
 def _defaults_layer() -> dict[str, Any]:
-    """The built-in bottom layer: pydantic defaults plus the results-dir default."""
-    from llenergymeasure.config.models import ExecutionConfig
+    """The built-in bottom layer: pydantic defaults, results-dir default, machine gaps.
 
+    The thermal-gap machine defaults live HERE, not in the user-config layer: the
+    user config only contributes what its file actually wrote, so when it is silent
+    the gaps resolve to these built-ins with ``default`` provenance rather than
+    being claimed by a layer the user never touched.
+    """
+    from llenergymeasure.config.models import ExecutionConfig
+    from llenergymeasure.config.user_config import UserExecutionConfig
+
+    execution = ExecutionConfig().model_dump(mode="python")
+    machine = UserExecutionConfig()
+    execution["experiment_gap_seconds"] = machine.experiment_gap_seconds
+    execution["cycle_gap_seconds"] = machine.cycle_gap_seconds
     return {
         "output": {"results_dir": DEFAULT_RESULTS_DIR},
-        "study_execution": ExecutionConfig().model_dump(mode="python"),
+        "study_execution": execution,
         "runners": {},
         "images": {},
     }
 
 
 def _user_config_layer(user_config: UserConfig | None) -> dict[str, Any]:
-    """The user config's contribution: results dir, thermal gaps, runner and image pins."""
+    """The user config's contribution: ONLY the fields its file actually wrote.
+
+    Built from ``model_fields_set`` so a silent config file (or a missing one)
+    contributes nothing and the built-in defaults keep their ``default``
+    provenance. A field the file wrote enters the layer even when its value equals
+    the built-in default - written is written.
+    """
     if user_config is None:
         return {}
+    output = fields_set_layer(user_config.output)
     return {
-        "output": {"results_dir": _deferring(user_config.output.results_dir)},
-        "study_execution": {
-            # The machine-local thermal defaults. The execution block documents an
-            # unset gap as deferring to these, which is why they live in this layer
-            # and not in the built-in defaults.
-            "experiment_gap_seconds": user_config.execution.experiment_gap_seconds,
-            "cycle_gap_seconds": user_config.execution.cycle_gap_seconds,
-        },
+        "output": {"results_dir": _deferring(output["results_dir"])}
+        if "results_dir" in output
+        else {},
+        "study_execution": fields_set_layer(user_config.execution),
         # "auto" is the user config's way of saying "no preference" for a runner, so
         # it defers to auto-detection rather than pinning the engine.
         "runners": {
             engine: value
-            for engine in ENGINE_NAMES
-            if (value := getattr(user_config.runners, engine, "auto")) != "auto"
+            for engine, value in fields_set_layer(user_config.runners).items()
+            if value != "auto"
         },
         "images": dict(user_config.images),
     }

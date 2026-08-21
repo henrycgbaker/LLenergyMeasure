@@ -505,12 +505,20 @@ def test_runner_skips_a_zero_gap(monkeypatch) -> None:
     assert gaps == []
 
 
-def test_hermetic_resolution_leaves_gaps_unset() -> None:
-    """Without a user config, resolution invents no machine default."""
+def test_hermetic_resolution_applies_machine_default_gaps() -> None:
+    """Without a user config, unset gaps resolve to the built-in machine defaults.
+
+    The machine defaults are the chain's bottom layer, so no resolution path can
+    leave a gap as None (which the runner would wait zero seconds on). The
+    provenance says so: the gaps are labelled ``default``, not claimed by a user
+    config that was never there.
+    """
     resolved = resolve_study(_raw())
 
-    assert resolved.study_execution.experiment_gap_seconds is None
-    assert resolved.study_execution.cycle_gap_seconds is None
+    assert resolved.study_execution.experiment_gap_seconds == _DEFAULT_EXPERIMENT_GAP
+    assert resolved.study_execution.cycle_gap_seconds == _DEFAULT_CYCLE_GAP
+    assert resolved.settings_provenance["study_execution.experiment_gap_seconds"] == "default"
+    assert resolved.settings_provenance["study_execution.cycle_gap_seconds"] == "default"
 
 
 # ---------------------------------------------------------------------------
@@ -576,3 +584,78 @@ def test_object_path_studies_get_yaml_labelled_provenance():
     resolved = resolve_study(_raw([_experiment()]))
     (log,) = resolved.provenance_logs.values()
     assert log["task.model"] == {"effective": "gpt2", "source": "yaml"}
+
+
+# ---------------------------------------------------------------------------
+# Layer order and provenance truth for the study settings (FIX B, PR #937)
+# ---------------------------------------------------------------------------
+
+
+def test_execution_defaults_beat_user_config_gaps() -> None:
+    """Caller execution defaults rank above the user config: file > defaults > user.
+
+    A caller's execution_defaults gap wins over the user config's machine-local
+    preference; a gap the caller's defaults leave unset still falls through to
+    the user config.
+    """
+    user = UserConfig(
+        execution=UserExecutionConfig(experiment_gap_seconds=123.0, cycle_gap_seconds=456.0)
+    )
+    resolved = resolve_study(
+        _raw(),
+        user_config=user,
+        execution_defaults={"experiment_gap_seconds": 77.0},
+    )
+
+    assert resolved.study_execution.experiment_gap_seconds == 77.0
+    assert resolved.study_execution.cycle_gap_seconds == 456.0
+    assert (
+        resolved.settings_provenance["study_execution.experiment_gap_seconds"]
+        == "call_site_default"
+    )
+    assert resolved.settings_provenance["study_execution.cycle_gap_seconds"] == "user_config"
+
+
+def test_silent_user_config_claims_no_provenance() -> None:
+    """A user config whose file wrote nothing labels nothing as user_config.
+
+    Resolved values are the built-in defaults either way; the label must say so.
+    """
+    resolved = resolve_study(_raw(), user_config=UserConfig())
+
+    assert resolved.output.results_dir == "./results"
+    assert resolved.settings_provenance["output.results_dir"] == "default"
+    assert resolved.settings_provenance["study_execution.experiment_gap_seconds"] == "default"
+    assert "user_config" not in set(resolved.settings_provenance.values())
+
+
+def test_written_user_config_values_are_labelled_user_config() -> None:
+    """Fields the user config file actually wrote carry the user_config label."""
+    user = UserConfig.model_validate(
+        {"output": {"results_dir": "/uc/results"}, "execution": {"cycle_gap_seconds": 200.0}}
+    )
+    resolved = resolve_study(_raw(), user_config=user)
+
+    assert resolved.output.results_dir == "/uc/results"
+    assert resolved.settings_provenance["output.results_dir"] == "user_config"
+    assert resolved.settings_provenance["study_execution.cycle_gap_seconds"] == "user_config"
+    # The gap the file did not write stays a built-in default.
+    assert resolved.settings_provenance["study_execution.experiment_gap_seconds"] == "default"
+
+
+def test_yaml_null_gap_falls_through_to_execution_defaults() -> None:
+    """A study-file explicit null gap defers to the caller's execution defaults.
+
+    Ratified corner (PR #937): an explicit ``null`` means "use the machine
+    default", and the caller's effective defaults now sit directly below the file,
+    so they catch it before the user config does.
+    """
+    raw = _raw(execution=ExecutionConfig(experiment_gap_seconds=None))
+    user = UserConfig(execution=UserExecutionConfig(experiment_gap_seconds=123.0))
+    resolved = resolve_study(
+        raw,
+        user_config=user,
+        execution_defaults={"experiment_gap_seconds": 77.0},
+    )
+
+    assert resolved.study_execution.experiment_gap_seconds == 77.0

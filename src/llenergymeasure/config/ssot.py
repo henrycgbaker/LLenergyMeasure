@@ -79,6 +79,11 @@ CONTAINER_EXCHANGE_DIR: Final = "/run/llem"
 # (llenergymeasure.config.precedence), so one vocabulary names one layer everywhere.
 SOURCE_CALL_SITE: Final = "call_site"
 """Provenance tag for a value pinned by the caller (a CLI flag, an API argument)."""
+SOURCE_CALL_SITE_DEFAULT: Final = "call_site_default"
+"""Provenance tag for a caller-supplied DEFAULT (e.g. the CLI's execution defaults):
+the caller's value, but one that deliberately sits below the study file, filling what
+the file omitted rather than overriding what it declared. Distinct from
+``call_site``, which names a pin that outranks everything."""
 SOURCE_ENV: Final = "env"
 SOURCE_YAML: Final = "yaml"
 SOURCE_USER_CONFIG: Final = "user_config"
@@ -398,6 +403,7 @@ __all__ = [
     "SAMPLING_PRESETS",
     "SOURCE_AUTO_DETECTED",
     "SOURCE_CALL_SITE",
+    "SOURCE_CALL_SITE_DEFAULT",
     "SOURCE_DEFAULT",
     "SOURCE_ENV",
     "SOURCE_IMPLICIT",
