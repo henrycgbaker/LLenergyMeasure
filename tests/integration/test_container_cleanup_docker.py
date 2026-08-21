@@ -67,24 +67,21 @@ def _image_present(image: str) -> bool:
 MARKER = "hello-from-container"
 
 
-def _launch(study_id: str) -> str:
+def _launch(study_id: str, *, auto_remove: bool = False) -> str:
     """Start a detached, labelled busybox container and return its id.
 
-    Deliberately NOT ``--rm``, matching the engine-server shape: this is the
-    container the cleanup has to stop, read, and only then remove. The container
-    prints a marker first so the persisted log tail has something to prove.
+    The removal policy is the whole point of the parameter, because it is what
+    separates the two container shapes the cleanup meets. The default is NOT
+    ``--rm``, matching the engine-server shape: that is the container the cleanup
+    has to stop, read, and only then remove. ``auto_remove=True`` stands in for
+    an experiment or baseline container, which docker reaps on stop.
+
+    The container prints a marker before sleeping, so a persisted log tail has
+    something to prove.
     """
     argv = ["docker", "run", "-d"]
-    for key, value in generate_container_labels(study_id).items():
-        argv += ["--label", f"{key}={value}"]
-    argv += [IMAGE, "sh", "-c", f"echo {MARKER}; sleep 120"]
-    result = subprocess.run(argv, capture_output=True, text=True, timeout=60, check=True)
-    return result.stdout.strip()
-
-
-def _launch_auto_removing(study_id: str) -> str:
-    """Start a labelled ``--rm`` container, standing in for an experiment container."""
-    argv = ["docker", "run", "-d", "--rm"]
+    if auto_remove:
+        argv.append("--rm")
     for key, value in generate_container_labels(study_id).items():
         argv += ["--label", f"{key}={value}"]
     argv += [IMAGE, "sh", "-c", f"echo {MARKER}; sleep 120"]
@@ -177,7 +174,7 @@ def test_cleanup_leaves_no_complaint_for_an_auto_removing_container(
     to keep its evidence.
     """
     study_id = f"llemtest{uuid.uuid4().hex}"
-    container_id = _launch_auto_removing(study_id)
+    container_id = _launch(study_id, auto_remove=True)
     try:
         assert _is_running(container_id)
 
