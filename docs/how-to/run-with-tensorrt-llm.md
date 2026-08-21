@@ -208,9 +208,10 @@ inside the container (both enumerate from 0).
 **PCIe hosts without functional peer-to-peer (P2P).** On boxes whose GPU
 topology reports `SYS` links in `nvidia-smi topo -m` (often because ACS is
 enabled in the BIOS), tensor-parallel runs can hang at the first NCCL
-collective. llem forwards every `NCCL_*` host environment variable into the
-experiment and baseline containers, so the standard workaround applies straight
-from the host:
+collective. llem forwards every non-empty `NCCL_*` host environment variable
+into each workload container it launches - the experiment container, the
+baseline container, and the engine-server container in server mode - so the
+standard workaround applies straight from the host:
 
 ```bash
 NCCL_P2P_DISABLE=1 LLEM_DOCKER_GPUS="device=0,1" llem run experiment.yaml
