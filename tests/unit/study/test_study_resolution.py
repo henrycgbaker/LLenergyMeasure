@@ -69,12 +69,19 @@ def _write_study(tmp_path: Path, study: dict) -> Path:
     return path
 
 
-def _capture_orchestrated(monkeypatch) -> list[StudyConfig]:
-    """Capture the studies handed to the orchestrator instead of running them.
+def _pin_default_user_config(monkeypatch) -> None:
+    """Pin the user config to the built-in defaults.
 
-    Also pins the user config to the built-in defaults, so what a test asserts
-    does not depend on the user config of the machine running it.
+    What a test asserts about a resolved study must not depend on the user config
+    of the machine running it.
     """
+    monkeypatch.setattr(
+        "llenergymeasure.config.user_config.load_user_config", lambda **_kw: UserConfig()
+    )
+
+
+def _capture_orchestrated(monkeypatch) -> list[StudyConfig]:
+    """Capture the studies handed to the orchestrator instead of running them."""
     import llenergymeasure.study.orchestration as orchestration
 
     captured: list[StudyConfig] = []
@@ -84,9 +91,7 @@ def _capture_orchestrated(monkeypatch) -> list[StudyConfig]:
         return make_study_result()
 
     monkeypatch.setattr(orchestration, "orchestrate_study", _capture)
-    monkeypatch.setattr(
-        "llenergymeasure.config.user_config.load_user_config", lambda **_kw: UserConfig()
-    )
+    _pin_default_user_config(monkeypatch)
     return captured
 
 
@@ -533,9 +538,7 @@ def test_provenance_logs_label_swept_and_overridden_fields(tmp_path, monkeypatch
     records the paths it overlaid; resolve_study formats them into per-experiment
     logs keyed by declared hash. No post-hoc diffing decides a label.
     """
-    monkeypatch.setattr(
-        "llenergymeasure.config.user_config.load_user_config", lambda **_kw: UserConfig()
-    )
+    _pin_default_user_config(monkeypatch)
     path = _write_study(
         tmp_path,
         {
@@ -560,9 +563,7 @@ def test_provenance_logs_keyed_by_declared_hash(tmp_path, monkeypatch):
     """Each unique declared config gets one log, keyed by its declared hash."""
     from llenergymeasure.domain.experiment import compute_declared_config_hash
 
-    monkeypatch.setattr(
-        "llenergymeasure.config.user_config.load_user_config", lambda **_kw: UserConfig()
-    )
+    _pin_default_user_config(monkeypatch)
     path = _write_study(
         tmp_path,
         {
@@ -668,9 +669,7 @@ def test_provenance_keeps_labelled_fields_at_default_value(tmp_path, monkeypatch
     emitted. n_prompts is overridden to its own default here - the provenance
     still records the call_site override.
     """
-    monkeypatch.setattr(
-        "llenergymeasure.config.user_config.load_user_config", lambda **_kw: UserConfig()
-    )
+    _pin_default_user_config(monkeypatch)
     path = _write_study(
         tmp_path,
         {
