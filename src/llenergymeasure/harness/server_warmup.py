@@ -49,6 +49,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -69,6 +70,8 @@ if TYPE_CHECKING:
     from llenergymeasure.harness.window_manager import WarmupContext
     from llenergymeasure.serving.transport import RequestShape
     from llenergymeasure.serving.types import ProbeRequest
+
+logger = logging.getLogger(__name__)
 
 
 @runtime_checkable
@@ -542,25 +545,23 @@ class ServerWarmup:
                     traffic_died = True
                     cause = _traffic_cause(traffic_task)
                     break
-                if eval_task is None:
-                    eval_task = asyncio.create_task(_evaluate_off_loop(sampler.get_samples()))
-                if eval_task.done():
-                    observables = eval_task.result()
-                    eval_task = None
+                # Harvest a finished verdict BEFORE starting the replacement, so a poll
+                # is never spent on an evaluation that has already answered (checking
+                # after would halve the gate's effective cadence).
+                if eval_task is not None and eval_task.done():
+                    finished, eval_task = eval_task, None
+                    observables = finished.result()
                     if observables.all_hold:
                         break
+                if eval_task is None:
+                    eval_task = asyncio.create_task(_evaluate_off_loop(sampler.get_samples()))
                 if self._clock() >= deadline:
                     timed_out = True
                     break
                 await self._sleep(self._poll_interval)
         finally:
-            # Dropping the wait on an unfinished evaluation abandons its worker thread
-            # to run itself out; that is safe only because the gate view bounds what
-            # one evaluation can cost.
             if eval_task is not None:
-                eval_task.cancel()
-                with contextlib.suppress(BaseException):
-                    await eval_task
+                await self._discard_evaluation(eval_task)
             await self._stop_traffic(traffic_task)
             sampler.stop()
             energy_j = _integrate_sampler_energy(sampler.get_samples())
@@ -653,6 +654,24 @@ class ServerWarmup:
             pre_window_protocol=protocol,
             energy_j=energy_j,
         )
+
+    @staticmethod
+    async def _discard_evaluation(eval_task: asyncio.Task[ObservableState]) -> None:
+        """Drop the wait on an in-flight gate evaluation, without losing its failure.
+
+        Abandoning the wait leaves the worker thread to run itself out, which is only
+        acceptable because the plateau's view bounds what one evaluation can cost. The
+        verdict is genuinely not wanted any more, but an EXCEPTION is: swallowing it
+        would let a detector bug surface as whatever the loop was already reporting -
+        typically a traffic failure - and send the reader after the wrong defect.
+        """
+        eval_task.cancel()
+        try:
+            await eval_task
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            logger.exception("server warmup gate evaluation raised; discarding its verdict")
 
     @staticmethod
     async def _stop_traffic(traffic_task: asyncio.Task[Any]) -> None:
