@@ -16,8 +16,9 @@ name: GPU CI
 #     never on energy values (power numbers in CI are noise).
 #
 # GPU jobs serialize (engine-smoke `needs` transformers; smoke matrix is
-# `max-parallel: 1`) because the shared runner guarantees at most two free
-# devices, so concurrent GPU jobs collide on device allocation.
+# `max-parallel: 1`) because the shared runner has only three free devices
+# (GPU 0 carries a foreign workload, see the engine-smoke env block below), so
+# concurrent GPU jobs collide on device allocation.
 #
 # Triggers:
 #   1. Manual:      workflow_dispatch (runs all jobs; run_gpu defaults true).
@@ -184,9 +185,19 @@ jobs:
       # tests are descoped from it. Kept surgical: the sibling engine_producers
       # tests (source_walker, runtime_literals, stub_factory) exercise codegen
       # logic without the uv subprocess and run fine in-container.
+      #
+      # Both steps request `--gpus 1`, NOT `--gpus all`. This job exercises one
+      # engine on one device, and on a shared GPU host a whole-host request is
+      # charged against the account's whole GPU quota (the quota whose refusals
+      # infra/docker_preflight.py reports on), so an `all` request starves
+      # concurrent measurement runs on the same box for the length of the job.
+      # Keep it a bare COUNT and not a device index: a count leaves the choice
+      # of device to the host, which is the only party that knows what is free.
+      # Observed on this runner, a `--gpus 1` container was granted host device
+      # 1, not device 0.
       - name: All tests (including GPU)
         run: |
-          docker run --rm --gpus all --cpus=32 \
+          docker run --rm --gpus 1 --cpus=32 \
             -v "${{ github.workspace }}":/app:ro \
             -v "${{ github.workspace }}/results":/app/results \
             -e PYTHONPATH -e PYTHONDONTWRITEBYTECODE -e HF_HOME \
@@ -199,7 +210,7 @@ jobs:
 
       - name: SIGINT verification
         run: |
-          docker run --rm --gpus all --cpus=32 \
+          docker run --rm --gpus 1 --cpus=32 \
             -v "${{ github.workspace }}":/app:ro \
             -v "${{ github.workspace }}/results":/app/results \
             -e PYTHONPATH -e PYTHONDONTWRITEBYTECODE -e HF_HOME \
