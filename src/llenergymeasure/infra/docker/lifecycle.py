@@ -115,7 +115,6 @@ class PullOutcome:
     Attributes:
         image:           The image reference that was ensured.
         cached:          The local cache already had it, so NO pull ran.
-        timed_out:       The pull exceeded ``DOCKER_PULL_TIMEOUT``.
         returncode:      ``docker pull``'s exit status; ``None`` when no pull ran
                          (cached) or it never returned (timed out).
         stderr:          ``docker pull`` stderr on a FAILED pull, decoded - the
@@ -129,20 +128,31 @@ class PullOutcome:
                          must tolerate - it is display/verification metadata, not
                          a success signal.
         elapsed:         Seconds the pull took; ``0.0`` when cached.
-        timeout_exc:     The ``TimeoutExpired`` behind ``timed_out``, kept so a
-                         caller that turns this report back into an exception can
-                         chain it as the cause. Reporting the outcome instead of
-                         raising is what would otherwise lose the traceback.
+        timeout_exc:     The ``TimeoutExpired`` raised when the pull exceeded
+                         ``DOCKER_PULL_TIMEOUT``, else ``None``. It is both the
+                         record THAT the pull timed out (see :attr:`timed_out`)
+                         and the cause a caller can chain when it turns this
+                         report back into an exception - reporting the outcome
+                         instead of raising is what would otherwise lose the
+                         traceback.
     """
 
     image: str
     cached: bool = False
-    timed_out: bool = False
     returncode: int | None = None
     stderr: str = ""
     inspect_stdout: bytes = b""
     elapsed: float = 0.0
     timeout_exc: BaseException | None = None
+
+    @property
+    def timed_out(self) -> bool:
+        """Whether the pull exceeded ``DOCKER_PULL_TIMEOUT``.
+
+        Derived from :attr:`timeout_exc` rather than stored alongside it, so the
+        flag and the exception behind it cannot disagree.
+        """
+        return self.timeout_exc is not None
 
     @property
     def ok(self) -> bool:
@@ -205,7 +215,6 @@ def _pull_image_if_absent(
     except subprocess.TimeoutExpired as exc:
         return PullOutcome(
             image=image,
-            timed_out=True,
             elapsed=time.perf_counter() - t0,
             timeout_exc=exc,
         )
