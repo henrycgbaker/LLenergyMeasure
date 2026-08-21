@@ -225,9 +225,10 @@ def _resolve_runner_specs(
     runner pins win; auto-resolved engines elevate to Docker, raising
     PreFlightError when a local-pinned engine is not importable on the host or an
     auto-resolved engine needs Docker but it is unavailable), emits preflight
-    progress, and warns on two resolved-plan conflicts: mixed local/Docker
-    runners, and a GPU selector set both via LLEM_DOCKER_GPUS and
-    study_execution.gpu_indices when a Docker container will launch.
+    progress, and warns on the resolved-plan conflicts: mixed local/Docker
+    runners, a GPU selector set both via LLEM_DOCKER_GPUS and
+    study_execution.gpu_indices, and an LLEM_DOCKER_GPUS value that leaves the
+    resolved GPU scope - the last two only when a container will launch.
     """
     from llenergymeasure.study.preflight import run_study_preflight
 
@@ -257,10 +258,12 @@ def _resolve_runner_specs(
         )
 
     # Physical GPU selector precedence (env>config): warn once per study dispatch
-    # when both LLEM_DOCKER_GPUS and study_execution.gpu_indices are set and a
-    # Docker container will actually launch. GPU scoping only affects containers,
-    # so a study with no Docker runner never triggers the warning. Single choke
-    # point for both dispatch paths (single-experiment and StudyRunner).
+    # when LLEM_DOCKER_GPUS contradicts the resolved GPU scope - overriding it, or
+    # leaving it entirely - and a Docker container will actually launch. The env var
+    # only reaches `docker run --gpus`, so a study with no container runner never
+    # triggers either warning. The resolved scope is what the study carries, so the
+    # allowlist behind it needs no separate read here. Single choke point for both
+    # dispatch paths (single-experiment and StudyRunner).
     if RUNNER_CONTAINER in modes:
         from llenergymeasure.utils.env_config import warn_on_gpu_selector_conflict
 

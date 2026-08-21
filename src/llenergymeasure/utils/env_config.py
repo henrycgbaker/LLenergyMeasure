@@ -83,6 +83,13 @@ the config indices are ignored and :func:`warn_on_gpu_selector_conflict` logs a
 one-line warning. Because the env fully overrides config, the two selectors
 never compose - there is no "config indices index into the env-restricted set"
 case to disambiguate.
+
+The same precedence holds against the machine-local GPU allowlist (the user
+config's ``execution.gpu_indices``): this env var still wins, because it is the
+same person's deliberate per-invocation act and can carry a GPU-/MIG-UUID
+selector an integer allowlist cannot express. Escaping the allowlist is
+therefore warned about loudly, not refused - see
+:func:`warn_on_gpu_selector_conflict`.
 """
 
 
@@ -138,24 +145,90 @@ def docker_gpus_arg(config_gpu_indices: list[int] | None = None) -> str:
     return raw
 
 
-def warn_on_gpu_selector_conflict(config_gpu_indices: list[int] | None) -> None:
-    """Log one warning when both ``LLEM_DOCKER_GPUS`` and config indices are set.
+def selector_physical_indices(selector: str) -> list[int] | None:
+    """Parse a ``--gpus`` selector into integer host device indices, or None.
 
-    Precedence resolution (env wins) is silent inside :func:`docker_gpus`; this
-    is the loud surface for the conflict so the researcher is told their config
-    ``gpu_indices`` are being ignored. Call once per study/experiment dispatch,
-    not once per ``docker run`` build, to avoid per-experiment log spam.
+    ``"device=2"`` -> ``[2]``; ``"device=2,3"`` -> ``[2, 3]``. Returns ``None``
+    for every selector whose physical devices are not integer-nameable:
+    ``"all"``, count forms (``"count=2"``, a bare count), and GPU-/MIG-UUID
+    selectors (``"device=GPU-<uuid>"``). Callers treat ``None`` as "unverifiable"
+    rather than "unrestricted": resolving a UUID to an index needs an
+    ``nvidia-smi`` lookup that this layer deliberately does not perform.
+    """
+    prefix = "device="
+    if not selector.startswith(prefix):
+        return None
+    tokens = [tok.strip() for tok in selector[len(prefix) :].split(",") if tok.strip()]
+    if not tokens:
+        return None
+    try:
+        return [int(tok) for tok in tokens]
+    except ValueError:
+        return None
+
+
+def warn_on_gpu_selector_conflict(config_gpu_indices: list[int] | None) -> None:
+    """Log one warning per way ``LLEM_DOCKER_GPUS`` contradicts the resolved scope.
+
+    ``config_gpu_indices`` is the RESOLVED ``study_execution.gpu_indices``: the
+    physical devices this run is scoped to, whether the study file named them or
+    they were inherited from the machine-local allowlist in the user config. It
+    arrives as plain data - this is layer 0, which cannot import the config layer
+    that owns the field.
+
+    Two conflicts, both silent inside :func:`docker_gpus`, which resolves the
+    precedence (env wins) without comment:
+
+    - Both selectors are set: the resolved scope is being ignored.
+    - The env selector leaves the resolved scope. The env var deliberately still
+      wins at ``docker run`` time: it is the same person's per-invocation act, and
+      it accepts GPU-/MIG-UUID selectors an integer scope cannot express. So this
+      is a loud warning, not a refusal. Integer-nameable selectors are compared
+      exactly; a UUID or count selector is reported as unverifiable, since mapping
+      it to a device index is an ``nvidia-smi`` lookup this layer does not do.
+
+    Call once per study/experiment dispatch, not once per ``docker run`` build,
+    to avoid per-experiment log spam.
     """
     raw = os.environ.get(ENV_DOCKER_GPUS, "").strip()
-    if raw and config_gpu_indices:
+    if not raw or not config_gpu_indices:
+        return
+
+    logger.warning(
+        "Both %s=%r (env) and study_execution.gpu_indices=%s (config) are set. "
+        "Env wins (env>config): containers are scoped to %r and the config "
+        "gpu_indices are ignored. Unset one to silence this warning.",
+        ENV_DOCKER_GPUS,
+        raw,
+        config_gpu_indices,
+        raw,
+    )
+
+    requested = selector_physical_indices(raw)
+    if requested is None:
         logger.warning(
-            "Both %s=%r (env) and study_execution.gpu_indices=%s (config) are set. "
-            "Env wins (env>config): containers are scoped to %r and the config "
-            "gpu_indices are ignored. Unset one to silence this warning.",
+            "%s=%r cannot be checked against the resolved GPU scope %s (it names no "
+            "integer device indices). Env wins: containers are scoped to %r. Verify by "
+            "hand that it stays inside the scope - llem cannot.",
             ENV_DOCKER_GPUS,
             raw,
             config_gpu_indices,
             raw,
+        )
+        return
+    escaping = [i for i in requested if i not in set(config_gpu_indices)]
+    if escaping:
+        logger.warning(
+            "%s=%r requests GPU %s, outside the resolved GPU scope %s. Env wins (a "
+            "deliberate per-invocation override): containers are scoped to %r, so llem "
+            "will use devices the config does not permit. Unset %s to stay inside the "
+            "scope.",
+            ENV_DOCKER_GPUS,
+            raw,
+            escaping,
+            config_gpu_indices,
+            raw,
+            ENV_DOCKER_GPUS,
         )
 
 

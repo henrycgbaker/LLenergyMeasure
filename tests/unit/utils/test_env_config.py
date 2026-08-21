@@ -265,6 +265,67 @@ class TestGpuSelectorConflictWarning:
             warn_on_gpu_selector_conflict([2, 3])
         assert caplog.records == []
 
+    def test_warns_when_env_escapes_the_resolved_scope(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """An integer selector outside the scope is named, along with both sets."""
+        monkeypatch.setenv(ENV_DOCKER_GPUS, "device=1,5")
+        with caplog.at_level(logging.WARNING):
+            warn_on_gpu_selector_conflict([1, 2])
+        messages = [rec.getMessage() for rec in caplog.records]
+        assert len(messages) == 2
+        assert any("Env wins (env>config)" in m for m in messages)
+        escape = next(m for m in messages if "requests GPU" in m)
+        assert "requests GPU [5]" in escape
+        assert "resolved GPU scope [1, 2]" in escape
+        assert "device=1,5" in escape
+
+    def test_no_escape_warning_when_env_stays_inside_the_scope(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """An env selector fully inside the scope only warns about the override."""
+        monkeypatch.setenv(ENV_DOCKER_GPUS, "device=2")
+        with caplog.at_level(logging.WARNING):
+            warn_on_gpu_selector_conflict([2, 3])
+        messages = [rec.getMessage() for rec in caplog.records]
+        assert len(messages) == 1
+        assert "Env wins (env>config)" in messages[0]
+
+    @pytest.mark.parametrize("selector", ["all", "count=2", "device=GPU-abc123", "2"])
+    def test_warns_unverifiable_selector_against_the_scope(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, selector: str
+    ) -> None:
+        """Non-integer selectors are reported as uncheckable rather than resolved."""
+        monkeypatch.setenv(ENV_DOCKER_GPUS, selector)
+        with caplog.at_level(logging.WARNING):
+            warn_on_gpu_selector_conflict([2, 3])
+        messages = [rec.getMessage() for rec in caplog.records]
+        assert len(messages) == 2
+        assert any("cannot be checked against the resolved GPU scope" in m for m in messages)
+
+
+class TestSelectorPhysicalIndices:
+    @pytest.mark.parametrize(
+        ("selector", "expected"),
+        [
+            ("device=2", [2]),
+            ("device=2,3", [2, 3]),
+            ("device=0, 1", [0, 1]),
+            ("all", None),
+            ("count=2", None),
+            ("2", None),
+            ("device=GPU-abc", None),
+            ("device=MIG-abc", None),
+            ("device=", None),
+        ],
+    )
+    def test_parses_only_integer_device_selectors(
+        self, selector: str, expected: list[int] | None
+    ) -> None:
+        from llenergymeasure.utils.env_config import selector_physical_indices
+
+        assert selector_physical_indices(selector) == expected
+
 
 class TestDockerShmSize:
     def test_default_is_8g(self, monkeypatch: pytest.MonkeyPatch) -> None:
