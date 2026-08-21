@@ -19,10 +19,19 @@ the three shapes are parameterisations of it:
 - :func:`build_server_container_argv` - the long-lived engine server. Detached,
   on the host network, and deliberately not auto-removed.
 
-Their divergences are real and each is stated where it is chosen, but nothing
-they have in common is written more than once, so the shapes cannot drift apart
-on the removal policy, the GPU selector, the ownership labels, or the rule that
-every flag precedes the image. Consumed by ``DockerRunner._build_docker_cmd``,
+All three forward the host ``NCCL_*`` environment (:func:`append_nccl_env`).
+That is not a divergence and never was: the server shape used to omit it, which
+read as a deliberate asymmetry but was an omission. A tensor-parallel server run
+needs the same host NCCL workarounds a multi-GPU offline run needs - on a PCIe
+host without functional GPU peer-to-peer, a server started without
+``NCCL_P2P_DISABLE=1`` hangs at its first NCCL collective exactly as an offline
+run does.
+
+Their remaining divergences are real and each is stated where it is chosen, but
+nothing they have in common is written more than once, so the shapes cannot drift
+apart on the removal policy, the GPU selector, the ownership labels, the host
+NCCL forwarding, or the rule that every flag precedes the image. Consumed by
+``DockerRunner._build_docker_cmd``,
 ``study.baseline_container``, and each engine's server adapter, which passes the
 argv it builds here to the serving layer's launcher.
 
@@ -405,10 +414,12 @@ def append_nccl_env(cmd: list[str]) -> None:
 
     Uses explicit ``-e KEY=VALUE`` (matching the ``LLEM_*`` forwarding idiom in
     ``build_docker_cmd``) and iterates keys in sorted order so the built command
-    is deterministic (tests assert on argv). Shared by the experiment dispatch
-    (:func:`build_docker_cmd`) and the baseline dispatch
-    (:func:`build_baseline_container_argv`) so the two
-    env-forwarding setups cannot drift.
+    is deterministic (tests assert on argv). Shared by all three container
+    shapes - the experiment dispatch (:func:`build_docker_cmd`), the baseline
+    dispatch (:func:`build_baseline_container_argv`) and the engine server
+    (:func:`build_server_container_argv`) - so their env-forwarding setups cannot
+    drift. A tensor-parallel server run reaches the same first-collective hang
+    as a tensor-parallel offline run, so no shape may skip this.
 
     Args:
         cmd: Docker command list to mutate in place (env appended before the
@@ -538,6 +549,13 @@ def build_server_container_argv(
     priming, no ``--entrypoint`` override. The measurement code stays on the host
     and talks to the server over HTTP.
 
+    It DOES forward the host ``NCCL_*`` environment (:func:`append_nccl_env`),
+    exactly as the other two shapes do. The engine's tensor-parallel workers run
+    inside this container, so a host that needs ``NCCL_P2P_DISABLE=1`` for
+    multi-GPU (PCIe topology without functional GPU peer-to-peer) needs it here
+    too: without it the server hangs at its first NCCL collective and never
+    becomes ready.
+
     ``serve_args`` are the engine command appended after the image. For vLLM the
     upstream ``vllm/vllm-openai`` image's ``ENTRYPOINT`` is ``["vllm", "serve"]``,
     so the adapter passes ``[<model>, "--port", <port>]`` and the entrypoint
@@ -560,12 +578,19 @@ def build_server_container_argv(
     server container that outlives its launching process - the exact case
     shutdown cannot cover - is otherwise invisible to them.
     """
+    flags = ["--shm-size", shm_size or docker_shm_size(), *hf_cache_mount_args()]
+    # Forward host NCCL_* env vars so multi-GPU tuning/workaround settings
+    # (e.g. NCCL_P2P_DISABLE=1 on PCIe hosts without functional GPU P2P) reach
+    # the engine's server process, matching the offline and baseline paths. A
+    # tensor-parallel server hangs at the first NCCL collective without them on
+    # exactly the hosts that need the workaround.
+    append_nccl_env(flags)
     return build_container_argv(
         image=image,
         gpu_indices=gpu_indices,
         lifetime=LIFETIME_DETACHED,
         host_network=True,
-        flags=["--shm-size", shm_size or docker_shm_size(), *hf_cache_mount_args()],
+        flags=flags,
         container_name=container_name,
         labels=labels,
         identity_before_flags=True,
