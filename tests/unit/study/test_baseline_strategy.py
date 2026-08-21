@@ -588,7 +588,7 @@ class TestDockerBaselineMount:
             patch("llenergymeasure.infra.docker_runner.DockerRunner", FakeDockerRunner),
             patch("llenergymeasure.study.gpu_memory.check_gpu_memory_residual"),
             patch.object(runner, "_handle_result"),
-            patch("llenergymeasure.study.container_lifecycle.persist_failure_artefacts"),
+            patch("llenergymeasure.study.failure_artefacts.persist_failure_artefacts"),
         ):
             runner._run_one_docker(config_cached, spec, config_hash="abc123", cycle=1, index=1)
 
@@ -1337,7 +1337,7 @@ class TestDockerPathOrdering:
             patch("llenergymeasure.infra.docker_runner.DockerRunner", FakeDockerRunner),
             patch("llenergymeasure.study.gpu_memory.check_gpu_memory_residual"),
             patch.object(runner, "_handle_result"),
-            patch("llenergymeasure.study.container_lifecycle.persist_failure_artefacts"),
+            patch("llenergymeasure.study.failure_artefacts.persist_failure_artefacts"),
         ):
             runner._run_one_docker(config_cached, spec, config_hash="abc123", cycle=1, index=1)
 

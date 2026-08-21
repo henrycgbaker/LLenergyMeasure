@@ -100,7 +100,7 @@ class _BaselineMixin:
         containers: the study-scoped cleanup and the orphan reaper can then see
         and correctly scope it.
         """
-        from llenergymeasure.study.container_lifecycle import generate_container_labels
+        from llenergymeasure.infra.docker.ownership import generate_container_labels
 
         return generate_container_labels(self.study.study_design_hash)
 
