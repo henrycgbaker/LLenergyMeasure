@@ -414,8 +414,12 @@ issuing loop, that stalls the warmup traffic, which lets the GPU fall to idle, w
 makes the next evaluation slower still. Evaluating off the loop keeps the traffic
 flowing and keeps the failsafe deadline enforceable however long one evaluation
 takes. Downsampling re-bases the detector's cost on `timeout_seconds` rather than on
-the capture cadence: it is about 3.9 s per evaluation at the 900 s default, and it
-scales up sharply if that timeout is set far above it.
+the capture cadence: it is about 3.9 s per evaluation at the 900 s default on one
+GPU. The view carries one decimated series per monitored GPU and the plateau pools
+them into a single detection, so the detector's input - and the same cost curve -
+grows with GPU count times timeout: roughly 30 s per evaluation with two GPUs at
+the default, about 4 min with four, and it scales up sharply if the timeout is set
+far above the default.
 
 The downsampling applies to the plateau observable alone. Its thresholds are
 duration-based and survive it: the plateau window is a fraction of the series, so it

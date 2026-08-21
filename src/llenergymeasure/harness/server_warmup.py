@@ -205,9 +205,12 @@ def _gate_view(samples: list[PowerThermalSample]) -> list[PowerThermalSample]:
     is exactly a series that stops being stable at the very end - which is what a
     stalled issuing loop produces. Decimating the view does not make the cost flat; it
     re-bases the same curve on the warmup's failsafe timeout in SECONDS instead of on
-    the capture cadence, which is ~3.9s per evaluation at the 900s default. That
-    timeout carries no upper bound, so the cost still runs away if it is set far above
-    the default (~30s per evaluation at 1800s); the loop stays responsive throughout
+    the capture cadence, which is ~3.9s per evaluation at the 900s default on ONE gpu.
+    The view holds one decimated series per monitored gpu and the plateau pools them
+    into a single detection, so the curve's input is gpu count x timeout: ~30s at the
+    default with two gpus, ~4min with four. The timeout carries no upper bound either,
+    so the cost still runs away if it is set far above the default (~30s per
+    evaluation at 1800s on one gpu); the loop stays responsive throughout
     because the evaluation runs off it, but an abandoned worker thread does keep
     burning a core until it finishes.
 
