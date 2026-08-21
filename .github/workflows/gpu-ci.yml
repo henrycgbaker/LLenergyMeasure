@@ -186,12 +186,14 @@ jobs:
       # logic without the uv subprocess and run fine in-container.
       #
       # Both steps request `--gpus 1`, NOT `--gpus all`. This job exercises one
-      # engine on one device, and the shared runner's allocation wrapper counts
-      # a whole-host request against the account's entire GPU quota, so an `all`
-      # request starves concurrent measurement runs on the same box for the
-      # length of the job. The bare COUNT is deliberate: the wrapper is the
-      # device authority and rewrites a count into whichever device it has
-      # allocated, so CI must never hand-pick an index here.
+      # engine on one device, and on a shared GPU host a whole-host request is
+      # charged against the account's whole GPU quota (the quota whose refusals
+      # infra/docker_preflight.py reports on), so an `all` request starves
+      # concurrent measurement runs on the same box for the length of the job.
+      # Keep it a bare COUNT and not a device index: a count leaves the choice
+      # of device to the host, which is the only party that knows what is free.
+      # Observed on this runner, a `--gpus 1` container was granted host device
+      # 1, not device 0.
       - name: All tests (including GPU)
         run: |
           docker run --rm --gpus 1 --cpus=32 \

@@ -287,10 +287,10 @@ ci-docker: ## Run ci inside a clean Ubuntu container (matches GitHub Actions env
 #
 #   The test containers request `--gpus 1`, matching the workflow: this target
 #   exercises one engine on one device, and a whole-host `--gpus all` request is
-#   charged against the account's entire GPU quota on a shared box, starving any
+#   charged against the account's whole GPU quota on a shared box, starving any
 #   measurement run going on beside it. Keep it a bare COUNT, not a device
-#   index: the host's allocation wrapper rewrites the count into whichever
-#   device it has allocated.
+#   index: a count leaves the choice of device to the host, which is the only
+#   party that knows what is free.
 # =============================================================================
 
 gpu-ci: ## GPU integration tests (mirrors gpu-ci.yml; transformers engine)

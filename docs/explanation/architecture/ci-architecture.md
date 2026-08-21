@@ -273,12 +273,15 @@ consistent. The value is host-specific runner config.
 
 The `transformers` job launches its two test containers itself rather than
 through llem, so it carries its own request: `--gpus 1`, never `--gpus all`. It
-exercises one engine on one device, and the runner host's allocation wrapper
-charges a whole-host request against the account's entire GPU quota, so an `all`
-request starves concurrent measurement runs on the same box for the length of
-the job. The request is a bare COUNT rather than a device index because the
-wrapper is the device authority: it rewrites a count into whichever device it
-has allocated, so CI never picks an index of its own.
+exercises one engine on one device, and on a shared GPU host a whole-host
+request is charged against the account's whole GPU quota, so an `all` request
+starves concurrent measurement runs on the same box for the length of the job.
+(That is the same quota whose refusals the container preflight reports on, in
+`infra/docker_preflight.py`.) The request is a bare count rather than a device
+index because a count leaves the choice of device to the host, which is the only
+party that knows which devices are free; an index chosen in CI would be a guess.
+Observed on the runner, a `--gpus 1` container was granted host device 1, not
+device 0.
 
 The GPU jobs serialize because the shared runner guarantees at most two free
 devices, so concurrent GPU jobs collide on device allocation. `engine-smoke`
