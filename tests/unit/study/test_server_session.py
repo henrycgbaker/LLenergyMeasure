@@ -1054,3 +1054,30 @@ class TestMakePlacement:
 
         with pytest.raises(StudyError, match="study_design_hash"):
             session._make_placement()
+
+
+# ---------------------------------------------------------------------------
+# GPU index spaces: placement is physical, and so is host-side measurement
+# ---------------------------------------------------------------------------
+
+
+class TestGpuIndexScoping:
+    def test_placement_carries_the_studys_physical_devices(self) -> None:
+        """Both placements are scoped by the study's physical device selector."""
+        session = _make_session(FakeEngine(), runner=_fake_runner(gpu_indices=[2, 3]))
+        assert session._placement_gpu_indices() == [2, 3]
+
+    def test_measurement_indices_are_drawn_from_the_allowed_devices(self) -> None:
+        """The host-side samplers address the devices the server was scoped to.
+
+        The samplers run in the study process, not inside the server, so they need
+        PHYSICAL host indices. Without the scope they would sample device 0 while
+        the server occupied device 2.
+        """
+        session = _make_session(FakeEngine(), runner=_fake_runner(gpu_indices=[2, 3]))
+        assert session._measurement_gpu_indices() == [2]
+
+    def test_measurement_indices_unchanged_without_a_scope(self) -> None:
+        """No scope keeps the historical single-device resolution."""
+        session = _make_session(FakeEngine(), runner=_fake_runner())
+        assert session._measurement_gpu_indices() == [0]

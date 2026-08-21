@@ -1598,14 +1598,19 @@ class ExecutionConfig(BaseModel):
     gpu_indices: list[int] | None = Field(
         default=None,
         description=(
-            "HOST GPU indices (as `nvidia-smi` shows) to scope llem's Docker containers to "
-            "via `docker run --gpus device=<indices>`, scoped at the docker level so "
-            "in-container CUDA and NVML indices stay consistent (see the docker-setup docs). "
-            "null = `--gpus all` (every visible GPU, the historical default). This is "
+            "HOST GPU indices (as `nvidia-smi` shows) llem may use for this study, for "
+            "compute placement AND for energy measurement. The container runner scopes "
+            "`docker run --gpus device=<indices>` (in-container CUDA and NVML then both "
+            "re-enumerate from 0, so they stay consistent); the process runner sets "
+            "`CUDA_VISIBLE_DEVICES` on the spawned worker and the launched server and "
+            "samples the same physical devices. See the docker-setup docs. "
+            "null = every visible GPU (the historical default). This is "
             "placement/dispatch metadata, NOT part of the declared-config or study-design "
             "hash, so pinning a study to different physical GPUs never changes dedup grouping. "
             "The LLEM_DOCKER_GPUS env var overrides this (env>config); when both are set the "
-            "env wins and a warning is logged."
+            "env wins and a warning is logged. Left unset, this inherits the machine-local "
+            "allowlist from the user config's `execution.gpu_indices`; set, it must name a "
+            "subset of that allowlist."
         ),
     )
 

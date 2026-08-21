@@ -266,6 +266,11 @@ class SubprocessSession(_OfflineSession):
                     "study_run_id": runner.study_run_id,
                     "cycle": self.cycle,
                     "config_hash": self.config_hash,
+                    # Physical device scoping for the process path. The child sets
+                    # its own CUDA_VISIBLE_DEVICES from this and draws its NVML
+                    # monitoring indices from the same set; the parent's environment
+                    # is never touched.
+                    "gpu_indices": runner.study.study_execution.gpu_indices,
                 },
                 daemon=False,  # daemon=False: clean CUDA teardown if parent exits unexpectedly
             )

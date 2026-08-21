@@ -345,3 +345,35 @@ def test_progress_consumer_thread_stays_responsive_on_silent_producer(
     t.join(timeout=2.0)
     assert not t.is_alive(), "consumer must exit on the sentinel"
     progress.on_step_done.assert_called_once_with("s", 0.1)
+
+
+# =============================================================================
+# SubprocessSession: physical GPU scoping reaches the worker
+# =============================================================================
+
+
+def _spawn_kwargs(runner: StudyRunner, ctx: Any) -> dict[str, Any]:
+    """Enter a SubprocessSession and return the kwargs it handed the child process."""
+    config = runner.study.experiments[0]
+    with patch("llenergymeasure.study.gpu_memory.check_gpu_memory_residual"):
+        session = SubprocessSession(runner, config, ctx, config_hash="h", cycle=1, index=1)
+        with session:
+            pass
+    return ctx.Process.call_args.kwargs["kwargs"]
+
+
+def test_subprocess_session_forwards_the_allowed_gpu_indices(tmp_path: Path) -> None:
+    """The study's allowed physical devices are handed to the worker to scope itself with."""
+    runner = _make_runner(tmp_path)
+    runner.study.study_execution.gpu_indices = [2, 3]
+    ctx = _make_mock_context(_make_mock_process(is_alive_after_join=False, exitcode=0))
+
+    assert _spawn_kwargs(runner, ctx)["gpu_indices"] == [2, 3]
+
+
+def test_subprocess_session_forwards_none_when_unrestricted(tmp_path: Path) -> None:
+    """No restriction stays None - the worker then leaves CUDA_VISIBLE_DEVICES alone."""
+    runner = _make_runner(tmp_path)
+    ctx = _make_mock_context(_make_mock_process(is_alive_after_join=False, exitcode=0))
+
+    assert _spawn_kwargs(runner, ctx)["gpu_indices"] is None

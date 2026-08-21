@@ -1799,10 +1799,18 @@ class ServerSession:
         return self._runner.study.study_execution.gpu_indices
 
     def _measurement_gpu_indices(self) -> list[int] | None:
-        # Logical indices the host-side NVML samplers address (mirrors offline).
+        # PHYSICAL indices the host-side NVML samplers address. These samplers run
+        # in THIS process, never inside the server, so they address host device
+        # indices for both placements: a sibling server container is scoped by
+        # --gpus and a server subprocess by CUDA_VISIBLE_DEVICES, but neither
+        # re-enumerates anything for the sampler here. Drawing them from the
+        # study's allowed set is therefore what makes energy land on the devices
+        # the server actually occupies.
         from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 
-        return _resolve_gpu_indices(self.config)
+        return _resolve_gpu_indices(
+            self.config, allowed_gpu_indices=self._runner.study.study_execution.gpu_indices
+        )
 
     # -- progress + cleanup --------------------------------------------------
 
