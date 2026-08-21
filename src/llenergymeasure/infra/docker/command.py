@@ -31,9 +31,9 @@ Their remaining divergences are real and each is stated where it is chosen, but
 nothing they have in common is written more than once, so the shapes cannot drift
 apart on the removal policy, the GPU selector, the ownership labels, the host
 NCCL forwarding, or the rule that every flag precedes the image. Consumed by
-``DockerRunner._build_docker_cmd``,
-``study.baseline_container``, and each engine's server adapter, which passes the
-argv it builds here to the serving layer's launcher.
+``DockerRunner._build_docker_cmd``, ``study.baseline_container``, and each
+engine's server adapter, which passes the argv it builds here to the serving
+layer's launcher.
 
 Scope: these are the shapes llenergymeasure runs a WORKLOAD in. The two one-shot
 diagnostic ``docker run`` probes elsewhere in ``infra`` (the engine-version probe
