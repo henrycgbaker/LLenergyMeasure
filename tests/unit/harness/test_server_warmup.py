@@ -4,24 +4,30 @@ probe request shape, and the divergence-labeling protocol descriptions.
 
 Covers: warmup draws from the (injected) MEASURED traffic
 shape; NO pre-window idle cooldown; re-warm fires at every level; timeout stamps
-timed_out; each composite observable gates independently.
+timed_out; each composite observable gates independently; the gate is evaluated on a
+1 Hz view of the power series, off the issuing loop, so neither the warmup traffic nor
+the failsafe deadline can be starved by a slow evaluation.
 """
 
 from __future__ import annotations
 
 import asyncio
 import contextlib
+import time
 from typing import Any
 
 import pytest
 
 from llenergymeasure.config.models import ServerWarmupConfig
 from llenergymeasure.device.power_thermal import PowerThermalSample
+from llenergymeasure.harness import server_warmup
 from llenergymeasure.harness.server_warmup import (
     ObservableState,
     ServerWarmup,
     ServerWarmupResult,
     WarmupTrafficError,
+    _evaluate_observables,
+    _gate_view,
     _power_plateau,
     _temperature_settled,
     _throttle_clear,
@@ -289,6 +295,63 @@ class TestThrottleClear:
         assert _throttle_clear([]) is False
 
 
+class TestGateView:
+    """The gate's series view is decimated to 1 Hz; the CAPTURE keeps full cadence.
+
+    Steady-state detection costs super-quadratically in the sample count, so the gate
+    must evaluate a bounded view of a series that grows for as long as warmup lasts.
+    Every gate threshold is defined over a duration, so the view asks the same question
+    of the same span.
+    """
+
+    def test_decimates_full_cadence_series_to_one_hz(self):
+        # 60s at the sampler's 100ms cadence: one sample per second, plus the newest.
+        raw = _series(n=600, dt=0.1)
+        view = _gate_view(raw)
+        assert len(view) == 61
+
+    def test_keeps_the_newest_sample(self):
+        # The trailing temperature / throttle windows are anchored on the newest
+        # sample, so the view must never lag the series.
+        raw = _series(n=600, dt=0.1)
+        assert _gate_view(raw)[-1] is raw[-1]
+
+    def test_series_already_at_one_hz_is_unchanged(self):
+        raw = _series(n=120, dt=1.0)
+        assert _gate_view(raw) == raw
+
+    def test_decimates_per_gpu(self):
+        # Per GPU, because the observables are per GPU (or pooled per GPU): a
+        # two-GPU poll must not decimate away one device's series.
+        raw = _series(n=600, dt=0.1, gpu=0) + _series(n=600, dt=0.1, gpu=1)
+        view = _gate_view(raw)
+        assert len([s for s in view if s.gpu_index == 0]) == 61
+        assert len([s for s in view if s.gpu_index == 1]) == 61
+
+    def test_sample_count_bounded_at_the_failsafe_horizon(self):
+        # The whole point: at the 900s failsafe the gate sees ~900 samples rather than
+        # the 9000 the full cadence would hand it, so the per-poll cost stays flat.
+        assert len(_gate_view(_series(n=9000, dt=0.1))) <= 902
+
+    def test_observables_see_only_the_decimated_view(self, monkeypatch):
+        # Structural guard: nobody can re-point an observable at the raw series.
+        seen: list[int] = []
+
+        def recording_plateau(samples):
+            seen.append(len(samples))
+            return True
+
+        monkeypatch.setattr(server_warmup, "_power_plateau", recording_plateau)
+        _evaluate_observables(_series(n=9000, dt=0.1))
+        assert seen and seen[0] <= 902
+
+    def test_verdict_unchanged_by_decimation(self):
+        # Same decision on a full-cadence series as the raw series would give: a
+        # settled 120s series passes, a ramping one does not.
+        assert _evaluate_observables(_series(n=1200, dt=0.1)).all_hold is True
+        assert _evaluate_observables(_series(n=1200, dt=0.1, rising=True)).all_hold is False
+
+
 class TestObservableState:
     def test_all_hold_requires_all_three(self):
         assert ObservableState(True, True, True).all_hold is True
@@ -472,6 +535,84 @@ class TestServerWarmupTimeoutBoundary:
         assert exc.value.__cause__ is None  # a clean early exit chains no cause
         assert "ended" in str(exc.value)
         assert sw.results == []  # no result recorded for a failed level
+
+
+#: A gate evaluation far slower than the whole warmup under test. Blocking (not
+#: awaitable) on purpose: it is the shape of the real cost, a CPU-bound detector call.
+_SLOW_EVAL_S = 0.6
+
+
+class TestSlowGateEvaluation:
+    """Regression: the gate is evaluated OFF the issuing loop, so an evaluation that
+    turns out slow can neither stall the warmup traffic nor starve the failsafe.
+
+    Guards the shipped defect where the gate was evaluated synchronously on the loop
+    that issues warmup traffic: one slow evaluation stopped the traffic, the idle GPU
+    made the next evaluation slower still, and the failsafe could never fire because
+    its deadline was checked by the loop the evaluation was blocking.
+    """
+
+    def test_slow_evaluation_cannot_push_past_the_deadline(self, monkeypatch):
+        def slow_evaluate(samples):
+            time.sleep(_SLOW_EVAL_S)
+            return ObservableState(False, False, False)
+
+        monkeypatch.setattr(server_warmup, "_evaluate_observables", slow_evaluate)
+        source = FakeSource()
+        sw = _warmup(
+            ServerWarmupConfig(mode="composite", timeout_seconds=0.1),
+            FakeSampler(_SETTLED),
+            source,
+            poll_interval=0.005,
+        )
+
+        async def drive() -> float:
+            started = time.monotonic()
+            await sw(_ctx())
+            return time.monotonic() - started
+
+        elapsed = asyncio.run(drive())
+        assert sw.results[0].timed_out is True
+        # The failsafe fired on its own deadline instead of waiting out the evaluation.
+        assert elapsed < _SLOW_EVAL_S / 2
+
+    def test_traffic_keeps_flowing_while_the_gate_evaluates(self, monkeypatch):
+        source = FakeSource()
+        issued_before: list[int] = []
+        issued_after: list[int] = []
+
+        def slow_evaluate(samples):
+            issued_before.append(source.issued)
+            time.sleep(_SLOW_EVAL_S)
+            issued_after.append(source.issued)
+            return ObservableState(False, False, False)
+
+        monkeypatch.setattr(server_warmup, "_evaluate_observables", slow_evaluate)
+        sw = _warmup(
+            ServerWarmupConfig(mode="composite", timeout_seconds=0.2),
+            FakeSampler([]),
+            source,
+            poll_interval=0.005,
+        )
+        asyncio.run(sw(_ctx()))
+        assert issued_before  # the evaluation really ran
+        # Requests were issued DURING the evaluation: the issuing loop kept its cadence.
+        assert issued_after[0] > issued_before[0]
+
+
+class TestCaptureKeepsFullCadence:
+    def test_warmup_energy_integrates_the_undecimated_series(self):
+        # The gate's 1 Hz view must not reach the measurement: the warmup energy is the
+        # integral of the sampler's own full-cadence series.
+        from llenergymeasure.energy.nvml import integrate_power_samples
+        from llenergymeasure.harness.windowing import _clean_samples
+
+        raw = _series(n=1200, dt=0.1)
+        expected = sum(integrate_power_samples(_clean_samples(raw)).values())
+        sampler = FakeSampler(raw, ready_after=1)
+        sw = _warmup(ServerWarmupConfig(mode="composite"), sampler, FakeSource())
+        asyncio.run(sw(_ctx()))
+        assert sw.results[0].energy_j == pytest.approx(expected)
 
 
 class TestServerWarmupFixed:
