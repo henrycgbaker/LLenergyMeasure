@@ -13,7 +13,10 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import math
+import threading
 import time
+from dataclasses import replace
 from typing import Any
 
 import pytest
@@ -107,6 +110,13 @@ class FakeSampler:
         polls = self._polls
         self._polls += 1
         return self._samples if polls >= self._ready_after else []
+
+
+def _with_throttle(
+    samples: list[PowerThermalSample], *, lo: float, hi: float
+) -> list[PowerThermalSample]:
+    """Set the throttle bit on the samples whose timestamp falls in ``[lo, hi]``."""
+    return [replace(s, thermal_throttle=lo <= s.timestamp <= hi) for s in samples]
 
 
 def _empty_report(issued: int = 0) -> IssuerReport:
@@ -296,12 +306,14 @@ class TestThrottleClear:
 
 
 class TestGateView:
-    """The gate's series view is decimated to 1 Hz; the CAPTURE keeps full cadence.
+    """The POWER PLATEAU observable reads a 1 Hz view; nothing else does.
 
-    Steady-state detection costs super-quadratically in the sample count, so the gate
-    must evaluate a bounded view of a series that grows for as long as warmup lasts.
-    Every gate threshold is defined over a duration, so the view asks the same question
-    of the same span.
+    Steady-state detection costs super-quadratically in the sample count, so the
+    plateau must be given a bounded view of a series that grows for as long as warmup
+    lasts. The temperature and throttle observables are extreme-value statistics over
+    a trailing window, so decimating them would lose short-lived extremes that must
+    veto the window; they read the poll as captured, and so does the energy
+    integration.
     """
 
     def test_decimates_full_cadence_series_to_one_hz(self):
@@ -333,23 +345,78 @@ class TestGateView:
         # the 9000 the full cadence would hand it, so the per-poll cost stays flat.
         assert len(_gate_view(_series(n=9000, dt=0.1))) <= 902
 
-    def test_observables_see_only_the_decimated_view(self, monkeypatch):
-        # Structural guard: nobody can re-point an observable at the raw series.
-        seen: list[int] = []
+    def test_only_the_plateau_reads_the_view(self, monkeypatch):
+        # Structural guard in both directions: the plateau must never be handed the raw
+        # series (that is the defect), and the other two must never be handed the view
+        # (that is what blinds them).
+        seen: dict[str, int] = {}
 
-        def recording_plateau(samples):
-            seen.append(len(samples))
-            return True
+        def recorder(name):
+            def record(samples):
+                seen[name] = len(samples)
+                return True
 
-        monkeypatch.setattr(server_warmup, "_power_plateau", recording_plateau)
+            return record
+
+        monkeypatch.setattr(server_warmup, "_power_plateau", recorder("plateau"))
+        monkeypatch.setattr(server_warmup, "_temperature_settled", recorder("temperature"))
+        monkeypatch.setattr(server_warmup, "_throttle_clear", recorder("throttle"))
         _evaluate_observables(_series(n=9000, dt=0.1))
-        assert seen and seen[0] <= 902
+        assert seen["plateau"] <= 902
+        assert seen["temperature"] == 9000
+        assert seen["throttle"] == 9000
 
-    def test_verdict_unchanged_by_decimation(self):
-        # Same decision on a full-cadence series as the raw series would give: a
-        # settled 120s series passes, a ramping one does not.
-        assert _evaluate_observables(_series(n=1200, dt=0.1)).all_hold is True
-        assert _evaluate_observables(_series(n=1200, dt=0.1, rising=True)).all_hold is False
+    def test_plateau_verdict_survives_decimation(self):
+        # The plateau's own decision is unchanged by the view: a settled 120s series at
+        # full cadence passes either way, a ramping one fails either way.
+        settled = _series(n=1200, dt=0.1)
+        ramping = _series(n=1200, dt=0.1, rising=True)
+        assert _power_plateau(settled) is _evaluate_observables(settled).power_plateau is True
+        assert _power_plateau(ramping) is _evaluate_observables(ramping).power_plateau is False
+
+    def test_throttle_transient_between_view_samples_still_vetoes(self):
+        # A 900ms throttle episode landing between two 1 Hz view samples: the view
+        # cannot see it at all, so the observable has to read the raw series.
+        samples = _series(n=1200, dt=0.1)
+        samples = _with_throttle(samples, lo=1114.1, hi=1114.9)
+        assert not any(s.thermal_throttle for s in _gate_view(samples))  # invisible
+        assert _evaluate_observables(samples).throttle_clear is False
+
+    def test_duty_cycle_throttle_invisible_to_the_view_still_vetoes(self):
+        # A throttle cycling on 400ms in every second, phased so that no 1 Hz view
+        # sample ever lands on an ON slice: sustained throttling, invisible to the view.
+        samples = [
+            replace(s, thermal_throttle=2 <= i % 10 <= 5)
+            for i, s in enumerate(_series(n=1200, dt=0.1))
+        ]
+        assert not any(s.thermal_throttle for s in _gate_view(samples))  # invisible
+        assert _evaluate_observables(samples).throttle_clear is False
+
+    def test_temperature_spike_between_view_samples_still_vetoes(self):
+        # The temperature observable is a range over a trailing window - also an
+        # extreme-value statistic, and also lost by decimation. A 3C spike 500ms wide,
+        # placed between view samples, must still block the gate.
+        samples = [
+            replace(s, temperature_c=58.0 if 1100.1 <= s.timestamp <= 1100.4 else 55.0)
+            for s in _series(n=1200, dt=0.1)
+        ]
+        view_temps = [s.temperature_c for s in _gate_view(samples)]
+        assert max(view_temps) - min(view_temps) == 0.0  # invisible
+        assert _evaluate_observables(samples).temperature_settled is False
+
+    def test_fast_power_ripple_reads_as_plateaued(self):
+        # The accepted consequence, pinned so it stays a decision rather than a
+        # surprise: a 2 Hz ripple is above the view's Nyquist frequency, so the view
+        # aliases it away and reads a plateau where the raw series reads instability.
+        # The plateau asks whether power has settled at a level, not whether
+        # consecutive samples differ, and the two observables that must catch
+        # short-lived events are the ones kept at full cadence.
+        samples = [
+            replace(s, power_w=300.0 * (1.0 + 0.1 * math.sin(2.0 * math.pi * 2.0 * i * 0.1)))
+            for i, s in enumerate(_series(n=1200, dt=0.1))
+        ]
+        assert _power_plateau(samples) is False
+        assert _evaluate_observables(samples).power_plateau is True
 
 
 class TestObservableState:
@@ -599,6 +666,48 @@ class TestSlowGateEvaluation:
         # Requests were issued DURING the evaluation: the issuing loop kept its cadence.
         assert issued_after[0] > issued_before[0]
 
+    def test_at_most_one_evaluation_runs_at_a_time(self, monkeypatch):
+        # Off-loop evaluation must not turn a slow detector into a thread pile-up: a
+        # poll that finds the previous evaluation still running starts no second one.
+        # Without that guard this warmup queues one evaluation per poll.
+        lock = threading.Lock()
+        live = 0
+        peak = 0
+
+        def slow_evaluate(samples):
+            nonlocal live, peak
+            with lock:
+                live += 1
+                peak = max(peak, live)
+            time.sleep(_SLOW_EVAL_S)
+            with lock:
+                live -= 1
+            return ObservableState(False, False, False)
+
+        monkeypatch.setattr(server_warmup, "_evaluate_observables", slow_evaluate)
+        sw = _warmup(
+            ServerWarmupConfig(mode="composite", timeout_seconds=0.2),
+            FakeSampler(_SETTLED),
+            FakeSource(),
+            poll_interval=0.001,  # ~200 polls inside one evaluation
+        )
+        asyncio.run(sw(_ctx()))
+        assert peak == 1
+
+
+def _sawtooth(n: int = 1200, dt: float = 0.1) -> list[PowerThermalSample]:
+    """A 295-305 W sawtooth of 1 s period on the sampler's 100 ms cadence.
+
+    Deliberately shaped so full cadence and the 1 Hz view integrate to DIFFERENT
+    energies: the view lands on the same phase of every tooth (295 W) while the true
+    mean is 300 W. A constant-power fixture cannot tell the two apart, so it cannot
+    catch the gate view leaking into the measurement. The 1.7% coefficient of variation
+    stays well inside the plateau threshold, so the gate still converges on it.
+    """
+    return [
+        replace(s, power_w=295.0 + 10.0 * (i % 10) / 9.0) for i, s in enumerate(_series(n=n, dt=dt))
+    ]
+
 
 class TestCaptureKeepsFullCadence:
     def test_warmup_energy_integrates_the_undecimated_series(self):
@@ -607,11 +716,17 @@ class TestCaptureKeepsFullCadence:
         from llenergymeasure.energy.nvml import integrate_power_samples
         from llenergymeasure.harness.windowing import _clean_samples
 
-        raw = _series(n=1200, dt=0.1)
+        raw = _sawtooth()
         expected = sum(integrate_power_samples(_clean_samples(raw)).values())
+        # Guard the fixture itself: if the two cadences ever integrate alike again, this
+        # test is vacuous and must be told so rather than passing.
+        decimated = sum(integrate_power_samples(_clean_samples(_gate_view(raw))).values())
+        assert abs(decimated - expected) / expected > 0.01
+
         sampler = FakeSampler(raw, ready_after=1)
         sw = _warmup(ServerWarmupConfig(mode="composite"), sampler, FakeSource())
         asyncio.run(sw(_ctx()))
+        assert sw.results[0].converged is True  # the fixture still passes the gate
         assert sw.results[0].energy_j == pytest.approx(expected)
 
 
