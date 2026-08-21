@@ -85,20 +85,19 @@ def pins_from_resolved(
     provenance: Mapping[str, str],
     *,
     section: str,
-    fallback_source: str = SOURCE_YAML,
 ) -> dict[str, RunnerPin]:
     """Pair each resolved per-engine value with the layer that supplied it.
 
     ``values`` is a resolved section of a study (``runners`` or ``images``) and
     ``provenance`` is the study's ``settings_provenance``, keyed by
-    ``"<section>.<engine>"``. ``fallback_source`` labels a value with no recorded
-    provenance, which happens only for a StudyConfig assembled by hand rather than
-    resolved: such a value was declared on the study, so it is labelled as declared.
+    ``"<section>.<engine>"``. A value with no recorded provenance is labelled
+    ``yaml``: that happens only for a StudyConfig assembled by hand rather than
+    resolved, where the value was declared on the study itself.
     """
     return {
         engine: RunnerPin(
             value=value,
-            source=provenance.get(f"{section}.{engine}", fallback_source),
+            source=provenance.get(f"{section}.{engine}", SOURCE_YAML),
         )
         for engine, value in (values or {}).items()
     }

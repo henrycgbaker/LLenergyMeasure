@@ -327,7 +327,7 @@ def _resolve_settings(
 
 
 def _validated_execution(
-    resolved: dict[str, Any], provenance: Mapping[str, str] | None = None
+    resolved: dict[str, Any], provenance: Mapping[str, str]
 ) -> ExecutionConfig:
     """Validate the chain's resolved execution block back into an ExecutionConfig.
 
@@ -354,7 +354,7 @@ def _validated_execution(
 
         def _blame(loc: tuple[Any, ...]) -> str:
             field_path = ".".join(str(p) for p in loc)
-            source = (provenance or {}).get(f"study_execution.{field_path}")
+            source = provenance.get(f"study_execution.{field_path}")
             supplied_by = param_names.get(source or "", source)
             return f"{field_path} (from {supplied_by}): " if supplied_by else f"{field_path}: "
 
