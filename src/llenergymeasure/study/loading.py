@@ -110,6 +110,8 @@ def resolve_study(
         overrides=overrides,
     )
     execution = _validated_execution(settings.execution, settings.provenance)
+    if user_config is not None:
+        _constrain_gpu_indices(execution, user_config.execution.gpu_indices)
 
     # Overlay the tool-wide user-config server warmup onto each declared
     # server config BEFORE dedup, so the resolved-config hash - and hence dedup -
@@ -363,6 +365,41 @@ def _validated_execution(
             f"Invalid execution settings: {details}. Keys must be study_execution "
             f"fields ({', '.join(sorted(ExecutionConfig.model_fields))})."
         ) from exc
+
+
+def _constrain_gpu_indices(
+    execution: ExecutionConfig,
+    allowed: list[int] | None,
+) -> None:
+    """Refuse a resolved GPU selection that escapes the machine-local allowlist.
+
+    ``allowed`` is the user config's ``execution.gpu_indices``: the host GPU
+    indices llem may use on this machine. The FILL half of the semantics needs no
+    code here - the precedence chain already does it, because the user config's
+    execution block is a layer beneath the study file, so a study that names no
+    devices inherits the allowlist and a study that names its own wins. This is
+    the other half: a resolved selection naming a device the machine forbids is a
+    contradiction, not a request to be quietly narrowed, so it fails loudly with
+    both sets in the message rather than being silently intersected.
+
+    ``gpu_indices`` is placement metadata that no hash reads
+    (``compute_study_design_hash`` digests the experiment list only, and the
+    execution block is excluded from it), so neither the fill nor this check can
+    move a study's identity or its dedup grouping.
+
+    Raises:
+        ConfigError: The resolved selection includes a device the allowlist omits.
+    """
+    if allowed is None or execution.gpu_indices is None:
+        return
+    outside = [i for i in execution.gpu_indices if i not in set(allowed)]
+    if outside:
+        raise ConfigError(
+            f"study_execution.gpu_indices requests GPU {outside}, which this machine's "
+            f"allowlist does not permit. The study asks for {execution.gpu_indices}; the "
+            f"user config allows execution.gpu_indices={list(allowed)}. Narrow the study to "
+            "the allowed set, or widen the allowlist in the user config."
+        )
 
 
 def _maybe_hint_sequential_server_singletons(

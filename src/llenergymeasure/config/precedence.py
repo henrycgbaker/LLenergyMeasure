@@ -450,6 +450,12 @@ def _study_file_layer(
             # The execution block documents an unset gap as "use the machine
             # default", so a null here defers rather than pinning zero seconds.
             execution[gap] = UNSET
+    if "gpu_indices" in execution and execution["gpu_indices"] is None:
+        # The execution block documents an unset gpu_indices as "every visible
+        # GPU". On a machine whose user config narrows what llem may use, that
+        # means the allowed set, so a null defers to the allowlist below rather
+        # than pinning unrestricted access over it.
+        execution["gpu_indices"] = UNSET
     return {
         "output": {"results_dir": _deferring(study_output.get("results_dir"))},
         "study_execution": execution,
