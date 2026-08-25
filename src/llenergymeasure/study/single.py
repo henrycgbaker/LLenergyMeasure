@@ -13,6 +13,7 @@ it delegates the actual execution body to ``run_single_experiment`` here.
 
 from __future__ import annotations
 
+import logging
 import shutil
 import time
 import traceback
@@ -28,6 +29,8 @@ from llenergymeasure.domain.progress import ProgressCallback
 if TYPE_CHECKING:
     from llenergymeasure.config.runner_spec import RunnerSpec
     from llenergymeasure.study.manifest import ManifestWriter
+
+logger = logging.getLogger(__name__)
 
 
 def run_single_experiment(
@@ -137,6 +140,11 @@ def run_single_experiment(
         from llenergymeasure.harness.preflight import run_preflight
         from llenergymeasure.study.runtime_observations import capture_runtime_observations
 
+        # A resolved GPU scope never reaches this leg: the orchestrator routes
+        # scoped singles through StudyRunner, whose worker subprocess enforces
+        # CUDA_VISIBLE_DEVICES before importing torch (_takes_single_fast_path).
+        allowed_gpu_indices = study.study_execution.gpu_indices
+
         # Staging dir for harness artefacts. The harness writes config.json here
         # always (sole home of provenance, authoritative home of identity) and
         # timeseries.parquet when save_timeseries is on, so the dir is created
@@ -165,7 +173,7 @@ def run_single_experiment(
 
                 engine = get_engine(config.engine)
                 harness = MeasurementHarness()
-                gpu_indices = _resolve_gpu_indices(config)
+                gpu_indices = _resolve_gpu_indices(config, allowed_gpu_indices=allowed_gpu_indices)
                 result = harness.run(
                     engine,
                     config,

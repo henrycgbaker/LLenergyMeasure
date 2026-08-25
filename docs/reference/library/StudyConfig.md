@@ -128,6 +128,7 @@ Controls sequencing, cycles, and failure handling:
 | `experiment_timeout_seconds` | `float` | `600.0` | Per-experiment timeout. Applies to both local and Docker paths. |
 | `stdout_silence_timeout_seconds` | `float` | `300.0` | Docker watchdog: kill the container if it emits no stdout for this many seconds. Raise to 600-900s for TRT-LLM builds with infrequent compile progress output. |
 | `deduplicate_equivalent` | `bool` | `True` | When `True`, configs sharing a resolved config hash (after engine-rules dormant resolution) are deduplicated. The hash covers the engine, task, sampling, harness, and measurement fields, so sweeping any of those yields distinct runs and only genuine duplicates collapse. Set to `false` to run every declared config. |
+| `gpu_indices` | `list[int] \| None` | `None` | Host GPU indices (as `nvidia-smi` shows) this study may use, for compute placement and for energy measurement alike. `None` inherits the machine-local allowlist from the user config's `execution.gpu_indices`, or means every visible GPU when that is unset too; a declared list must be a subset of that allowlist. Placement metadata: never part of `study_design_hash` or any config hash, so pinning a study to different physical GPUs never changes dedup grouping. See [GPU pinning](/how-to/docker-setup#gpu-not-visible-inside-container). |
 
 ### Runner and image overrides
 

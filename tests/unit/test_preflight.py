@@ -433,7 +433,8 @@ def test_run_study_preflight_multi_engine_docker_available_auto_elevates(
         "llenergymeasure.infra.runner_resolution.is_running_in_container", lambda: False
     )
     monkeypatch.setattr(
-        "llenergymeasure.infra.docker_preflight.run_docker_preflight", lambda skip=False: None
+        "llenergymeasure.infra.docker_preflight.run_docker_preflight",
+        lambda skip=False, gpu_indices=None: None,
     )
     study = make_study(["transformers", "vllm"])
     with caplog.at_level(logging.INFO, logger="llenergymeasure.study.preflight"):

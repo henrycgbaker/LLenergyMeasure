@@ -18,6 +18,7 @@ Key design decisions:
 from __future__ import annotations
 
 import contextlib
+import logging
 import os
 import signal
 import time
@@ -29,6 +30,8 @@ from llenergymeasure.study._progress import _QueueProgressCallback
 if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.domain.environment import EnvironmentSnapshot
+
+logger = logging.getLogger(__name__)
 
 # Failure classifiers produced by ``_collect_result`` and consumed by
 # parent-side sentinel handling. Lifted so the producer and consumer don't
@@ -66,6 +69,44 @@ def _kill_process_group(pid: int, sig: int) -> None:
         os.killpg(pid, sig)
 
 
+def _cuda_visible_devices_value(gpu_indices: list[int]) -> str:
+    """Format physical host device indices as a ``CUDA_VISIBLE_DEVICES`` value."""
+    return ",".join(str(i) for i in gpu_indices)
+
+
+def _scope_to_gpu_indices(gpu_indices: list[int] | None) -> None:
+    """Restrict this process to ``gpu_indices`` via ``CUDA_VISIBLE_DEVICES``.
+
+    No-op when ``gpu_indices`` is None (every visible GPU - the default).
+
+    THE TWO INDEX SPACES, and why they diverge here. The container runner scopes
+    devices with ``docker run --gpus``, where the granted GPUs re-enumerate from 0
+    for BOTH CUDA and NVML, so logical == physical inside the container. The
+    process runner has no such lever: ``CUDA_VISIBLE_DEVICES`` is the only way to
+    keep torch off a forbidden device, and it remaps CUDA indices while NVML keeps
+    addressing physical devices. So in this process:
+
+    - torch sees the allowed devices as logical ``0..n-1``;
+    - NVML (energy sampling, thermal sampling, persistence-mode checks) still
+      sees them at their physical indices.
+
+    llem's monitoring indices are therefore PHYSICAL throughout - the allowed set
+    is passed to ``_resolve_gpu_indices`` unchanged - and the two consumers that
+    index the visible set (torch, Zeus) translate at their own call sites via
+    ``device.gpu_info.to_cuda_logical_indices``. Sampling then covers exactly the
+    devices compute runs on.
+
+    Must be called before torch is first imported: torch reads
+    ``CUDA_VISIBLE_DEVICES`` when it initialises CUDA, and a later change to the
+    variable does not move an already-initialised context.
+    """
+    if not gpu_indices:
+        return
+    value = _cuda_visible_devices_value(gpu_indices)
+    os.environ["CUDA_VISIBLE_DEVICES"] = value
+    logger.debug("Worker scoped to CUDA_VISIBLE_DEVICES=%s (physical host indices)", value)
+
+
 def _run_experiment_worker(
     config: ExperimentConfig,
     conn: Any,  # multiprocessing.Connection (child end)
@@ -79,6 +120,7 @@ def _run_experiment_worker(
     study_run_id: str,
     cycle: int,
     config_hash: str,
+    gpu_indices: list[int] | None = None,
 ) -> None:
     """Entry point for the child process. Runs one experiment and returns result via Pipe.
 
@@ -101,12 +143,20 @@ def _run_experiment_worker(
         cycle: 1-based cycle counter for this config within the study.
         config_hash: ``compute_declared_config_hash(config)``. The parent is
             the single SSOT for this value.
+        gpu_indices: PHYSICAL host device indices this worker may use (the
+            resolved ``study_execution.gpu_indices``). None means every visible
+            GPU. See :func:`_scope_to_gpu_indices` for what setting it does.
     """
     # Become process group leader so all descendants (vLLM workers, MPI ranks, etc.)
     # share this PGID. The parent can then kill the whole group via os.killpg().
     os.setpgrp()
 
     signal.signal(signal.SIGINT, signal.SIG_IGN)
+
+    # Restrict this process (and every descendant) to the allowed devices BEFORE
+    # anything imports torch. Safe here and nowhere else in the parent: this is a
+    # freshly spawned child, so its os.environ is its own.
+    _scope_to_gpu_indices(gpu_indices)
 
     # Wrap the worker body BEFORE run_preflight() / get_engine() so engine
     # import-time warnings under ``spawn`` are captured.
@@ -143,12 +193,15 @@ def _run_experiment_worker(
             harness = MeasurementHarness()
             from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 
-            gpu_indices = _resolve_gpu_indices(config)
+            # PHYSICAL monitoring indices, drawn from the same allowed set that
+            # scoped CUDA_VISIBLE_DEVICES above, so NVML samples exactly the
+            # devices torch was given.
+            monitor_indices = _resolve_gpu_indices(config, allowed_gpu_indices=gpu_indices)
             result = harness.run(
                 engine,
                 config,
                 snapshot=snapshot,
-                gpu_indices=gpu_indices,
+                gpu_indices=monitor_indices,
                 progress=progress_cb,
                 output_dir=output_dir,
                 save_timeseries=save_timeseries,

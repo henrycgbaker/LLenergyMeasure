@@ -37,6 +37,28 @@ from llenergymeasure.study.single import run_single_experiment
 logger = logging.getLogger(__name__)
 
 
+def _takes_single_fast_path(study: StudyConfig) -> bool:
+    """Whether this study runs on the in-process single-experiment fast path.
+
+    Server experiments always route through StudyRunner (the single server call
+    site is StudyRunner._run_one -> ServerSession); the fast path is
+    offline-only. A resolved GPU scope also forces StudyRunner: the fast path
+    executes in the CALLING process, where enforcing the scope would mean
+    setting CUDA_VISIBLE_DEVICES in the caller's environment - a side effect a
+    library must not have - while StudyRunner's worker subprocess scopes itself
+    before importing torch. The allowlist promise is enforcement, not a
+    warning, so a scoped single experiment pays the subprocess and gets the
+    scope. Unscoped offline singles keep the fast path unchanged.
+    """
+    is_server_study = any(exp.serving_mode == "server" for exp in study.experiments)
+    return (
+        len(study.experiments) == 1
+        and study.study_execution.n_cycles == 1
+        and not is_server_study
+        and study.study_execution.gpu_indices is None
+    )
+
+
 def _ensure_study_artefacts_dir(study_dir: Path) -> Path:
     """Create and return the _study-artefacts/ subdirectory."""
     artefacts_dir = study_dir / STUDY_ARTEFACTS_DIR
@@ -137,16 +159,7 @@ def orchestrate_study(
     _write_study_artefacts(study, artefacts_dir, system_overrides, config_path)
 
     wall_start = time.monotonic()
-    # Server experiments always route through StudyRunner (the single server call
-    # site is StudyRunner._run_one -> ServerSession); the in-process single path
-    # is offline-only. Offline single experiments still take the fast path
-    # unchanged (byte-identical behaviour).
-    is_server_study = any(exp.serving_mode == "server" for exp in study.experiments)
-    is_single = (
-        len(study.experiments) == 1 and study.study_execution.n_cycles == 1 and not is_server_study
-    )
-
-    if is_single:
+    if _takes_single_fast_path(study):
         result_files, experiment_results, warnings = _run_single_experiment_dispatch(
             study, manifest, study_dir, runner_specs, progress, study.provenance_logs
         )
@@ -225,9 +238,10 @@ def _resolve_runner_specs(
     runner pins win; auto-resolved engines elevate to Docker, raising
     PreFlightError when a local-pinned engine is not importable on the host or an
     auto-resolved engine needs Docker but it is unavailable), emits preflight
-    progress, and warns on two resolved-plan conflicts: mixed local/Docker
-    runners, and a GPU selector set both via LLEM_DOCKER_GPUS and
-    study_execution.gpu_indices when a Docker container will launch.
+    progress, and warns on the resolved-plan conflicts: mixed local/Docker
+    runners, a GPU selector set both via LLEM_DOCKER_GPUS and
+    study_execution.gpu_indices, and an LLEM_DOCKER_GPUS value that leaves the
+    resolved GPU scope - the last two only when a container will launch.
     """
     from llenergymeasure.study.preflight import run_study_preflight
 
@@ -257,10 +271,12 @@ def _resolve_runner_specs(
         )
 
     # Physical GPU selector precedence (env>config): warn once per study dispatch
-    # when both LLEM_DOCKER_GPUS and study_execution.gpu_indices are set and a
-    # Docker container will actually launch. GPU scoping only affects containers,
-    # so a study with no Docker runner never triggers the warning. Single choke
-    # point for both dispatch paths (single-experiment and StudyRunner).
+    # when LLEM_DOCKER_GPUS contradicts the resolved GPU scope - overriding it, or
+    # leaving it entirely - and a Docker container will actually launch. The env var
+    # only reaches `docker run --gpus`, so a study with no container runner never
+    # triggers either warning. The resolved scope is what the study carries, so the
+    # allowlist behind it needs no separate read here. Single choke point for both
+    # dispatch paths (single-experiment and StudyRunner).
     if RUNNER_CONTAINER in modes:
         from llenergymeasure.utils.env_config import warn_on_gpu_selector_conflict
 

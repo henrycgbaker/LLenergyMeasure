@@ -682,7 +682,11 @@ class TensorRTEngine:
         argv = _serving.serve_command(model, port)
         log_path = sl.default_server_log_path("tensorrt", port)
         return sl.launch_process_server(
-            argv, base_url=base_url, engine="tensorrt", log_path=log_path
+            argv,
+            base_url=base_url,
+            engine="tensorrt",
+            log_path=log_path,
+            gpu_indices=placement.gpu_indices,
         )
 
     def await_ready(

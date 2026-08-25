@@ -598,3 +598,74 @@ def test_select_energy_sampler_wrapper_still_returns_bare_sampler() -> None:
     ):
         result = select_energy_sampler("auto")
     assert result is None
+
+
+# ---------------------------------------------------------------------------
+# ZeusSampler index space: physical in, CUDA-visible out, physical back
+# ---------------------------------------------------------------------------
+
+
+def test_zeus_monitored_pairs_identity_when_unrestricted(monkeypatch) -> None:
+    """No visibility restriction means physical == logical."""
+    monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
+    assert ZeusSampler(gpu_indices=[0, 1])._monitored_pairs() == [(0, 0), (1, 1)]
+
+
+def test_zeus_monitored_pairs_translate_under_a_restriction(monkeypatch) -> None:
+    """Physical indices become the visible-set positions ZeusMonitor expects."""
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "2,3")
+    assert ZeusSampler(gpu_indices=[2, 3])._monitored_pairs() == [(2, 0), (3, 1)]
+
+
+def test_zeus_refuses_when_no_monitored_device_is_visible(monkeypatch) -> None:
+    """All monitored devices invisible: refuse loudly, never record a silent 0.0 J."""
+    from llenergymeasure.utils.exceptions import ExperimentError
+
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0,1")
+
+    with pytest.raises(ExperimentError, match=r"\[2, 3\]") as exc_info:
+        ZeusSampler(gpu_indices=[2, 3])._monitored_pairs()
+    assert "CUDA_VISIBLE_DEVICES" in str(exc_info.value)
+
+
+def test_zeus_refuses_when_a_monitored_device_is_invisible(monkeypatch) -> None:
+    """A partially-invisible set would under-report, so it is refused too."""
+    from llenergymeasure.utils.exceptions import ExperimentError
+
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "2")
+
+    with pytest.raises(ExperimentError, match=r"\[3\]"):
+        ZeusSampler(gpu_indices=[2, 3])._monitored_pairs()
+
+
+def test_zeus_window_uses_logical_indices_and_reports_physical(monkeypatch) -> None:
+    """The monitor is opened on logical indices; per-GPU energy comes back physical."""
+    import sys
+    import types
+    from unittest.mock import MagicMock
+
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "2,3")
+
+    opened: dict[str, object] = {}
+
+    class _FakeMonitor:
+        def __init__(self, gpu_indices, cpu_indices):
+            opened["gpu_indices"] = gpu_indices
+
+        def begin_window(self, name):
+            pass
+
+        def end_window(self, name):
+            return MagicMock(energy={0: 10.0, 1: 20.0}, time=2.0)
+
+    module = types.ModuleType("zeus.monitor")
+    module.ZeusMonitor = _FakeMonitor
+    monkeypatch.setitem(sys.modules, "zeus.monitor", module)
+
+    sampler = ZeusSampler(gpu_indices=[2, 3])
+    tracker = sampler.start_tracking()
+    measurement = sampler.stop_tracking(tracker)
+
+    assert opened["gpu_indices"] == [0, 1]
+    assert measurement.per_gpu_j == {2: 10.0, 3: 20.0}
+    assert measurement.total_j == 30.0

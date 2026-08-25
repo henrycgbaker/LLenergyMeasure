@@ -688,3 +688,174 @@ def test_provenance_keeps_labelled_fields_at_default_value(tmp_path, monkeypatch
     entry = log["task.dataset.n_prompts"]
     assert entry["source"] == "call_site"
     assert entry["effective"] == default_value
+
+
+# ---------------------------------------------------------------------------
+# GPU allowlist: fill when the study is silent, constrain when it is not
+# ---------------------------------------------------------------------------
+
+
+def test_no_allowlist_leaves_gpu_indices_alone() -> None:
+    """Without a machine allowlist, an undeclared selector stays "all GPUs"."""
+    resolved = resolve_study(_raw(), user_config=UserConfig())
+
+    assert resolved.study_execution.gpu_indices is None
+
+
+def test_allowlist_fills_an_undeclared_study_selector() -> None:
+    """A study that declares no GPUs inherits the machine's allowed set."""
+    user = UserConfig(execution=UserExecutionConfig(gpu_indices=[2, 3]))
+    resolved = resolve_study(_raw(), user_config=user)
+
+    assert resolved.study_execution.gpu_indices == [2, 3]
+
+
+def test_allowlist_fill_is_labelled_as_the_user_configs(monkeypatch) -> None:
+    """The fill is an ordinary precedence layer, and the provenance says so."""
+    user = UserConfig(execution=UserExecutionConfig(gpu_indices=[2, 3]))
+    resolved = resolve_study(_raw(), user_config=user)
+
+    assert resolved.settings_provenance["study_execution.gpu_indices"] == "user_config"
+
+
+def test_explicit_null_gpu_indices_still_defers_to_the_allowlist() -> None:
+    """`gpu_indices: null` means "every GPU I may use", not "escape the allowlist".
+
+    The study block documents null as every visible GPU. On a machine that narrows
+    what llem may use, that means the allowed set, so an explicit null defers to
+    the allowlist exactly as an explicit null gap defers to the machine default.
+    """
+    user = UserConfig(execution=UserExecutionConfig(gpu_indices=[2, 3]))
+    resolved = resolve_study(_raw(execution=ExecutionConfig(gpu_indices=None)), user_config=user)
+
+    assert resolved.study_execution.gpu_indices == [2, 3]
+
+
+def test_allowlist_fills_an_explicit_null_override() -> None:
+    """A programmatic overrides-layer null cannot escape the allowlist.
+
+    The overrides parameter outranks the user-config layer, so a caller passing
+    an explicit ``gpu_indices: None`` bypasses the precedence fill. The
+    constraint function is the choke point every path crosses: it must resolve
+    that null to the allowed set, labelled as the user config's, never to
+    unrestricted.
+    """
+    user = UserConfig(execution=UserExecutionConfig(gpu_indices=[2, 3]))
+    resolved = resolve_study(
+        _raw(), user_config=user, overrides={"study_execution": {"gpu_indices": None}}
+    )
+
+    assert resolved.study_execution.gpu_indices == [2, 3]
+    assert resolved.settings_provenance["study_execution.gpu_indices"] == "user_config"
+
+
+def test_allowlist_admits_a_study_subset() -> None:
+    """A study inside the allowed set keeps exactly what it declared."""
+    user = UserConfig(execution=UserExecutionConfig(gpu_indices=[1, 2, 3]))
+    resolved = resolve_study(_raw(execution=ExecutionConfig(gpu_indices=[2])), user_config=user)
+
+    assert resolved.study_execution.gpu_indices == [2]
+
+
+def test_allowlist_rejects_a_study_index_outside_it() -> None:
+    """An out-of-set study index fails loudly, naming both sets - no silent narrowing."""
+    from llenergymeasure.utils.exceptions import ConfigError
+
+    user = UserConfig(execution=UserExecutionConfig(gpu_indices=[2, 3]))
+    with pytest.raises(ConfigError) as exc:
+        resolve_study(_raw(execution=ExecutionConfig(gpu_indices=[0, 3])), user_config=user)
+
+    message = str(exc.value)
+    assert "requests GPU [0]" in message
+    assert "[0, 3]" in message
+    assert "execution.gpu_indices=[2, 3]" in message
+
+
+def test_allowlist_is_not_applied_without_a_user_config() -> None:
+    """The hermetic route (no user config) resolves exactly what it was handed."""
+    resolved = resolve_study(_raw(execution=ExecutionConfig(gpu_indices=[7])), user_config=None)
+
+    assert resolved.study_execution.gpu_indices == [7]
+
+
+def test_allowlist_fill_does_not_move_the_study_design_hash() -> None:
+    """The filled selector is placement metadata: study identity must not shift.
+
+    Same study, resolved once with no allowlist and once under a machine allowlist
+    that fills gpu_indices. The design hash - what dedup grouping and resume drift
+    checks key on - has to be byte-identical, or restricting llem to a subset of a
+    host's GPUs would silently fork every study's identity.
+    """
+    unrestricted = resolve_study(_raw(), user_config=UserConfig())
+    restricted = resolve_study(
+        _raw(), user_config=UserConfig(execution=UserExecutionConfig(gpu_indices=[2, 3]))
+    )
+
+    assert restricted.study_execution.gpu_indices == [2, 3]
+    assert unrestricted.study_execution.gpu_indices is None
+    assert restricted.study_design_hash == unrestricted.study_design_hash
+    assert restricted.declared_resolved_config_hashes == (
+        unrestricted.declared_resolved_config_hashes
+    )
+
+
+def test_allowlist_fill_leaves_the_experiment_list_byte_identical() -> None:
+    """The fill touches the execution block only, never a hashed experiment field."""
+    unrestricted = resolve_study(_raw(), user_config=UserConfig())
+    restricted = resolve_study(
+        _raw(), user_config=UserConfig(execution=UserExecutionConfig(gpu_indices=[2, 3]))
+    )
+
+    assert [exp.model_dump(mode="json") for exp in restricted.experiments] == [
+        exp.model_dump(mode="json") for exp in unrestricted.experiments
+    ]
+
+
+def test_allowlist_fill_reaches_the_container_gpus_selector(monkeypatch, tmp_path: Path) -> None:
+    """End of the wire: a machine-local allowlist becomes the docker --gpus selector.
+
+    The container path reads the RESOLVED study_execution.gpu_indices, so the fill
+    is what makes a study that declares no devices land on the allowed ones.
+    """
+    from llenergymeasure.infra.docker import command as cmd
+
+    monkeypatch.delenv("LLEM_DOCKER_GPUS", raising=False)
+    resolved = resolve_study(
+        _raw(), user_config=UserConfig(execution=UserExecutionConfig(gpu_indices=[2, 3]))
+    )
+
+    argv = cmd.build_docker_cmd(
+        image="llem-transformers:test",
+        config=resolved.experiments[0],
+        config_hash="cafebabe",
+        exchange_dir=str(tmp_path),
+        env_path=None,
+        extra_mounts=[],
+        container_name=None,
+        labels={},
+        gpu_indices=resolved.study_execution.gpu_indices,
+    )
+
+    assert argv[argv.index("--gpus") + 1] == '"device=2,3"'
+
+
+def test_no_allowlist_keeps_the_gpus_selector_at_all(monkeypatch, tmp_path: Path) -> None:
+    """Without an allowlist the container argv is the historical `--gpus all`."""
+    from llenergymeasure.infra.docker import command as cmd
+
+    monkeypatch.delenv("LLEM_DOCKER_GPUS", raising=False)
+    resolved = resolve_study(_raw(), user_config=UserConfig())
+
+    argv = cmd.build_docker_cmd(
+        image="llem-transformers:test",
+        config=resolved.experiments[0],
+        config_hash="cafebabe",
+        exchange_dir=str(tmp_path),
+        env_path=None,
+        extra_mounts=[],
+        container_name=None,
+        labels={},
+        gpu_indices=resolved.study_execution.gpu_indices,
+    )
+
+    assert argv[argv.index("--gpus") + 1] == "all"

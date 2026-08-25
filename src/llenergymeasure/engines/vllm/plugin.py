@@ -593,7 +593,13 @@ class VLLMEngine:
 
         argv = _serving.process_argv(model, port)
         log_path = sl.default_server_log_path("vllm", port)
-        return sl.launch_process_server(argv, base_url=base_url, engine="vllm", log_path=log_path)
+        return sl.launch_process_server(
+            argv,
+            base_url=base_url,
+            engine="vllm",
+            log_path=log_path,
+            gpu_indices=placement.gpu_indices,
+        )
 
     def await_ready(
         self,

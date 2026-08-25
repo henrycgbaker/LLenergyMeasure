@@ -407,3 +407,43 @@ def test_multi_engine_in_container_no_socket_all_explicit_process_passes(
     assert specs["vllm"].mode == "process"
     assert overrides == {}
     docker_preflight.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# GPU scope vs the host's actual device count (warn, never fail)
+# ---------------------------------------------------------------------------
+
+
+class TestGpuScopeHostCheck:
+    """The host-count comparison is a warning: placement metadata, remote-daemon tolerant."""
+
+    def _warn(self, monkeypatch, gpu_indices, count):
+        from llenergymeasure.study.preflight import _warn_if_gpu_scope_exceeds_host
+
+        monkeypatch.setattr("llenergymeasure.device.gpu_info.host_gpu_count", lambda: count)
+        _warn_if_gpu_scope_exceeds_host(gpu_indices)
+
+    def test_warns_when_an_index_is_beyond_the_host(self, monkeypatch, caplog):
+        with caplog.at_level(logging.WARNING, logger="llenergymeasure.study.preflight"):
+            self._warn(monkeypatch, [0, 5], 2)
+        messages = [rec.getMessage() for rec in caplog.records]
+        assert len(messages) == 1
+        assert "device(s) [5]" in messages[0]
+        assert "NVML reports 2 GPU(s)" in messages[0]
+        assert "valid indices are 0-1" in messages[0]
+
+    def test_silent_when_the_scope_fits(self, monkeypatch, caplog):
+        with caplog.at_level(logging.WARNING, logger="llenergymeasure.study.preflight"):
+            self._warn(monkeypatch, [0, 1], 2)
+        assert caplog.records == []
+
+    def test_silent_when_the_count_is_unknown(self, monkeypatch, caplog):
+        """No NVML (the remote-daemon case) means "cannot check", not a false alarm."""
+        with caplog.at_level(logging.WARNING, logger="llenergymeasure.study.preflight"):
+            self._warn(monkeypatch, [7], None)
+        assert caplog.records == []
+
+    def test_silent_without_a_scope(self, monkeypatch, caplog):
+        with caplog.at_level(logging.WARNING, logger="llenergymeasure.study.preflight"):
+            self._warn(monkeypatch, None, 2)
+        assert caplog.records == []

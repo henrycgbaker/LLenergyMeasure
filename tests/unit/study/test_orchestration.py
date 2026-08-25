@@ -77,3 +77,20 @@ def test_gpu_selector_warn_not_duplicated_across_docker_runners(monkeypatch):
         _resolve(study, specs)
 
     mock_warn.assert_called_once_with([0])
+
+
+def test_gpu_selector_warn_receives_the_resolved_scope(monkeypatch):
+    """The warning surface is handed the study's RESOLVED scope, whatever set it.
+
+    The scope may have been named by the study file or inherited from the
+    machine-local allowlist in the user config; by this point the study carries
+    the answer, so the orchestrator never reads the user config to find it.
+    """
+    monkeypatch.setenv("LLEM_DOCKER_GPUS", "device=7")
+    study = _study([2, 3])
+    specs = {"vllm": RunnerSpec(mode=RUNNER_CONTAINER, image="img", source="yaml")}
+
+    with patch(_WARN_TARGET) as mock_warn:
+        _resolve(study, specs)
+
+    mock_warn.assert_called_once_with([2, 3])

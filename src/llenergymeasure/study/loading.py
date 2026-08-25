@@ -110,6 +110,8 @@ def resolve_study(
         overrides=overrides,
     )
     execution = _validated_execution(settings.execution, settings.provenance)
+    if user_config is not None:
+        _constrain_gpu_indices(execution, user_config.execution.gpu_indices, settings.provenance)
 
     # Overlay the tool-wide user-config server warmup onto each declared
     # server config BEFORE dedup, so the resolved-config hash - and hence dedup -
@@ -363,6 +365,48 @@ def _validated_execution(
             f"Invalid execution settings: {details}. Keys must be study_execution "
             f"fields ({', '.join(sorted(ExecutionConfig.model_fields))})."
         ) from exc
+
+
+def _constrain_gpu_indices(
+    execution: ExecutionConfig,
+    allowed: list[int] | None,
+    provenance: dict[str, str],
+) -> None:
+    """Constrain a resolved GPU selection to the machine-local allowlist.
+
+    ``allowed`` is the user config's ``execution.gpu_indices``: the host GPU
+    indices llem may use on this machine. The precedence chain fills an
+    undeclared selector from the user-config layer, but that covers LAYERS, not
+    call sites: a programmatic override can hand this function an explicit null
+    that outranks the user-config layer. Null means "every GPU I may use", and
+    with an allowlist set that is the allowed set - so the null fill also lands
+    here, the one choke point every resolution path passes through. The refusal
+    half is unchanged: a resolved selection naming a device the machine forbids
+    is a contradiction, not a request to be quietly narrowed, so it fails loudly
+    with both sets in the message rather than being silently intersected.
+
+    ``gpu_indices`` is placement metadata that no hash reads
+    (``compute_study_design_hash`` digests the experiment list only, and the
+    execution block is excluded from it), so neither the fill nor this check can
+    move a study's identity or its dedup grouping.
+
+    Raises:
+        ConfigError: The resolved selection includes a device the allowlist omits.
+    """
+    if allowed is None:
+        return
+    if execution.gpu_indices is None:
+        execution.gpu_indices = list(allowed)
+        provenance["study_execution.gpu_indices"] = "user_config"
+        return
+    outside = [i for i in execution.gpu_indices if i not in set(allowed)]
+    if outside:
+        raise ConfigError(
+            f"study_execution.gpu_indices requests GPU {outside}, which this machine's "
+            f"allowlist does not permit. The study asks for {execution.gpu_indices}; the "
+            f"user config allows execution.gpu_indices={list(allowed)}. Narrow the study to "
+            "the allowed set, or widen the allowlist in the user config."
+        )
 
 
 def _maybe_hint_sequential_server_singletons(

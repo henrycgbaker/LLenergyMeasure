@@ -206,3 +206,58 @@ def test_user_runners_config_validator_rejects_legacy_vocabulary(value, hint):
         match=rf"'{value}' was renamed in v0.7 \(runners.transformers\).*{hint}",
     ):
         UserRunnersConfig(transformers=value)
+
+
+# ---------------------------------------------------------------------------
+# UserExecutionConfig.gpu_indices - the machine-local GPU allowlist
+# ---------------------------------------------------------------------------
+
+
+def test_user_execution_gpu_indices_defaults_to_none():
+    """Absent allowlist means every visible GPU (today's behaviour, unchanged)."""
+    from llenergymeasure.config.user_config import UserExecutionConfig
+
+    assert UserExecutionConfig().gpu_indices is None
+
+
+def test_user_execution_gpu_indices_accepts_a_subset():
+    """A non-empty, non-negative, duplicate-free list validates."""
+    from llenergymeasure.config.user_config import UserExecutionConfig
+
+    assert UserExecutionConfig(gpu_indices=[2, 3]).gpu_indices == [2, 3]
+
+
+@pytest.mark.parametrize(
+    ("value", "message"),
+    [
+        ([], "must not be empty"),
+        ([-1], "must be non-negative"),
+        ([0, 1, 0], "must not contain duplicates"),
+    ],
+)
+def test_user_execution_gpu_indices_rejects_malformed(value, message):
+    """Empty, negative, and duplicate index lists are refused by name."""
+    import pydantic
+
+    from llenergymeasure.config.user_config import UserExecutionConfig
+
+    with pytest.raises(pydantic.ValidationError, match=rf"execution.gpu_indices {message}"):
+        UserExecutionConfig(gpu_indices=value)
+
+
+def test_load_user_config_reads_gpu_indices_from_file(tmp_path):
+    """The allowlist round-trips through the YAML front door."""
+    path = tmp_path / "config.yaml"
+    path.write_text("execution:\n  gpu_indices: [1, 2]\n")
+    config = load_user_config(config_path=path)
+    assert config.execution.gpu_indices == [1, 2]
+
+
+def test_load_user_config_malformed_gpu_indices_raises_config_error(tmp_path):
+    """A malformed allowlist in the file surfaces as ConfigError, not a raw pydantic error."""
+    from llenergymeasure.utils.exceptions import ConfigError
+
+    path = tmp_path / "config.yaml"
+    path.write_text("execution:\n  gpu_indices: []\n")
+    with pytest.raises(ConfigError, match="must not be empty"):
+        load_user_config(config_path=path)

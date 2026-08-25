@@ -499,3 +499,72 @@ def test_container_readiness_timeout_captures_logs(monkeypatch):
         sl.await_ready(handle, COMPLETIONS_PROBE, timeout=1.0, poll_interval=0.2)
 
     assert "still loading weights" in str(excinfo.value)
+
+
+# ---------------------------------------------------------------------------
+# Process-leg GPU scoping via CUDA_VISIBLE_DEVICES
+# ---------------------------------------------------------------------------
+
+
+def test_process_server_env_is_none_when_unscoped(monkeypatch):
+    """No scope means Popen(env=None): the launch inherits the parent unchanged."""
+    monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
+    assert sl.process_server_env(None) is None
+    assert sl.process_server_env([]) is None
+
+
+def test_process_server_env_sets_cuda_visible_devices(monkeypatch):
+    """The allowed physical devices become the child's CUDA_VISIBLE_DEVICES."""
+    monkeypatch.setenv("LLEM_MARKER", "kept")
+    monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
+
+    env = sl.process_server_env([2, 3])
+
+    assert env is not None
+    assert env["CUDA_VISIBLE_DEVICES"] == "2,3"
+    assert env["LLEM_MARKER"] == "kept", "parent environment must be carried through"
+
+
+def test_process_server_env_never_mutates_the_parent(monkeypatch):
+    """Scoping a server must not narrow the study process's own visibility."""
+    import os
+
+    monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
+    sl.process_server_env([2, 3])
+    assert "CUDA_VISIBLE_DEVICES" not in os.environ
+
+
+def test_launched_server_process_sees_the_scope(tmp_path):
+    """End to end: a launched server really is started with the scoped variable."""
+    out = tmp_path / "scope.log"
+    handle = sl.launch_process_server(
+        [sys.executable, "-c", "import os; print(os.environ.get('CUDA_VISIBLE_DEVICES'))"],
+        base_url="http://127.0.0.1:1",
+        engine="stub",
+        log_path=out,
+        gpu_indices=[3, 1],
+    )
+    try:
+        handle.process.wait(timeout=20)  # type: ignore[union-attr]
+    finally:
+        sl.shutdown(handle)
+
+    assert out.read_text().strip() == "3,1"
+
+
+def test_launched_server_process_unscoped_inherits(tmp_path, monkeypatch):
+    """Without a scope the child inherits whatever the parent had."""
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "7")
+    out = tmp_path / "inherit.log"
+    handle = sl.launch_process_server(
+        [sys.executable, "-c", "import os; print(os.environ.get('CUDA_VISIBLE_DEVICES'))"],
+        base_url="http://127.0.0.1:1",
+        engine="stub",
+        log_path=out,
+    )
+    try:
+        handle.process.wait(timeout=20)  # type: ignore[union-attr]
+    finally:
+        sl.shutdown(handle)
+
+    assert out.read_text().strip() == "7"

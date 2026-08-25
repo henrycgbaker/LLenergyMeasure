@@ -82,6 +82,7 @@ __all__ = [
     "default_server_log_path",
     "launch_container_server",
     "launch_process_server",
+    "process_server_env",
     "server_container_name",
     "shutdown",
 ]
@@ -138,12 +139,34 @@ def default_server_log_path(engine: str, port: int) -> Path:
 # ---------------------------------------------------------------------------
 
 
+def process_server_env(gpu_indices: list[int] | None) -> dict[str, str] | None:
+    """Build the launch environment that scopes a server process to ``gpu_indices``.
+
+    ``None`` (the default, and what an unscoped study yields) means "inherit the
+    parent environment unchanged" - which is what ``Popen(env=None)`` does, so the
+    unscoped launch is byte-for-byte the historical one.
+
+    Otherwise: the parent environment plus ``CUDA_VISIBLE_DEVICES`` set to the
+    allowed PHYSICAL host device indices. This is the process leg's only scoping
+    lever (the container leg uses ``--gpus``), and it is applied to a copy, never
+    to ``os.environ``, so launching a scoped server does not narrow the study
+    process's own device visibility. The server then addresses those devices as
+    logical ``0..n-1``, while the host-side energy samplers keep addressing them
+    physically - :mod:`llenergymeasure.device.gpu_info` documents the two index
+    spaces and owns the translation between them.
+    """
+    if not gpu_indices:
+        return None
+    return {**os.environ, "CUDA_VISIBLE_DEVICES": ",".join(str(i) for i in gpu_indices)}
+
+
 def launch_process_server(
     argv: list[str],
     *,
     base_url: str,
     engine: str,
     log_path: Path,
+    gpu_indices: list[int] | None = None,
 ) -> ServerHandle:
     """Launch a server as a host subprocess in its own process group.
 
@@ -154,6 +177,9 @@ def launch_process_server(
     failure-artefact hand-off. A launch that cannot even start (bad argv,
     missing executable) cleans up its own log file and raises
     :class:`ServerLaunchError`.
+
+    ``gpu_indices`` are the allowed physical host devices; see
+    :func:`process_server_env`.
     """
     log_path.parent.mkdir(parents=True, exist_ok=True)
     log_file = open(log_path, "wb")  # noqa: SIM115 - handle lives on the ServerHandle
@@ -163,6 +189,7 @@ def launch_process_server(
             stdout=log_file,
             stderr=subprocess.STDOUT,
             start_new_session=True,
+            env=process_server_env(gpu_indices),
         )
     except (OSError, ValueError) as exc:
         # Failed launch cleans its own partial state: close + remove the log file.

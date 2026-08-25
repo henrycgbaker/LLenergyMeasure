@@ -116,7 +116,11 @@ class TestHarnessModelMemoryCapture:
             patch("importlib.util.find_spec", return_value=MagicMock()),
             patch(
                 "llenergymeasure.engines._cuda.get_nvml_device_memory_mb",
-                side_effect=AssertionError("NVML must not be consulted when torch reads > 0"),
+                side_effect=AssertionError(
+                    "NVML fallback reached - torch was expected to supply the reading. "
+                    "This also fires when torch was never consulted because a leaked "
+                    "CUDA_VISIBLE_DEVICES emptied the translated index list."
+                ),
             ),
         ):
             result = capture_model_memory_mb(gpu_indices=[0])

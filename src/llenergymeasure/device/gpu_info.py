@@ -1,12 +1,20 @@
 """GPU device detection helpers.
 
 This module provides NVML lifecycle management, GPU index resolution for
-experiments, and GPU architecture / compute-capability detection.
+experiments, translation between the physical and CUDA-visible index spaces, and
+GPU architecture / compute-capability detection.
+
+Index spaces, since two of them meet here: NVML addresses PHYSICAL device
+indices and ignores ``CUDA_VISIBLE_DEVICES`` completely, while CUDA (and Zeus,
+which builds on it) addresses LOGICAL indices into the visible set. llem's
+monitoring indices are physical throughout - see :func:`_resolve_gpu_indices` -
+and :func:`to_cuda_logical_indices` is the one translation into the other space.
 """
 
 from __future__ import annotations
 
 import logging
+import os
 from collections.abc import Generator
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
@@ -118,33 +126,112 @@ def get_gpu_architecture(device_index: int = 0) -> str:
     return "unknown"
 
 
-def _resolve_gpu_indices(config: ExperimentConfig) -> list[int]:
-    """Determine GPU indices to monitor for an experiment.
+def host_gpu_count() -> int | None:
+    """Return the number of NVML-visible devices, or None when NVML cannot answer.
+
+    Fail-soft by design: ``None`` means "unknown", not "zero". pynvml absent, no
+    driver, or a remote Docker daemon (where the GPUs live on another host) all
+    yield ``None``, so callers must treat it as "cannot check" rather than as a
+    device count of nought.
+    """
+    try:
+        import pynvml
+
+        with nvml_context():
+            return int(pynvml.nvmlDeviceGetCount())
+    except Exception:
+        logger.debug("NVML device count unavailable", exc_info=True)
+        return None
+
+
+def cuda_visible_physical_order() -> list[int] | None:
+    """Return the physical device indices ``CUDA_VISIBLE_DEVICES`` makes visible.
+
+    The returned list is in VISIBILITY order, so its positions are exactly the
+    logical indices CUDA and Zeus address: ``CUDA_VISIBLE_DEVICES=3,1`` yields
+    ``[3, 1]``, meaning logical 0 is physical 3 and logical 1 is physical 1.
+
+    ``None`` when the variable is unset, empty, or names devices by UUID -
+    i.e. whenever the physical-to-logical mapping is not integer-derivable here.
+    An unset variable means logical == physical, which is the case every caller
+    already handles as the identity mapping.
+    """
+    raw = os.environ.get("CUDA_VISIBLE_DEVICES", "").strip()
+    if not raw:
+        return None
+    tokens = [tok.strip() for tok in raw.split(",") if tok.strip()]
+    try:
+        return [int(tok) for tok in tokens]
+    except ValueError:
+        return None  # GPU-<uuid> / MIG-<uuid> form: not integer-mappable.
+
+
+def to_cuda_logical_indices(physical_indices: list[int]) -> list[int]:
+    """Translate physical device indices into the CUDA-visible logical space.
+
+    llem's monitoring indices are PHYSICAL device indices, because NVML addresses
+    physical devices and ignores ``CUDA_VISIBLE_DEVICES`` entirely. Two consumers
+    need the other space: torch (``torch.cuda.*(device=...)``) and Zeus
+    (``ZeusMonitor(gpu_indices=...)``) both index into the visible set. Under a
+    restricting ``CUDA_VISIBLE_DEVICES`` the two spaces differ, and handing a
+    physical index to either addresses the wrong device or raises.
+
+    With ``CUDA_VISIBLE_DEVICES=2,3``, physical ``[2, 3]`` becomes logical
+    ``[0, 1]``. A physical index that is not visible at all is dropped: it has no
+    logical counterpart, and asking torch about it is an error. Identity when
+    ``CUDA_VISIBLE_DEVICES`` is unset or UUID-valued (nothing to translate).
+    """
+    visible = cuda_visible_physical_order()
+    if visible is None:
+        return list(physical_indices)
+    return [visible.index(i) for i in physical_indices if i in visible]
+
+
+def _resolve_gpu_indices(
+    config: ExperimentConfig,
+    allowed_gpu_indices: list[int] | None = None,
+) -> list[int]:
+    """Determine the PHYSICAL GPU indices to monitor for an experiment.
 
     Generic over each engine's ``ParallelismModel`` (from ``ssot.ENGINES``):
 
     - **multiply_fields** (vLLM ``tensor_parallel_size * pipeline_parallel_size``,
       TensorRT-LLM ``tensor_parallel_size``): the product of the named config
       fields (each defaulting to 1) is known before the harness runs, so
-      gpu_indices = list(range(total)).
+      gpu_indices = the first ``total`` allowed devices.
     - **all_visible_field** (transformers ``device_map``): a non-None value means
-      the model shards across all NVML-visible GPUs. Sharding is decided at load
+      the model shards across all visible GPUs. Sharding is decided at load
       time inside harness.run(), but gpu_indices must be passed *before* load, so
-      measuring all visible GPUs is correct and safe.
-    - **Neither / no engine section**: [0] (single-GPU default, backward compatible).
+      measuring every device llem may use is correct and safe.
+    - **Neither / no engine section**: one device (single-GPU default, backward
+      compatible).
+
+    ``allowed_gpu_indices`` is the physical device set llem may use (the resolved
+    ``study_execution.gpu_indices``). When given, every branch draws from it
+    instead of counting from zero, so the sampled devices are exactly the devices
+    compute was placed on. When None, the historical behaviour stands: indices
+    count from 0 and the census branch takes every NVML-visible device.
+
+    Callers that run INSIDE a scoped container must pass None. There, docker has
+    already restricted the device set and both CUDA and NVML re-enumerate from 0,
+    so the in-container indices are already the right ones and applying a host
+    allowlist on top would address devices the container cannot see.
 
     Note: num_processes > 1 (data parallelism via Accelerate) is not handled here.
     For local runs this path is not yet implemented; for Docker each subprocess calls
     the harness independently.
     """
+    allowed = list(allowed_gpu_indices) if allowed_gpu_indices else None
+    first = [allowed[0]] if allowed else [0]
+
     try:
         engine = Engine(config.engine)
     except ValueError:
-        return [0]  # Unrecognised engine - single-GPU default (backward compatible).
+        return first  # Unrecognised engine - single-GPU default (backward compatible).
     section = getattr(config, engine.value, None)
     engine_params = getattr(section, "engine_params", None) if section is not None else None
     if engine_params is None:
-        return [0]
+        return first
 
     parallelism = ENGINES[engine].parallelism
     if parallelism.multiply_fields:
@@ -152,20 +239,28 @@ def _resolve_gpu_indices(config: ExperimentConfig) -> list[int]:
         for field in parallelism.multiply_fields:
             total *= getattr(engine_params, field, None) or 1
         if total > 1:
-            return list(range(total))
+            if allowed is None:
+                return list(range(total))
+            if total > len(allowed):
+                logger.warning(
+                    "Engine parallelism requests %d GPUs but only %s are allowed on this "
+                    "machine; monitoring the allowed devices only. The engine itself will "
+                    "fail to place %d ranks.",
+                    total,
+                    allowed,
+                    total,
+                )
+            return allowed[:total]
     elif (
         parallelism.all_visible_field is not None
         and getattr(engine_params, parallelism.all_visible_field, None) is not None
     ):
-        # Model will shard across all visible GPUs - measure all of them.
+        # Model will shard across all visible GPUs - measure all of them. Under an
+        # allowlist "all visible" IS the allowed set, so no NVML census is needed.
+        if allowed is not None:
+            return allowed
         # Best-effort: if pynvml is absent or no NVIDIA GPU, fall through to [0].
-        try:
-            import pynvml
-
-            with nvml_context():
-                count = pynvml.nvmlDeviceGetCount()
-            if count > 1:
-                return list(range(count))
-        except Exception:
-            pass  # pynvml absent or no NVIDIA GPU - fall through to [0]
-    return [0]
+        count = host_gpu_count()
+        if count is not None and count > 1:
+            return list(range(count))
+    return first

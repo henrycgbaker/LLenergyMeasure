@@ -345,6 +345,12 @@ def run_warmup(
 def capture_model_memory_mb(gpu_indices: list[int] | None = None) -> float:
     """Capture the post-load model-memory baseline in MB.
 
+    ``gpu_indices`` are PHYSICAL device indices (llem's monitoring index space).
+    The torch branch translates them into the CUDA-visible space first, because
+    ``torch.cuda.*(device=...)`` indexes the visible set: under a restricting
+    ``CUDA_VISIBLE_DEVICES`` a physical index there names a different device, or
+    none at all. The NVML fallback needs no translation - NVML is physical.
+
     In-process engines (Transformers): torch's per-process allocator sees the
     loaded weights, so ``torch.cuda.max_memory_allocated(device=idx)`` per rank
     (max across ``gpu_indices``, defaulting to ``[0]``) is authoritative and
@@ -365,7 +371,9 @@ def capture_model_memory_mb(gpu_indices: list[int] | None = None) -> float:
             import torch
 
             if torch.cuda.is_available():
-                indices = gpu_indices if gpu_indices is not None else [0]
+                from llenergymeasure.device.gpu_info import to_cuda_logical_indices
+
+                indices = to_cuda_logical_indices(gpu_indices if gpu_indices is not None else [0])
                 if indices:
                     peak = max(torch.cuda.max_memory_allocated(device=idx) for idx in indices)
                     torch_mb = bytes_to_mb(peak)

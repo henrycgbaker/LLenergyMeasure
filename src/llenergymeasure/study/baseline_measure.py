@@ -382,6 +382,23 @@ class _BaselineMixin:
                 f"{baseline.power_w:.1f}W ({baseline.sample_count} samples)",
             )
 
+    def _baseline_gpu_indices(self, config: ExperimentConfig, cache_key: str) -> list[int]:
+        """Monitoring indices for a baseline measurement, in the right index space.
+
+        The two dispatch paths do NOT share one: on the host path the sampler runs
+        in this process and addresses PHYSICAL devices, so it takes the study's
+        allowed set. On the container path the indices become the baseline
+        container's ``CUDA_VISIBLE_DEVICES`` while ``--gpus`` does the physical
+        scoping, so they must stay in-container LOGICAL indices counting from 0.
+        """
+        from llenergymeasure.device.gpu_info import _resolve_gpu_indices
+
+        if self._is_local_key(cache_key):
+            return _resolve_gpu_indices(
+                config, allowed_gpu_indices=self.study.study_execution.gpu_indices
+            )
+        return _resolve_gpu_indices(config)
+
     def _measure_baseline(
         self,
         config: ExperimentConfig,
@@ -403,9 +420,7 @@ class _BaselineMixin:
                 for streaming stage markers. Ignored on the local path (there
                 is no subprocess to stream from).
         """
-        from llenergymeasure.device.gpu_info import _resolve_gpu_indices
-
-        gpu_indices = _resolve_gpu_indices(config)
+        gpu_indices = self._baseline_gpu_indices(config, cache_key)
 
         if self._is_local_key(cache_key):
             from llenergymeasure.harness.baseline import measure_baseline_power
@@ -479,10 +494,9 @@ class _BaselineMixin:
         if cached is None:
             return
 
-        from llenergymeasure.device.gpu_info import _resolve_gpu_indices
         from llenergymeasure.harness.baseline import save_baseline_cache
 
-        gpu_indices = _resolve_gpu_indices(config)
+        gpu_indices = self._baseline_gpu_indices(config, cache_key)
         location = "host" if self._is_local_key(cache_key) else "baseline container"
 
         if self._progress is not None:

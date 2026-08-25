@@ -1799,10 +1799,28 @@ class ServerSession:
         return self._runner.study.study_execution.gpu_indices
 
     def _measurement_gpu_indices(self) -> list[int] | None:
-        # Logical indices the host-side NVML samplers address (mirrors offline).
+        # PHYSICAL indices the host-side NVML samplers address. These samplers run
+        # in THIS process, never inside the server, so they address host device
+        # indices for both placements: a sibling server container is scoped by
+        # --gpus and a server subprocess by CUDA_VISIBLE_DEVICES, but neither
+        # re-enumerates anything for the sampler here. Measurement must follow
+        # PLACEMENT, and for a container placement the effective --gpus selector
+        # is env>config (LLEM_DOCKER_GPUS wins): when that selector names integer
+        # devices, the samplers monitor exactly those. An unverifiable selector
+        # (UUID / count form) falls back to the resolved scope - the existing
+        # conflict warning already flags it as uncheckable. The process placement
+        # never reads the env var, so there the resolved scope IS the placement.
+        from llenergymeasure.config.ssot import RUNNER_CONTAINER
         from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 
-        return _resolve_gpu_indices(self.config)
+        allowed = self._runner.study.study_execution.gpu_indices
+        if self.spec is not None and self.spec.mode == RUNNER_CONTAINER:
+            from llenergymeasure.utils.env_config import docker_gpus, selector_physical_indices
+
+            placed = selector_physical_indices(docker_gpus(allowed))
+            if placed is not None:
+                allowed = placed
+        return _resolve_gpu_indices(self.config, allowed_gpu_indices=allowed)
 
     # -- progress + cleanup --------------------------------------------------
 

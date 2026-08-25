@@ -90,11 +90,16 @@ class ProbeRequest:
 class ServerPlacement:
     """Where a server runs: process (host subprocess) or container (sibling image).
 
-    ``image``, ``gpu_indices``, and ``labels`` are consumed only by the container
-    leg; the adapter resolves a ``None`` image via the image registry.
-    Constructed by the caller (the server session, from the resolved
-    ``RunnerSpec`` + ``study_execution.gpu_indices`` + the study's container
-    ownership labels); tests construct it directly.
+    ``image`` and ``labels`` are consumed only by the container leg; the adapter
+    resolves a ``None`` image via the image registry. Constructed by the caller
+    (the server session, from the resolved ``RunnerSpec`` +
+    ``study_execution.gpu_indices`` + the study's container ownership labels);
+    tests construct it directly.
+
+    ``gpu_indices`` are the PHYSICAL host devices the server may use, and BOTH
+    legs consume them: the container leg as ``docker run --gpus``, the process leg
+    as ``CUDA_VISIBLE_DEVICES`` on the launched subprocess. ``None`` means every
+    visible GPU.
 
     ``labels`` carries the study's ownership labels
     (``infra.docker.ownership.generate_container_labels``) so a launched
