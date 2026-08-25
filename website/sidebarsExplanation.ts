@@ -22,7 +22,6 @@ const sidebarsExplanation: SidebarsConfig = {
           items: [
             'methodology/empirical-grounding/min-window-duration',
             'methodology/empirical-grounding/loaded-thermal-equilibrium',
-            'methodology/empirical-grounding/probe-window-rank',
             'methodology/empirical-grounding/open-loop-arrivals',
           ],
         },

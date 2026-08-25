@@ -39,7 +39,6 @@ was measured.
 | Energy sampler polling (NVML) | 100 ms interval, trapezoidal integration, instantaneous power reading | Cited: the 100 ms interval matches the A100 power-reading refresh period, so polling faster returns stale values ([NVML reference](https://docs.nvidia.com/deploy/nvml-api/index.html)); trapezoidal integration is standard for non-uniform timesteps and is sensor-noise-limited. See [Energy measurement](/explanation/methodology/energy-measurement). | The +/-5% sensor floor is a hardware limit shared by all NVML-based samplers. The A100 sensor also averages only the most recent 25 ms of each 100 ms update period, so about 25% of runtime is sampled and excursions outside that window are missed (Yang et al., 2024). The duty cycle is architecture-dependent, so this envelope is A100-specific. |
 | Baseline measurement location | Measured in the same CUDA environment as the work it is subtracted from | Controlled host-versus-container comparison: a host-measured baseline under-counts container idle power by about 8.7 W per A100, roughly 19% of adjusted energy on a 4-GPU, 120 s run. See [Baseline power](/explanation/methodology/methodology#baseline-power). | A100-PCIE-40GB, PyTorch image. A per-image cache key keeps the correction apples-to-apples across engine images. |
 | Default output and input length | 256 output tokens, 256 input tokens | A peer-benchmark survey grounds the 256 **output** length: it is the modal vLLM synthetic-throughput default, close to the ShareGPT median, and it balances the prefill-to-decode ratio. The 256 **input** length is the shipped default following a later change; the original survey premised and recommended a 512 input length, so the shipped input length is not grounded by it. See [Dataset choice](/explanation/methodology/dataset-context). | Development and iteration default; users raise it for generation-heavy tasks and publication-grade runs. |
-| Probe window length for the optimiser's triage tier | 15 s (adopted 2026-08-25; ships with the triage tier) | [Probe-window rank study](/explanation/methodology/empirical-grounding/probe-window-rank): the shortest candidate window whose configuration ranking agrees with the full 240 s window's (Spearman rho 0.82 rising to 0.93 at longer candidates, top-3 overlap 2 of 3 throughout), on a grid whose across-cell spread is 87x the replicate noise. | vLLM, Qwen2.5-0.5B-Instruct, A100-PCIE-40GB, 15 req/s, 11-cell grid; tensor-parallel behaviour unmeasured (disclosed registration amendment). Validates the window length in isolation: the companion abbreviated-protocol study failed rank validity at a 30 s fixed warmup, so the tier's full protocol is being re-parameterised on the registered fallback. Probe results stay tier-marked, never reported as measurements. |
 | Transformers in server mode | Rejected at config validation (v0.7) | Upstream verdict at the pinned Transformers version: `transformers serve` is scoped to evaluation, experimentation, and moderate load; it exposes no first-class liveness endpoint, so a real-probe readiness check cannot be satisfied; and it auto-unloads the model after 300 seconds idle. | vLLM and TensorRT-LLM are the server-mode engines at v0.7. Transformers server support is a fast-follow. |
 
 ---
@@ -72,12 +71,6 @@ gates on the loaded thermal state, never on an idle wait.
   A pre-registered study of how far die temperature lags power under serving load,
   and why the server warmup gate needs a temperature observable. Grounds the
   three-observable gate, the 300 s fixed-mode floor, and the 900 s timeout.
-
-- **[Probe windows preserve configuration rankings](/explanation/methodology/empirical-grounding/probe-window-rank).**
-  A pre-registered rank-fidelity study: how short a measurement window can be
-  while still ordering serving configurations by energy-per-token the way the
-  full window does. Grounds the 15 s probe window adopted for the optimiser's
-  triage tier.
 
 - **[Open-loop Poisson arrivals](/explanation/methodology/empirical-grounding/open-loop-arrivals).**
   Why server load is generated open-loop, the measured arrival-process contract,
