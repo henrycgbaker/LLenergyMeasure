@@ -731,6 +731,24 @@ def test_explicit_null_gpu_indices_still_defers_to_the_allowlist() -> None:
     assert resolved.study_execution.gpu_indices == [2, 3]
 
 
+def test_allowlist_fills_an_explicit_null_override() -> None:
+    """A programmatic overrides-layer null cannot escape the allowlist.
+
+    The overrides parameter outranks the user-config layer, so a caller passing
+    an explicit ``gpu_indices: None`` bypasses the precedence fill. The
+    constraint function is the choke point every path crosses: it must resolve
+    that null to the allowed set, labelled as the user config's, never to
+    unrestricted.
+    """
+    user = UserConfig(execution=UserExecutionConfig(gpu_indices=[2, 3]))
+    resolved = resolve_study(
+        _raw(), user_config=user, overrides={"study_execution": {"gpu_indices": None}}
+    )
+
+    assert resolved.study_execution.gpu_indices == [2, 3]
+    assert resolved.settings_provenance["study_execution.gpu_indices"] == "user_config"
+
+
 def test_allowlist_admits_a_study_subset() -> None:
     """A study inside the allowed set keeps exactly what it declared."""
     user = UserConfig(execution=UserExecutionConfig(gpu_indices=[1, 2, 3]))
