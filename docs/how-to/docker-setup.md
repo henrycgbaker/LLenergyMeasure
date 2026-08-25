@@ -603,11 +603,11 @@ launched engine server). The engine then sees the allowed devices as `0..n-1` wh
 NVML sampling keeps addressing them at their real host indices, so compute and energy still land
 on the same hardware.
 
-One exception, and `llem` says so in a warning when it applies: a single-experiment run on the
-process runner executes in the calling process, where setting `CUDA_VISIBLE_DEVICES` would mean
-mutating your own environment. There the measurement is scoped but compute is not. Export
-`CUDA_VISIBLE_DEVICES` yourself before invoking `llem`, or use the container runner, if you need
-the scope enforced for that case.
+A single-experiment run normally executes in the calling process, where setting
+`CUDA_VISIBLE_DEVICES` would mean mutating your own environment - so when a GPU scope is
+resolved, `llem` does not run it there: the experiment routes through the study runner's worker
+subprocess, which sets `CUDA_VISIBLE_DEVICES` on itself before importing torch. The scope is
+enforced on every dispatch path; a scoped single experiment simply pays one subprocess spawn.
 
 **Precedence: `LLEM_DOCKER_GPUS` (env) > `study_execution.gpu_indices` (study YAML) >
 `execution.gpu_indices` (user config).** The env var is a deliberate per-invocation override, so

@@ -33,39 +33,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _warn_unenforceable_gpu_scope(allowed_gpu_indices: list[int] | None) -> None:
-    """Warn that the in-process leg cannot restrict COMPUTE to the allowed GPUs.
-
-    Every other dispatch path can: the container runner passes ``--gpus``, and the
-    subprocess runner sets ``CUDA_VISIBLE_DEVICES`` in a freshly spawned child. This
-    leg runs the experiment in the CALLING process, so the only lever available -
-    ``CUDA_VISIBLE_DEVICES`` - would mean mutating the caller's own environment.
-    That is a side effect a library must not have: ``run_experiment()`` returning
-    with the caller's device visibility permanently narrowed would be worse than
-    the unscoped run.
-
-    Measurement IS scoped: the monitoring indices are drawn from the allowed set,
-    so energy and thermal sampling only ever address permitted devices. But a
-    model that shards across every visible GPU (``device_map="auto"``) can still
-    place compute outside them, and energy on those devices goes uncounted. Say so
-    rather than reporting a quietly incomplete number.
-    """
-    if not allowed_gpu_indices:
-        return
-    logger.warning(
-        "GPU scope %s cannot be enforced on the single-experiment in-process path: "
-        "restricting it would mean setting CUDA_VISIBLE_DEVICES in the calling "
-        "process, which llem will not do to its caller. Measurement is scoped to "
-        "%s, but compute may still be placed on other visible devices, and energy "
-        "spent there is not counted. To enforce the scope, export "
-        "CUDA_VISIBLE_DEVICES=%s yourself before invoking llem, or use the "
-        "container runner.",
-        allowed_gpu_indices,
-        allowed_gpu_indices,
-        ",".join(str(i) for i in allowed_gpu_indices),
-    )
-
-
 def run_single_experiment(
     study: StudyConfig,
     manifest: ManifestWriter,
@@ -173,8 +140,10 @@ def run_single_experiment(
         from llenergymeasure.harness.preflight import run_preflight
         from llenergymeasure.study.runtime_observations import capture_runtime_observations
 
+        # A resolved GPU scope never reaches this leg: the orchestrator routes
+        # scoped singles through StudyRunner, whose worker subprocess enforces
+        # CUDA_VISIBLE_DEVICES before importing torch (_takes_single_fast_path).
         allowed_gpu_indices = study.study_execution.gpu_indices
-        _warn_unenforceable_gpu_scope(allowed_gpu_indices)
 
         # Staging dir for harness artefacts. The harness writes config.json here
         # always (sole home of provenance, authoritative home of identity) and

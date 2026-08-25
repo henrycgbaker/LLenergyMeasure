@@ -3,17 +3,17 @@
 The container runner scopes devices with ``docker run --gpus``; the process
 runner has only ``CUDA_VISIBLE_DEVICES``. These tests pin the two consequences:
 a spawned worker restricts itself (and nothing else) to the allowed devices, and
-the in-process single-experiment leg says out loud that it cannot.
+a scoped single experiment never takes the in-process fast path (where the
+scope could not be enforced without mutating the caller's environment).
 """
 
 from __future__ import annotations
 
-import logging
 import os
 
 import pytest
 
-from llenergymeasure.study.single import _warn_unenforceable_gpu_scope
+from llenergymeasure.study.orchestration import _takes_single_fast_path
 from llenergymeasure.study.worker import _cuda_visible_devices_value, _scope_to_gpu_indices
 
 
@@ -86,31 +86,29 @@ def test_worker_scopes_before_importing_torch() -> None:
 
 
 # ---------------------------------------------------------------------------
-# In-process leg: honest about what it cannot enforce
+# Dispatch: a scoped single experiment never takes the in-process fast path
 # ---------------------------------------------------------------------------
 
 
-def test_in_process_leg_warns_when_a_scope_cannot_be_enforced(caplog) -> None:
-    """The warning names the scope, the reason, and both ways out."""
-    with caplog.at_level(logging.WARNING):
-        _warn_unenforceable_gpu_scope([2, 3])
+def _single_offline_study(gpu_indices: list[int] | None):
+    from llenergymeasure.config.models import ExperimentConfig, StudyConfig
 
-    messages = [rec.getMessage() for rec in caplog.records]
-    assert len(messages) == 1
-    assert "GPU scope [2, 3] cannot be enforced" in messages[0]
-    assert "CUDA_VISIBLE_DEVICES=2,3" in messages[0]
-    assert "container runner" in messages[0]
+    return StudyConfig(
+        experiments=[ExperimentConfig(task={"model": "m1"}, engine="vllm", serving_mode="offline")],
+        study_execution={"n_cycles": 1, "gpu_indices": gpu_indices},
+    )
 
 
-def test_in_process_leg_silent_without_a_scope(caplog) -> None:
-    """No allowlist, nothing to warn about."""
-    with caplog.at_level(logging.WARNING):
-        _warn_unenforceable_gpu_scope(None)
-    assert caplog.records == []
+def test_unscoped_offline_single_keeps_the_fast_path() -> None:
+    """Without a GPU scope the offline single experiment runs in-process."""
+    assert _takes_single_fast_path(_single_offline_study(None)) is True
 
 
-def test_in_process_leg_never_mutates_the_callers_environment(monkeypatch) -> None:
-    """The warning is the whole of the in-process response: no env is touched."""
-    monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
-    _warn_unenforceable_gpu_scope([2, 3])
-    assert "CUDA_VISIBLE_DEVICES" not in os.environ
+def test_scoped_single_routes_through_the_runner() -> None:
+    """A resolved scope forces StudyRunner, whose worker subprocess enforces it.
+
+    The fast path runs in the calling process, where enforcing the scope would
+    mean mutating the caller's CUDA_VISIBLE_DEVICES - so a scoped single must
+    not take it. Enforcement, not a warning.
+    """
+    assert _takes_single_fast_path(_single_offline_study([2, 3])) is False

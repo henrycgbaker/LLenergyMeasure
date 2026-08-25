@@ -37,6 +37,28 @@ from llenergymeasure.study.single import run_single_experiment
 logger = logging.getLogger(__name__)
 
 
+def _takes_single_fast_path(study: StudyConfig) -> bool:
+    """Whether this study runs on the in-process single-experiment fast path.
+
+    Server experiments always route through StudyRunner (the single server call
+    site is StudyRunner._run_one -> ServerSession); the fast path is
+    offline-only. A resolved GPU scope also forces StudyRunner: the fast path
+    executes in the CALLING process, where enforcing the scope would mean
+    setting CUDA_VISIBLE_DEVICES in the caller's environment - a side effect a
+    library must not have - while StudyRunner's worker subprocess scopes itself
+    before importing torch. The allowlist promise is enforcement, not a
+    warning, so a scoped single experiment pays the subprocess and gets the
+    scope. Unscoped offline singles keep the fast path unchanged.
+    """
+    is_server_study = any(exp.serving_mode == "server" for exp in study.experiments)
+    return (
+        len(study.experiments) == 1
+        and study.study_execution.n_cycles == 1
+        and not is_server_study
+        and study.study_execution.gpu_indices is None
+    )
+
+
 def _ensure_study_artefacts_dir(study_dir: Path) -> Path:
     """Create and return the _study-artefacts/ subdirectory."""
     artefacts_dir = study_dir / STUDY_ARTEFACTS_DIR
@@ -137,16 +159,7 @@ def orchestrate_study(
     _write_study_artefacts(study, artefacts_dir, system_overrides, config_path)
 
     wall_start = time.monotonic()
-    # Server experiments always route through StudyRunner (the single server call
-    # site is StudyRunner._run_one -> ServerSession); the in-process single path
-    # is offline-only. Offline single experiments still take the fast path
-    # unchanged (byte-identical behaviour).
-    is_server_study = any(exp.serving_mode == "server" for exp in study.experiments)
-    is_single = (
-        len(study.experiments) == 1 and study.study_execution.n_cycles == 1 and not is_server_study
-    )
-
-    if is_single:
+    if _takes_single_fast_path(study):
         result_files, experiment_results, warnings = _run_single_experiment_dispatch(
             study, manifest, study_dir, runner_specs, progress, study.provenance_logs
         )
