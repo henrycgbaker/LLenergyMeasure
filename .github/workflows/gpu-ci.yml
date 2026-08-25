@@ -419,9 +419,16 @@ jobs:
         run: |
           # Belt-and-suspenders: llem uses `docker run --rm`, but kill anything
           # left over from a timed-out leg so it cannot hold the pinned GPU.
-          # Match by repo prefix on the image column, NOT `--filter ancestor=<repo>`:
-          # a no-tag ancestor filter only matches <repo>:latest, never the pinned
-          # tags actually used (vllm/vllm-openai:v0.19.1, .../release:1.2.1).
-          docker ps --format '{{.ID}} {{.Image}}' \
-            | awk '$2 ~ /^(vllm\/vllm-openai|nvcr\.io\/nvidia\/tensorrt-llm\/release)/ {print $1}' \
-            | xargs -r docker kill 2>/dev/null || true
+          # Scope: ONLY llem-owned orphans - containers carrying llem's
+          # ownership label whose launching process is gone (the timed-out-leg
+          # signature; the same rule llem's own startup reaper applies). An
+          # image-prefix match is NOT a safe scope on a shared host: it kills
+          # any other tenant of the same engine image, including a live
+          # measurement study's server (which is exactly what happened once).
+          docker ps --filter label=llem.study_id \
+              --format '{{.ID}} {{.Label "llem.parent_pid"}}' \
+            | while read -r cid pid; do
+                if [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; then
+                  docker kill "$cid" 2>/dev/null || true
+                fi
+              done
