@@ -350,6 +350,16 @@ def _configuration_section(
         lines.append(CheckLine("ok", f"runner.{engine}: {spec.mode} (source={spec.source}{image})"))
 
     cfg = user_cfg if user_cfg is not None else UserConfig()
+    if cfg.execution.gpu_indices is not None:
+        lines.append(
+            CheckLine(
+                "ok",
+                f"GPU allowlist: {cfg.execution.gpu_indices} (execution.gpu_indices) - "
+                "llem places work and measurement only on these host devices",
+            )
+        )
+    else:
+        lines.append(CheckLine("ok", "GPU allowlist: none - all host GPUs permitted"))
     lines.append(CheckLine("ok", f"energy_sampler: {cfg.measurement.energy_sampler}"))
     lines.append(
         CheckLine(

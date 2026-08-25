@@ -120,8 +120,14 @@ def run_study_preflight(
                 image_source=image_source,
             )
 
-    # Physical GPU scope: warn (never fail) when it names devices this host does
-    # not have. Runs for every runner mode, unlike the Docker probe below.
+    # Physical GPU scope: state the resolved scope positively, then warn (never
+    # fail) when it names devices this host does not have. Runs for every runner
+    # mode, unlike the Docker probe below.
+    if study.study_execution.gpu_indices is not None:
+        logger.info(
+            "GPU scope: work and measurement are restricted to host device(s) %s.",
+            study.study_execution.gpu_indices,
+        )
     _warn_if_gpu_scope_exceeds_host(study.study_execution.gpu_indices)
 
     # Docker pre-flight: run once if any engine resolves to a Docker runner.

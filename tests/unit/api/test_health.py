@@ -243,6 +243,27 @@ def test_configuration_defaults() -> None:
     assert all(line.status == "ok" for line in section.lines)
 
 
+def test_configuration_states_the_gpu_allowlist() -> None:
+    from llenergymeasure.config.user_config import UserExecutionConfig
+
+    fake_path = MagicMock()
+    fake_path.exists.return_value = False
+    cfg = UserConfig(execution=UserExecutionConfig(gpu_indices=[2, 3]))
+    with patch.object(health, "get_user_config_path", return_value=fake_path):
+        section = health._configuration_section(cfg, None, {})
+    text = "\n".join(line.message for line in section.lines)
+    assert "GPU allowlist: [2, 3]" in text
+
+
+def test_configuration_states_the_absent_allowlist() -> None:
+    fake_path = MagicMock()
+    fake_path.exists.return_value = False
+    with patch.object(health, "get_user_config_path", return_value=fake_path):
+        section = health._configuration_section(UserConfig(), None, {})
+    text = "\n".join(line.message for line in section.lines)
+    assert "GPU allowlist: none - all host GPUs permitted" in text
+
+
 def test_configuration_invalid_config_fails() -> None:
     specs: dict[str, RunnerSpec] = {}
     fake_path = MagicMock()

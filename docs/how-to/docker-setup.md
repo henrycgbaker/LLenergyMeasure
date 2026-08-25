@@ -594,6 +594,13 @@ All three take **host device indices** as the NVIDIA driver / NVML enumerate the
 `nvidia-smi` shows), and all three scope both COMPUTE and MEASUREMENT: `llem` only ever places
 work on, and only ever samples energy from, the devices you named.
 
+**Advisory locking stays whole-set on purpose.** `llem`'s per-GPU advisory locks are keyed by
+the effective selector (env>config), so a scoped study locks every device in its resolved scope
+for the duration of the run - not just the devices a given experiment happens to occupy at one
+moment. On a shared host this is the conservative choice: the scope is the study's declared
+footprint, and holding all of it prevents another `llem` study from interleaving onto a device
+the first study is about to use. Narrower per-experiment locking would admit exactly that race.
+
 How the scope is applied depends on the runner. The **container runner** restricts at the docker
 level (`--gpus device=2,3`) rather than with `CUDA_VISIBLE_DEVICES` inside the container, which
 keeps CUDA and NVML indices consistent in there - both re-enumerate from 0 - so energy
