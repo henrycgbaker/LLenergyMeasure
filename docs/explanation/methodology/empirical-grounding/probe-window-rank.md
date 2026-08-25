@@ -16,10 +16,11 @@ makes the probe window length a rank-fidelity question: how short can the
 window get before the ranking it produces stops agreeing with the ranking the
 full 240 s window produces?
 
-> Traceability: this study was pre-registered, collected 2026-08-20 to
-> 2026-08-25, and its verdict was ratified 2026-08-25. The values below are
-> its banked results. One registered quantity was amended before analysis,
-> disclosed under [Registration amendment](#registration-amendment).
+> Traceability: this study was pre-registered, collected 2026-08-20/21, and
+> its verdict was ratified and banked 2026-08-25. The values below are its
+> banked results. One registered quantity was amended before the registered
+> rank-vs-window analysis ran, disclosed under
+> [Registration amendment](#registration-amendment).
 
 ---
 
@@ -39,7 +40,10 @@ levels; a prefix-caching flip; eager mode (CUDA graphs off); and a combined
 stressor that moves several axes at once. Every cell serves the same model
 (Qwen2.5-0.5B-Instruct) at the same offered rate (15 req/s, open-loop Poisson
 arrivals, seeded), with the same prompt pool and a 256-token output budget, on
-one A100-PCIE-40GB.
+A100-PCIE-40GB hardware (one device per visit; 32 of 33 visits on the same
+physical device, one replicate of one cell on a second - disclosed in the
+study record, and the verdict is robust to it because every window length
+slices the same visits).
 
 **Full protocol first, slices second.** Each cell was measured 3 times under
 the full protocol - one server launch per visit, convergence-gated warmup, a
@@ -75,8 +79,11 @@ rendezvous hangs inside server containers, and engine versions are frozen for
 the release cycle, so the cell's schedule slots were skipped by the driver's
 hole mechanism (which preserves every other cell's seeded order). The top-k
 denominator was amended from 3-of-12 to 3-of-11 by an explicit ratified
-ruling **before** any analysis ran - the analysis code asserts the registered
-grid size and refused to emit a verdict until the amendment was recorded. No
+ruling **before** the registered rank-vs-window analysis ran - the analysis
+code asserts the registered grid size and refused to emit a verdict until the
+amendment was recorded (interim full-protocol per-cell values from a
+registered mid-campaign pause check did already exist at ruling time; no
+abbreviated-window statistic did). No
 threshold, estimator, replicate count, or stability requirement changed.
 The consequence is stated under [Envelope](#envelope-and-limits):
 tensor-parallel rank behaviour under short windows is unmeasured.
@@ -98,7 +105,7 @@ The ordering being preserved is a resolvable one, not noise re-shuffled: the
 across-cell spread of energy-per-token (coefficient of variation 0.279,
 max/min ratio 2.81x) is 87x the median within-cell replicate noise (0.0032).
 The structure behind the numbers: the two eager-mode cells are far more
-efficient per token than everything else (about 2.7x) and hold ranks 1-2 at
+efficient per token than everything else (about 2.8x) and hold ranks 1-2 at
 **every** window length; the one top-3 substitution under short windows comes
 from a statistically flat mid-field where adjacent cells differ by less than
 one replicate spread - exactly the regime the overlap floor of 2 was
@@ -116,7 +123,7 @@ study licenses the ranking they feed, not their absolute values.
 ## Envelope and limits
 
 - **One operating point.** vLLM at the pinned engine version,
-  Qwen2.5-0.5B-Instruct, one A100-PCIE-40GB, 15 req/s. Re-confirm on other
+  Qwen2.5-0.5B-Instruct, A100-PCIE-40GB, 15 req/s. Re-confirm on other
   engines, models, hosts, and rates before leaning on the ranking elsewhere.
 - **Tensor parallelism is unmeasured.** The amended grid carries no
   tensor-parallel cell (see the amendment above), and it is the configuration
@@ -125,8 +132,12 @@ study licenses the ranking they feed, not their absolute values.
   their visit's full-length warmup and launch. This study therefore answers
   "is a shorter window enough?" in isolation; the abbreviated protocol as the
   triage tier actually runs it - short warmup as well as short windows - is a
-  separate claim, validated by its own pre-registered companion study before
-  the tier ships.
+  separate claim, tested by its own pre-registered companion study. That study
+  has since reported: the combined abbreviated protocol at a 30 s fixed warmup
+  FAILED rank validity, with a confirmed config-differential bias on the
+  eager-mode axis - so the window finding here stands as scoped, and the
+  triage tier's protocol is being re-parameterised on the registered fallback
+  before it ships.
 - **Warmup cost is untouched.** The window is the only thing shortened here;
   a probe still pays the launch and warmup floor, which is why the optimiser's
   answer to a large search space is fewer candidates, not ever-cheaper probes.
